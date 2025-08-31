@@ -11,7 +11,7 @@ from compute_horde_validator.validator.allowance.types import (
     reservation_id,
     ss58_address,
 )
-from compute_horde_validator.validator.allowance.utils.spending import SpendingValidatorBase
+from compute_horde_validator.validator.allowance.utils.spending import SpendingBookkeeperBase
 
 
 class AllowanceBase(ABC):
@@ -142,7 +142,7 @@ class AllowanceBase(ABC):
         self,
         block_start: int,
         block_end: int,
-    ) -> SpendingValidatorBase:
+    ) -> SpendingBookkeeperBase:
         """
         Get an object that can validate a sequence of allowance spending transactions against precaltulated allowance.
         """

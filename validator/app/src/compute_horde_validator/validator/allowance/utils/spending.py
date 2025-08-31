@@ -1,5 +1,6 @@
 import datetime
 from abc import abstractmethod, ABC
+from collections import defaultdict
 from dataclasses import dataclass
 from typing import NamedTuple
 
@@ -29,11 +30,6 @@ class DoubleSpentBlocks(SpendingIssue):
 
 
 @dataclass
-class UnknownBlocks(SpendingIssue):
-    unknown_blocks: block_ids
-
-
-@dataclass
 class InvalidatedBlocks(SpendingIssue):
     invalidated_blocks: block_ids
 
@@ -44,109 +40,170 @@ class InsufficientAllowance(SpendingIssue):
     blocks: block_ids
 
 
-class SpendingValidatorBase(ABC):
-    @abstractmethod
-    def validate_next(
-        self,
-        validator: validator_ss58,
-        miner: miner_ss58,
-        executor_class: ExecutorClass,
-        spend_time: datetime.datetime,
-        blocks: block_ids,
-        amount: float,
-    ) -> tuple[bool, list[SpendingIssue]]:
-        """
-        Validate the next spending.
-        Returns tuple:
-            - True/False based on whether valid blocks were enough to spend the given amount
-            - List of spending issues (empty if no issues).
-        """
+class NotEnoughAllowance(Exception):
+    def __init__(self, issues: list[SpendingIssue]):
+        self.issues = issues
 
 
-class ValiMinerExeclassBlock(NamedTuple):
+class ValidatorMinerExecutor(NamedTuple):
     validator: validator_ss58
     miner: miner_ss58
-    block: block_id
     executor_class: ExecutorClass
 
 
-class AmountAndInvalidation(NamedTuple):
+class AllowanceInfo(NamedTuple):
     allowance: amount
     invalidated_at_block: block_id | None
 
 
-class SpendingValidator(SpendingValidatorBase):
-    def __init__(
+class SpendingBookkeeperBase(ABC):
+    def spend(
         self,
-        known_allowances: dict[ValiMinerExeclassBlock, AmountAndInvalidation],
-        blocks: list[Block],
-    ) -> None:
-        self._allowances = known_allowances
-        self._blocks: list[Block] = blocks
-        self._previously_spent: set[ValiMinerExeclassBlock] = set()
-
-    def validate_next(
-        self,
-        validator: validator_ss58,
-        miner: miner_ss58,
-        executor_class: ExecutorClass,
+        triplet: ValidatorMinerExecutor,
         spend_time: datetime.datetime,
-        blocks: block_ids,
-        amount: float,
-    ) -> tuple[bool, list[SpendingIssue]]:
+        payment_blocks: block_ids,
+        spend_amount: float,
+    ) -> list[SpendingIssue]:
+        """
+        Validate the next spending and register it if valid.
+        Returns a list of spending issues (empty if no issues).
+        Throws SpendingImpossible if spending is impossible - also includes issues.
+        """
         issues: list[SpendingIssue] = []
 
         # Filter out blocks that are either expired or in the future relative to the spending time
         block_at_spend_time = self._get_block_at_time(spend_time)
-        allowed_range = range(block_at_spend_time - settings.BLOCK_EXPIRY, block_at_spend_time + 1)
-        blocks_in_range = [b for b in blocks if b in allowed_range]
-        if block_outside_range := set(blocks) - set(blocks_in_range):
-            issues.append(BlocksOutsideRange(allowed_range, list(block_outside_range)))
+        allowed_block_range = range(
+            block_at_spend_time - settings.BLOCK_EXPIRY, block_at_spend_time + 1
+        )
+        blocks_in_range = {b for b in payment_blocks if b in allowed_block_range}
 
-        # Check each block within range and filter out spent and invalidated blocks
-        double_spent_blocks: block_ids = []
-        unknown_blocks: block_ids = []
-        invalidated_blocks: block_ids = []
-        spendable_allowances: dict[ValiMinerExeclassBlock, AmountAndInvalidation] = {}
-        keys_in_range = [
-            ValiMinerExeclassBlock(validator, miner, block, executor_class)
-            for block in blocks_in_range
-        ]
-        for key in keys_in_range:
-            if key not in self._allowances:
-                # unknown allowance - could have been a 0, or already spend before the validation started
-                unknown_blocks.append(key.block)
-                continue
+        # Find out which blocks are already spent or invalidated
+        already_spent_blocks = self._check_for_spent_blocks(triplet, blocks_in_range)
+        invalidated_blocks = self._check_for_invalidated_blocks(
+            triplet, blocks_in_range, block_at_spend_time
+        )
 
-            if key in self._previously_spent:
-                # allowance already spent during this validation
-                double_spent_blocks.append(key.block)
-                continue
+        # Figure out which allowances are available for spending in this case
+        spendable_allowances = self._get_blocks_allowances(
+            triplet, blocks_in_range - already_spent_blocks - invalidated_blocks
+        )
 
-            allowance = self._allowances[key]
-
-            if allowance.invalidated_at_block is not None and allowance.invalidated_at_block <= block_at_spend_time:
-                invalidated_blocks.append(allowance.invalidated_at_block)
-                continue
-
-            spendable_allowances[key] = allowance
-
-        if unknown_blocks:
-            issues.append(UnknownBlocks(unknown_blocks))
-        if double_spent_blocks:
-            issues.append(DoubleSpentBlocks(double_spent_blocks))
+        # Derive issue lists from the sets
+        if blocks_outside_range := set(payment_blocks) - set(blocks_in_range):
+            issues.append(BlocksOutsideRange(allowed_block_range, list(blocks_outside_range)))
+        if already_spent_blocks:
+            issues.append(DoubleSpentBlocks(list(already_spent_blocks)))
         if invalidated_blocks:
-            issues.append(InvalidatedBlocks(invalidated_blocks))
+            issues.append(InvalidatedBlocks(list(invalidated_blocks)))
 
-        spendable_amount = sum(allowance.allowance for allowance in spendable_allowances.values())
-        if spendable_amount < amount:
+        # Finally, check if all the blocks that can be spent amount to enough allowance
+        spendable_amount = sum(spendable_allowances.values())
+        if spendable_amount < spend_amount:
             # Not enough allowance to cover the spending. Fail and bail.
-            issues.append(InsufficientAllowance(spendable_amount, [k.block for k in spendable_allowances.keys()]))
-            return False, issues
+            issues.append(
+                InsufficientAllowance(spendable_amount, list(spendable_allowances.keys()))
+            )
+            raise NotEnoughAllowance(issues)
+        else:
+            # We have enough allowance. Register the spending.
+            self._register_transaction(triplet, list(spendable_allowances.keys()), spend_time)
+            return issues
 
-        # We have enough allowance. Register the spending.
-        self._previously_spent.update(spendable_allowances.keys())
-        return True, issues
+    @abstractmethod
+    def _get_blocks_allowances(
+        self,
+        triplet: ValidatorMinerExecutor,
+        blocks: set[block_id],
+    ) -> dict[block_id, amount]:
+        """Get allowance amounts for multiple blocks for specific validator/miner/executor_class combination."""
+        pass
+
+    @abstractmethod
+    def _check_for_spent_blocks(
+        self,
+        triplet: ValidatorMinerExecutor,
+        blocks: set[block_id],
+    ) -> set[block_id]:
+        """Get set of blocks that have already been spent for the triplet."""
+        pass
+
+    @abstractmethod
+    def _check_for_invalidated_blocks(
+        self,
+        triplet: ValidatorMinerExecutor,
+        blocks: set[block_id],
+        at_block: block_id,
+    ) -> set[block_id]:
+        """Get set of blocks that were invalidated at or before the given block number."""
+        pass
+
+    @abstractmethod
+    def _get_block_at_time(self, time: datetime.datetime) -> block_id | None:
+        """Get the block ID at the given time."""
+        pass
+
+    @abstractmethod
+    def _register_transaction(
+        self,
+        triplet: ValidatorMinerExecutor,
+        blocks: block_ids,
+        spent_at: datetime.datetime,
+    ) -> None:
+        """Register a transaction with common info for multiple blocks."""
+        pass
+
+
+class InMemorySpendingBookkeeper(SpendingBookkeeperBase):
+    def __init__(
+        self,
+        known_allowances: dict[ValidatorMinerExecutor, dict[block_id, AllowanceInfo]],
+        blocks: list[Block],
+    ) -> None:
+        self._allowances = known_allowances
+        self._blocks = blocks
+        self._spendings_per_triplet: defaultdict[ValidatorMinerExecutor, set[block_id]] = (
+            defaultdict(set)
+        )
+
+    def _get_blocks_allowances(
+        self, triplet: ValidatorMinerExecutor, blocks: set[block_id]
+    ) -> dict[block_id, float]:
+        triplet_allowances = self._allowances.get(triplet, {})
+        return {
+            block: allowance.allowance
+            for block in blocks
+            if (allowance := triplet_allowances.get(block)) is not None
+        }
+
+    def _check_for_spent_blocks(
+        self, triplet: ValidatorMinerExecutor, blocks: set[block_id]
+    ) -> set[block_id]:
+        spent_blocks = self._spendings_per_triplet.get(triplet, set())
+        return spent_blocks & set(blocks)
+
+    def _check_for_invalidated_blocks(
+        self, triplet: ValidatorMinerExecutor, blocks: set[block_id], at_block: block_id
+    ) -> set[block_id]:
+        triplet_allowances = self._allowances.get(triplet, {})
+        invalidated_blocks = set()
+        for block in blocks:
+            allowance = triplet_allowances.get(block)
+            if (
+                allowance
+                and allowance.invalidated_at_block is not None
+                and allowance.invalidated_at_block <= at_block
+            ):
+                invalidated_blocks.add(block)
+        return invalidated_blocks
+
+    def _register_transaction(
+        self,
+        triplet: ValidatorMinerExecutor,
+        blocks: list[block_id],
+        spent_at: datetime.datetime,
+    ) -> None:
+        self._spendings_per_triplet[triplet].update(blocks)
 
     def _get_block_at_time(self, time: datetime.datetime) -> block_id | None:
         # We need at least two blocks: one real block and a trailing bound block
