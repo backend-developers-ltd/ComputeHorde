@@ -5,7 +5,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("validator", "0078_delete_computetimeallowance"),
+        ("validator", "0079_organicjob_allowance_blocks"),
     ]
 
     operations = [
