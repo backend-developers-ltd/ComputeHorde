@@ -8,7 +8,6 @@ import traceback
 import uuid
 from collections.abc import Callable
 from datetime import timedelta
-from decimal import Decimal
 from functools import cached_property
 from math import ceil, floor
 from typing import ParamSpec, TypeVar, Union
@@ -30,6 +29,7 @@ from compute_horde.dynamic_config import fetch_dynamic_configs_from_contract, sy
 from compute_horde.fv_protocol.facilitator_requests import OrganicJobRequest
 from compute_horde.miner_client.organic import OrganicMinerClient
 from compute_horde.smart_contracts.map_contract import get_dynamic_config_types_from_settings
+from compute_horde.smart_contracts.utils import get_web3_connection
 from compute_horde.subtensor import get_cycle_containing_block
 from compute_horde.utils import turbobt_get_validators
 from compute_horde_core.executor_class import ExecutorClass
@@ -41,7 +41,7 @@ from numpy.typing import NDArray
 from pydantic import JsonValue, TypeAdapter
 
 from compute_horde_validator.celery import app
-from compute_horde_validator.validator import collateral
+from compute_horde_validator.validator.collateral.default import collateral
 from compute_horde_validator.validator.cross_validation.prompt_answering import answer_prompts
 from compute_horde_validator.validator.cross_validation.prompt_generation import generate_prompts
 from compute_horde_validator.validator.locks import Locked, LockType, get_advisory_lock
@@ -1575,12 +1575,12 @@ def slash_collateral_task(job_uuid: str) -> None:
             logger.info(f"Already slashed for this job {job_uuid}")
             return
 
-        contract_address = collateral.get_collateral_contract_address()
+        contract_address = collateral().get_collateral_contract_address()
         slash_amount: int = config.DYNAMIC_COLLATERAL_SLASH_AMOUNT_WEI
         if contract_address and slash_amount > 0 and job.miner.evm_address:
             try:
-                w3 = collateral.get_web3_connection(network=settings.BITTENSOR_NETWORK)
-                collateral.slash_collateral(
+                w3 = get_web3_connection(network=settings.BITTENSOR_NETWORK)
+                collateral().slash_collateral(
                     w3=w3,
                     contract_address=contract_address,
                     miner_address=job.miner.evm_address,
