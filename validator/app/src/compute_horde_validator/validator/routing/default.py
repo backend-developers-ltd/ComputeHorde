@@ -14,27 +14,33 @@ from compute_horde_validator.validator.allowance.default import allowance
 from compute_horde_validator.validator.allowance.types import (
     CannotReserveAllowanceException,
     NotEnoughAllowanceException,
+    blocks_ids,
+    reservation_id,
 )
-from compute_horde_validator.validator.allowance.types import (
-    Miner as AllowanceMiner,
-)
+from compute_horde_validator.validator.allowance.types import Miner as AllowanceMiner
 from compute_horde_validator.validator.models import Miner
 from compute_horde_validator.validator.receipts.default import receipts
-from compute_horde_validator.validator.routing.base import RoutingBase
-from compute_horde_validator.validator.routing.types import (
-    AllMinersBusy,
-    JobRoute,
-)
+from compute_horde_validator.validator.routing.base import JobRouteBase, RoutingBase
+from compute_horde_validator.validator.routing.types import AllMinersBusy
 from compute_horde_validator.validator.utils import TRUSTED_MINER_FAKE_KEY
 
 logger = logging.getLogger(__name__)
+
+
+class JobRoute(JobRouteBase):
+    def __init__(
+        self, miner: Miner, allowance_blocks: blocks_ids, allowance_reservation_id: reservation_id
+    ):
+        super().__init__(miner=miner)
+        self.allowance_blocks = allowance_blocks
+        self.allowance_reservation_id = allowance_reservation_id
 
 
 class Routing(RoutingBase):
     def __init__(self):
         self._lock = asyncio.Lock()
 
-    async def pick_miner_for_job_request(self, request: OrganicJobRequest) -> JobRoute:
+    async def pick_miner_for_job_request(self, request: OrganicJobRequest) -> JobRouteBase:
         if isinstance(request, V2JobRequest):
             async with self._lock:
                 return await sync_to_async(_pick_miner_for_job_v2)(request)
@@ -52,7 +58,7 @@ def routing() -> Routing:
     return _routing_instance
 
 
-def _pick_miner_for_job_v2(request: V2JobRequest) -> JobRoute:
+def _pick_miner_for_job_v2(request: V2JobRequest) -> JobRouteBase:
     executor_class = request.executor_class
     logger.info(f"Picking a miner for job {request.uuid} with executor class {executor_class}")
 

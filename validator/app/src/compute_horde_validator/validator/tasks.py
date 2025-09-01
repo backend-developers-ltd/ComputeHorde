@@ -63,7 +63,7 @@ from compute_horde_validator.validator.organic_jobs.miner_driver import (
     execute_organic_job_request,
 )
 from compute_horde_validator.validator.pylon import pylon_client
-from compute_horde_validator.validator.routing.types import JobRoute
+from compute_horde_validator.validator.routing.base import JobRouteBase
 from compute_horde_validator.validator.s3 import (
     download_prompts_from_s3_url,
     generate_upload_url,
@@ -1616,7 +1616,7 @@ def evict_old_data():
 
 
 async def execute_organic_job_request_on_worker(
-    job_request: OrganicJobRequest, job_route: JobRoute
+    job_request: OrganicJobRequest, job_route: JobRouteBase
 ) -> OrganicJob:
     timeout = await aget_config("ORGANIC_JOB_CELERY_WAIT_TIMEOUT")
     future_result: AsyncResult[None] = _execute_organic_job_on_worker.apply_async(
@@ -1632,7 +1632,7 @@ async def execute_organic_job_request_on_worker(
 @app.task
 def _execute_organic_job_on_worker(job_request: JsonValue, job_route: JsonValue) -> None:
     request: OrganicJobRequest = TypeAdapter(OrganicJobRequest).validate_python(job_request)
-    route: JobRoute = TypeAdapter(JobRoute).validate_python(job_route)
+    route: JobRouteBase = TypeAdapter(JobRouteBase).validate_python(job_route)
     async_to_sync(execute_organic_job_request)(request, route)
 
 

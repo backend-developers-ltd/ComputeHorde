@@ -51,7 +51,7 @@ from compute_horde_validator.validator.models import (
 )
 from compute_horde_validator.validator.organic_jobs.miner_client import MinerClient
 from compute_horde_validator.validator.receipts.default import receipts
-from compute_horde_validator.validator.routing.types import JobRoute
+from compute_horde_validator.validator.routing.base import JobRouteBase
 from compute_horde_validator.validator.utils import TRUSTED_MINER_FAKE_KEY
 
 logger = logging.getLogger(__name__)
@@ -169,7 +169,7 @@ async def _get_current_block() -> int:
 
 
 async def execute_organic_job_request(
-    job_request: OrganicJobRequest, job_route: JobRoute
+    job_request: OrganicJobRequest, job_route: JobRouteBase
 ) -> OrganicJob:
     if (
         job_route.miner.hotkey_ss58 == settings.DEBUG_MINER_KEY
