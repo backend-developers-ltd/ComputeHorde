@@ -523,7 +523,7 @@ CELERY_BEAT_SCHEDULE = {
         },
     },
     "sync_collaterals": {
-        "task": "compute_horde_validator.validator.tasks.sync_collaterals",
+        "task": "compute_horde_validator.validator.collateral.tasks.sync_collaterals",
         "schedule": timedelta(minutes=5),
         "options": {
             "expires": timedelta(minutes=5).total_seconds(),
