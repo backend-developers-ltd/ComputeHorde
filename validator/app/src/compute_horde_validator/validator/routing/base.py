@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 
 from compute_horde.fv_protocol.facilitator_requests import OrganicJobRequest
 
+from compute_horde_validator.validator.allowance.types import Miner
 from compute_horde_validator.validator.routing.types import JobRoute
 
 
@@ -20,3 +21,20 @@ class RoutingBase(ABC):
         Filters miners based on compute time allowance and minimum collateral requirements.
         Creates a reservation for the selected miner and returns a JobRoute with that miner.
         """
+
+
+class JobRouteBase(ABC):
+    """
+    Abstract base class for a job route.
+    """
+
+    def __init__(self, *, miner: Miner):
+        self.miner = miner
+
+    @abstractmethod
+    def spend_allowance(self) -> None:
+        pass
+
+    @abstractmethod
+    def undo_allowance_reservation(self) -> None:
+        pass
