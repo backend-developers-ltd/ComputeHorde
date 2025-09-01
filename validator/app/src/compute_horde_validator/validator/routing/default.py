@@ -64,7 +64,8 @@ async def _pick_miner_for_job_v2(request: V2JobRequest) -> JobRoute:
             ip_version=miner_model.ip_version,
             hotkey_ss58=miner_model.hotkey,
         )
-        return JobRoute(miner=miner, allowance_reservation_id=None)
+        # FIXME: implement `allowance_blocks` reservation, it must not be None
+        return JobRoute(miner=miner, allowance_blocks=[], allowance_reservation_id=None)
 
     if request.on_trusted_miner:
         logger.debug(f"Using TRUSTED_MINER for job {request.uuid}")
@@ -75,7 +76,7 @@ async def _pick_miner_for_job_v2(request: V2JobRequest) -> JobRoute:
             ip_version=miner_model.ip_version,
             hotkey_ss58=miner_model.hotkey,
         )
-        return JobRoute(miner=miner, allowance_reservation_id=None)
+        return JobRoute(miner=miner, allowance_blocks=None, allowance_reservation_id=None)
 
     # Calculate total executor-seconds required for the job
     executor_seconds = (
@@ -108,7 +109,7 @@ async def _pick_miner_for_job_v2(request: V2JobRequest) -> JobRoute:
     for miner_hotkey, _ in suitable_miners:
         try:
             # 3. Reserve allowance for this miner
-            reservation_id, _ = await sync_to_async(allowance().reserve_allowance)(
+            reservation_id, blocks = await sync_to_async(allowance().reserve_allowance)(
                 miner=miner_hotkey,
                 executor_class=executor_class,
                 allowance_seconds=executor_seconds,
@@ -125,7 +126,9 @@ async def _pick_miner_for_job_v2(request: V2JobRequest) -> JobRoute:
             logger.info(
                 f"Successfully reserved miner {miner_hotkey} for job {request.uuid} with reservation ID {reservation_id}"
             )
-            return JobRoute(miner=miner, allowance_reservation_id=reservation_id)
+            return JobRoute(
+                miner=miner, allowance_blocks=blocks, allowance_reservation_id=reservation_id
+            )
 
         except CannotReserveAllowanceException:
             logger.debug(
