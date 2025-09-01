@@ -152,7 +152,7 @@ class ReceiptsBase(ABC):
         """
         Return counts of ongoing jobs per miner at the given time for the executor_class.
 
-        A job counts as ongoing if its JobStartedReceipt is valid at at_time and there 
+        A job counts as ongoing if its JobStartedReceipt is valid at at_time and there
         is no JobFinishedReceipt with timestamp <= at_time for the same job_uuid.
         """
         pass

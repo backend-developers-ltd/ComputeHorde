@@ -336,7 +336,7 @@ async def test_get_finished_jobs_for_block_range_returns_only_in_range(settings)
     validator_hotkey = settings.BITTENSOR_WALLET().get_hotkey().ss58_address
 
     in_uuid = str(uuid.uuid4())
-    # Create corresponding JobStarted with matching executor_class so tuple query includes it
+
     await JobStartedReceipt.objects.acreate(
         job_uuid=in_uuid,
         miner_hotkey=miner_hotkey,
