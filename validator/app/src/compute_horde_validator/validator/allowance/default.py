@@ -4,7 +4,7 @@ from compute_horde_core.executor_class import ExecutorClass
 
 from .base import AllowanceBase
 from .types import Miner, Neuron, block_ids, reservation_id, ss58_address
-from .utils import blocks, booking, metagraph
+from .utils import blocks, booking, manifests, metagraph
 from .utils.supertensor import supertensor
 
 
@@ -40,7 +40,7 @@ class Allowance(AllowanceBase):
         return supertensor().get_current_block()
 
     def get_manifests(self) -> dict[ss58_address, dict[ExecutorClass, int]]:
-        raise NotImplementedError
+        return manifests.get_current_manifests()
 
     def miners(self) -> list[Miner]:
         return metagraph.miners()
