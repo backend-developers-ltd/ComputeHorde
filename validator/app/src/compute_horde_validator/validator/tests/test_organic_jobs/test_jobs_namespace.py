@@ -32,7 +32,7 @@ async def test_organic_job_namespace_priority(job_namespace, namespace_value):
         ip_version=miner_model.ip_version,
         hotkey_ss58=miner_model.hotkey,
     )
-    job_route = JobRoute(miner=miner, allowance_reservation_id=None)
+    job_route = JobRoute(miner=miner, allowance_reservation_id=None, allowance_blocks=None)
 
     job_request = get_dummy_job_request_v2(uuid=str(uuid.uuid4()))
     job_request.job_namespace = job_namespace
