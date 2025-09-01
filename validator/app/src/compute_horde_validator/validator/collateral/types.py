@@ -1,3 +1,7 @@
+from dataclasses import dataclass
+from typing import Any
+
+from hexbytes import HexBytes
 from pydantic import BaseModel
 
 
@@ -5,7 +9,11 @@ class CollateralException(Exception):
     pass
 
 
-class BurnInputError(CollateralException):
+class SlashInputError(CollateralException):
+    pass
+
+
+class SlashCollateralError(Exception):
     pass
 
 
@@ -16,11 +24,24 @@ class MinerCollateral(BaseModel):
     collateral_wei: int
 
 
-class SlashedEvent(BaseModel):
-    tx_hash: str
-    block_number: int
-    miner_address: str
-    amount_wei: int
-    url: str
+@dataclass
+class SlashedEvent:
+    event: str
+    logIndex: int
+    transactionIndex: int
+    transactionHash: HexBytes
+    address: str
+    blockHash: HexBytes
+    blockNumber: int
 
-
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "SlashedEvent":
+        return cls(
+            event=data["event"],
+            logIndex=data["logIndex"],
+            transactionIndex=data["transactionIndex"],
+            transactionHash=data["transactionHash"],
+            address=data["address"],
+            blockHash=data["blockHash"],
+            blockNumber=data["blockNumber"],
+        )

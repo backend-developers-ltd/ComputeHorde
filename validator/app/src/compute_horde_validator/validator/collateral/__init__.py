@@ -1,6 +1,6 @@
+from .base import CollateralBase
 from .default import collateral
 from .types import MinerCollateral, SlashedEvent
-from .base import CollateralBase
 
 __all__ = [
     "collateral",
@@ -8,5 +8,3 @@ __all__ = [
     "MinerCollateral",
     "SlashedEvent",
 ]
-
-

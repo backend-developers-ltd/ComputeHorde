@@ -3,14 +3,14 @@ from decimal import Decimal
 
 import turbobt
 from asgiref.sync import async_to_sync
+from compute_horde.smart_contracts.utils import get_web3_connection
 from django.conf import settings
+
 from compute_horde_validator.celery import app
-from compute_horde_validator.validator.tasks import bittensor_client
-
 from compute_horde_validator.validator.models import Miner, SystemEvent
-from compute_horde_validator.validator.tasks import _get_metagraph_for_sync
-from .. import collateral as collateral_low_level
+from compute_horde_validator.validator.tasks import _get_metagraph_for_sync, bittensor_client
 
+from .default import collateral
 
 logger = logging.getLogger(__name__)
 
@@ -39,14 +39,14 @@ def sync_collaterals(bittensor: turbobt.Bittensor) -> None:
         )
         return
 
-    associations = async_to_sync(collateral_low_level.get_evm_key_associations)(
+    associations = async_to_sync(collateral().get_evm_key_associations)(
         subtensor=bittensor.subtensor,
         netuid=settings.BITTENSOR_NETUID,
         block_hash=block.hash,
     )
     miners = Miner.objects.filter(hotkey__in=hotkeys)
-    w3 = collateral_low_level.get_web3_connection(network=settings.BITTENSOR_NETWORK)
-    contract_address = collateral_low_level.get_collateral_contract_address()
+    w3 = get_web3_connection(network=settings.BITTENSOR_NETWORK)
+    contract_address = collateral().get_collateral_contract_address()
 
     to_update = []
     for miner in miners:
@@ -62,7 +62,7 @@ def sync_collaterals(bittensor: turbobt.Bittensor) -> None:
 
         if contract_address:
             try:
-                collateral_wei = collateral_low_level.get_miner_collateral(
+                collateral_wei = collateral().get_miner_collateral(
                     w3, contract_address, miner.evm_address, block.number
                 )
                 miner.collateral_wei = Decimal(collateral_wei)
@@ -81,5 +81,3 @@ def sync_collaterals(bittensor: turbobt.Bittensor) -> None:
                 )
 
     Miner.objects.bulk_update(to_update, fields=["evm_address", "collateral_wei"])
-
-

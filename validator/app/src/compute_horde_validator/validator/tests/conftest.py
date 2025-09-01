@@ -53,12 +53,12 @@ def _patch_celery_job_execution():
 @pytest.fixture(autouse=True)
 def _patch_collateral_contract_address(mocker: MockerFixture):
     names = [
-        "get_collateral_contract_address",
-        "get_collateral_contract_address_async",
+        "Collateral._get_collateral_contract_address",
+        "Collateral._get_collateral_contract_address_async",
     ]
     for name in names:
         mocker.patch(
-            f"compute_horde_validator.validator.collateral.{name}",
+            f"compute_horde_validator.validator.collateral.default.{name}",
             return_value="0x7b89cb9B1D5B6A9F2296072885019D8Bfecc704A",
         )
 
