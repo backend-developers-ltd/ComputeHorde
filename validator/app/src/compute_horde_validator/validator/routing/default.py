@@ -1,13 +1,12 @@
+import asyncio
 import logging
 from typing import assert_never
 
 from asgiref.sync import sync_to_async
-from compute_horde.blockchain.block_cache import aget_current_block
 from compute_horde.fv_protocol.facilitator_requests import (
     OrganicJobRequest,
     V2JobRequest,
 )
-from compute_horde.utils import async_synchronized
 from django.conf import settings
 
 from compute_horde_validator.validator.allowance.default import allowance
@@ -18,10 +17,8 @@ from compute_horde_validator.validator.allowance.types import (
 from compute_horde_validator.validator.allowance.types import (
     Miner as AllowanceMiner,
 )
-from compute_horde_validator.validator.models import (
-    MetagraphSnapshot,
-    Miner,
-)
+from compute_horde_validator.validator.allowance.utils.supertensor import supertensor
+from compute_horde_validator.validator.models import Miner
 from compute_horde_validator.validator.routing.base import RoutingBase
 from compute_horde_validator.validator.routing.types import (
     AllMinersBusy,
@@ -33,9 +30,13 @@ logger = logging.getLogger(__name__)
 
 
 class Routing(RoutingBase):
+    def __init__(self):
+        self._lock = asyncio.Lock()
+
     async def pick_miner_for_job_request(self, request: OrganicJobRequest) -> JobRoute:
         if isinstance(request, V2JobRequest):
-            return await _pick_miner_for_job_v2(request)
+            async with self._lock:
+                return await sync_to_async(_pick_miner_for_job_v2)(request)
 
         assert_never(request)
 
@@ -50,14 +51,13 @@ def routing() -> Routing:
     return _routing_instance
 
 
-@async_synchronized
-async def _pick_miner_for_job_v2(request: V2JobRequest) -> JobRoute:
+def _pick_miner_for_job_v2(request: V2JobRequest) -> JobRoute:
     executor_class = request.executor_class
     logger.info(f"Picking a miner for job {request.uuid} with executor class {executor_class}")
 
     if settings.DEBUG_MINER_KEY:
         logger.debug(f"Using DEBUG_MINER_KEY for job {request.uuid}")
-        miner_model, _ = await Miner.objects.aget_or_create(hotkey=settings.DEBUG_MINER_KEY)
+        miner_model, _ = Miner.objects.get_or_create(hotkey=settings.DEBUG_MINER_KEY)
         miner = AllowanceMiner(
             address=miner_model.address,
             port=miner_model.port,
@@ -69,7 +69,7 @@ async def _pick_miner_for_job_v2(request: V2JobRequest) -> JobRoute:
 
     if request.on_trusted_miner:
         logger.debug(f"Using TRUSTED_MINER for job {request.uuid}")
-        miner_model, _ = await Miner.objects.aget_or_create(hotkey=TRUSTED_MINER_FAKE_KEY)
+        miner_model, _ = Miner.objects.get_or_create(hotkey=TRUSTED_MINER_FAKE_KEY)
         miner = AllowanceMiner(
             address=miner_model.address,
             port=miner_model.port,
@@ -83,15 +83,11 @@ async def _pick_miner_for_job_v2(request: V2JobRequest) -> JobRoute:
         request.download_time_limit + request.execution_time_limit + request.upload_time_limit
     )
 
-    try:
-        current_block = (await MetagraphSnapshot.aget_latest()).block
-    except Exception as exc:
-        logger.warning(f"Failed to get latest metagraph snapshot: {exc}")
-        current_block = await aget_current_block()
+    current_block = supertensor().get_current_block()
 
     # 1. Find miners with enough allowance
     try:
-        suitable_miners = await sync_to_async(allowance().find_miners_with_allowance)(
+        suitable_miners = allowance().find_miners_with_allowance(
             allowance_seconds=executor_seconds,
             executor_class=executor_class,
             job_start_block=current_block,
@@ -103,13 +99,13 @@ async def _pick_miner_for_job_v2(request: V2JobRequest) -> JobRoute:
         )
         raise
 
-    miners = {miner.hotkey_ss58: miner for miner in await sync_to_async(allowance().miners)()}
+    miners = {miner.hotkey_ss58: miner for miner in allowance().miners()}
 
     # 2. Iterate and try to reserve a miner
     for miner_hotkey, _ in suitable_miners:
         try:
             # 3. Reserve allowance for this miner
-            reservation_id, blocks = await sync_to_async(allowance().reserve_allowance)(
+            reservation_id, blocks = allowance().reserve_allowance(
                 miner=miner_hotkey,
                 executor_class=executor_class,
                 allowance_seconds=executor_seconds,
@@ -117,7 +113,7 @@ async def _pick_miner_for_job_v2(request: V2JobRequest) -> JobRoute:
             )
 
             miner = miners[miner_hotkey]
-            await Miner.objects.aget_or_create(
+            Miner.objects.get_or_create(
                 address=miner.address,
                 ip_version=miner.ip_version,
                 port=miner.port,
