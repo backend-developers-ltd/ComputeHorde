@@ -290,20 +290,10 @@ class Receipts(ReceiptsBase):
     async def get_busy_executor_count(
         self, executor_class: ExecutorClass, at_time: datetime.datetime
     ) -> dict[str, int]:
-        """
-        Count ongoing jobs per miner for the given executor_class at at_time.
-
-        A job is ongoing if its JobStartedReceipt is valid at at_time and there is no
-        JobFinishedReceipt with timestamp <= at_time for the same job_uuid.
-
-        Returns:
-            Dictionary mapping miner hotkeys to the number of ongoing jobs for that executor_class.
-        """
         starts_qs = JobStartedReceipt.objects.valid_at(at_time).filter(
             executor_class=str(executor_class)
         )
 
-        # Existence of a finish before or at at_time for the same job UUID
         finishes = JobFinishedReceipt.objects.filter(
             job_uuid=OuterRef("job_uuid"), timestamp__lte=at_time
         )

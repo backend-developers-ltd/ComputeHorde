@@ -29,7 +29,13 @@ from ..types import (
 from ..utils import blocks, manifests
 from ..utils.manifests import sync_manifests
 from ..utils.supertensor import supertensor
-from .mockchain import MINER_HOTKEYS, manifest_responses, set_block_number
+from .mockchain import (
+    EXECUTOR_CAP,
+    MINER_HOTKEYS,
+    VALIDATOR_HOTKEYS,
+    manifest_responses,
+    set_block_number,
+)
 from .utils_for_tests import (
     LF,
     Matcher,
@@ -49,6 +55,14 @@ def configure_logs(caplog):
         caplog.at_level(logging.CRITICAL, logger="compute_horde.miner_client.organic"),
     ):
         yield
+
+
+def test_current_block():
+    with set_block_number(1000):
+        assert allowance().get_current_block() == 1000
+
+    with set_block_number(1005):
+        assert allowance().get_current_block() == 1005
 
 
 @pytest.mark.filterwarnings("ignore::pytest.PytestUnraisableExceptionWarning")
@@ -600,3 +614,69 @@ def test_allowance_reservation_corner_cases(configure_logs):
             "highest_unspent_allowance": LF(4.749230769230769),
             "highest_unspent_allowance_ss58": Matcher(r".*"),
         }
+
+
+@pytest.mark.django_db(transaction=True)
+def test_manifests(configure_logs):
+    with set_block_number(1000):
+        sync_manifests()
+
+        miner_manifests = allowance().get_manifests()
+
+        for validator_hotkey in VALIDATOR_HOTKEYS.values():
+            executor_dict = miner_manifests.pop(validator_hotkey)
+            total_executor_count = sum(executor_count for executor_count in executor_dict.values())
+            # validators shouldn't have executors
+            assert total_executor_count == 0
+
+        for miner_hotkey in MINER_HOTKEYS.values():
+            executor_dict = miner_manifests.pop(miner_hotkey)
+            total_executor_count = sum(executor_count for executor_count in executor_dict.values())
+            # miners must have executors
+            assert total_executor_count != 0
+
+        # all manifests should have been accounted for
+        assert not miner_manifests
+
+    # test with a block number after START_CHANGING_MANIFESTS_BLOCK
+    with set_block_number(1020):
+        sync_manifests()
+
+        miner_manifests = allowance().get_manifests()
+
+        for validator_hotkey in VALIDATOR_HOTKEYS.values():
+            executor_dict = miner_manifests.pop(validator_hotkey)
+            total_executor_count = sum(executor_count for executor_count in executor_dict.values())
+            # validators shouldn't have executors
+            assert total_executor_count == 0
+
+        # Build expected manifest values for 1000 and 1020
+        responses_1000 = {hk: req for hk, req, _ in manifest_responses(1000)}
+        responses_1020 = {hk: req for hk, req, _ in manifest_responses(1020)}
+        target_ec = ExecutorClass.always_on__llm__a6000
+        # Choose a miner whose manifest changes after 1010
+        whacky_miner = next(h for h in MINER_HOTKEYS.values() if h.startswith("whacky_miner_"))
+
+        # Ensure current manifests reflect the latest sync (1020) and not earlier (1000)
+        assert whacky_miner in miner_manifests
+        whacky_execs = miner_manifests[whacky_miner]
+        assert (
+            whacky_execs[target_ec] == responses_1020[whacky_miner].manifest[target_ec]  # type: ignore[union-attr]
+        )
+        assert (
+            whacky_execs[target_ec] != responses_1000[whacky_miner].manifest[target_ec]  # type: ignore[union-attr]
+        )
+
+        # Do the same check for an always-increasing miner
+        always_inc_miner = next(
+            h for h in MINER_HOTKEYS.values() if h.startswith("always_increasing_miner_")
+        )
+        assert always_inc_miner in miner_manifests
+        always_execs = miner_manifests[always_inc_miner]
+        expected_inc_1020 = responses_1020[always_inc_miner].manifest[target_ec]  # type: ignore[union-attr]
+        # sync_manifests clamps by max_executors_per_class; in tests this aligns with EXECUTOR_CAP
+        expected_inc_1020_clamped = min(expected_inc_1020, EXECUTOR_CAP[target_ec])
+        assert always_execs[target_ec] == expected_inc_1020_clamped
+        assert (
+            always_execs[target_ec] != responses_1000[always_inc_miner].manifest[target_ec]  # type: ignore[union-attr]
+        )

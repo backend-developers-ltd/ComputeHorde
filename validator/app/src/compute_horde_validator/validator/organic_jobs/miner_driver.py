@@ -210,6 +210,7 @@ async def execute_organic_job_request(
         streaming_details=job_request.streaming_details.model_dump()
         if job_request.streaming_details
         else None,
+        allowance_blocks=job_route.allowance_blocks,
         allowance_reservation_id=job_route.allowance_reservation_id,
     )
 

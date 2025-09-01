@@ -142,15 +142,6 @@ class ReceiptsBase(ABC):
         """
         Returns tuples for jobs whose finish (receipt) timestamp falls within the
         given block range [start_block, end_block), filtered by executor class.
-
-        Tuple format:
-            (
-                validator_hotkey: str,
-                miner_hotkey: str,
-                job_run_time_us: int,
-                block_start_time: datetime | None,
-                block_ids: list[int],
-            )
         """
         pass
 
@@ -161,7 +152,7 @@ class ReceiptsBase(ABC):
         """
         Return counts of ongoing jobs per miner at the given time for the executor_class.
 
-        A job counts as ongoing if its JobStartedReceipt is valid at at_time (respects TTL)
-        and there is no JobFinishedReceipt with timestamp <= at_time for the same job_uuid.
+        A job counts as ongoing if its JobStartedReceipt is valid at at_time and there 
+        is no JobFinishedReceipt with timestamp <= at_time for the same job_uuid.
         """
         pass

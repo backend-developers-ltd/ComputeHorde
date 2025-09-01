@@ -284,7 +284,6 @@ class ValidatorWhitelist(models.Model):
 class Cycle(models.Model):
     start = models.BigIntegerField()
     stop = models.BigIntegerField()
-    set_compute_time_allowance = models.BooleanField(default=False)
 
     class Meta:
         constraints = [
@@ -399,6 +398,7 @@ class OrganicJob(JobBase):
     allowance_reservation_id = models.BigIntegerField(
         null=True, blank=True, help_text="ID of the allowance reservation for this job"
     )
+    allowance_blocks = ArrayField(models.BigIntegerField(), null=True, default=list)
 
     class Meta:
         indexes = [
@@ -453,37 +453,6 @@ class AdminJobRequest(models.Model):
 
 def get_random_salt() -> list[int]:
     return list(urandom(8))
-
-
-class ComputeTimeAllowance(models.Model):
-    """
-    Record of executor-seconds allowance for a validator-miner pair.
-    Calculated at the beginning of each cycle.
-    """
-
-    cycle = models.ForeignKey(Cycle, on_delete=models.CASCADE)
-    miner = models.ForeignKey(Miner, on_delete=models.CASCADE)
-    validator = models.ForeignKey(
-        Miner, on_delete=models.CASCADE, related_name="validator_allowances"
-    )
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    initial_allowance = models.FloatField(
-        default=0.0, help_text="Executor-seconds allocated at the beginning of the cycle"
-    )
-    remaining_allowance = models.FloatField(
-        default=0.0, help_text="Remaining executor-seconds that can be used"
-    )
-
-    class Meta:
-        constraints = [
-            UniqueConstraint(
-                fields=["miner", "validator", "cycle"], name="unique_miner_allowance_per_cycle"
-            ),
-        ]
-
-    def __str__(self):
-        return f"{self.validator.hotkey} -> {self.miner.hotkey} {self.cycle}: initial={self.initial_allowance:.2f}s remaining={self.remaining_allowance:.2f}s"
 
 
 class Weights(models.Model):

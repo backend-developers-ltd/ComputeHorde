@@ -56,8 +56,9 @@ None
 3. undo allowance reservation
 4. spend allowance
 5. validate foreign receipt
-6. return manifests
-7. return the metagraph (include ddos-shield-mangled addresses)
+6. return block number
+7. return manifests
+8. return the metagraph (include ddos-shield-mangled addresses)
 
 Access them using the singleton `allowance.allowance()`.
 
