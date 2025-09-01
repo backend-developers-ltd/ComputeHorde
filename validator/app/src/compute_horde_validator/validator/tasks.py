@@ -11,7 +11,7 @@ from datetime import timedelta
 from decimal import Decimal
 from functools import cached_property
 from math import ceil, floor
-from typing import Any, ParamSpec, TypeVar, Union
+from typing import ParamSpec, TypeVar, Union
 
 import billiard.exceptions
 import bittensor
@@ -29,8 +29,8 @@ from celery.utils.log import get_task_logger
 from compute_horde.dynamic_config import fetch_dynamic_configs_from_contract, sync_dynamic_config
 from compute_horde.fv_protocol.facilitator_requests import OrganicJobRequest
 from compute_horde.smart_contracts.map_contract import get_dynamic_config_types_from_settings
-from compute_horde.subtensor import TEMPO, get_cycle_containing_block
-from compute_horde.utils import MIN_VALIDATOR_STAKE, turbobt_get_validators
+from compute_horde.subtensor import get_cycle_containing_block
+from compute_horde.utils import turbobt_get_validators
 from compute_horde_core.executor_class import ExecutorClass
 from constance import config
 from django.conf import settings
@@ -45,7 +45,6 @@ from compute_horde_validator.validator.cross_validation.prompt_answering import 
 from compute_horde_validator.validator.cross_validation.prompt_generation import generate_prompts
 from compute_horde_validator.validator.locks import Locked, LockType, get_advisory_lock
 from compute_horde_validator.validator.models import (
-    ComputeTimeAllowance,
     Cycle,
     Miner,
     OrganicJob,
@@ -79,8 +78,7 @@ from compute_horde_validator.validator.synthetic_jobs.utils import (
 )
 
 from . import eviction
-from .allowance import tasks  # noqa
-from .clean_me_up import get_single_manifest, save_compute_time_allowance_event
+from .clean_me_up import get_single_manifest
 from .dynamic_config import aget_config
 from .models import AdminJobRequest, MetagraphSnapshot, MinerManifest
 from .scoring import create_scoring_engine
@@ -1272,136 +1270,6 @@ async def get_manifests_from_miners(
             result_manifests[hotkey] = manifest
 
     return result_manifests
-
-
-@app.task
-def set_compute_time_allowances() -> None:
-    metagraph = MetagraphSnapshot.get_cycle_start()
-    current_cycle = Cycle.from_block(metagraph.block, netuid=settings.BITTENSOR_NETUID)
-    if current_cycle.set_compute_time_allowance:
-        logger.debug(f"allowances already calculated for cycle {current_cycle}")
-        return
-
-    set_success = False
-    try:
-        current_cycle.set_compute_time_allowance = True
-        current_cycle.save()
-        set_success = async_to_sync(_set_compute_time_allowances)(metagraph, current_cycle)
-
-    except Exception:
-        msg = "Failed to set compute time allowances: {e}"
-        SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).create(
-            type=SystemEvent.EventType.COMPUTE_TIME_ALLOWANCE,
-            subtype=SystemEvent.EventSubType.GENERIC_ERROR,
-            long_description=msg,
-            data={},
-        )
-        logger.warning(msg)
-
-    if not set_success:
-        current_cycle.set_compute_time_allowance = False
-        current_cycle.save()
-
-
-async def _set_compute_time_allowances(metagraph: MetagraphSnapshot, cycle: Cycle) -> bool:
-    """
-    Calculate and save allowances for all validator-miner pairs at the beginning of a cycle.
-    """
-
-    data: dict[str, Any] = {
-        "cycle_start": cycle.start,
-        "cycle_stop": cycle.stop,
-    }
-
-    miners_hotkeys = metagraph.get_serving_hotkeys()
-    if len(miners_hotkeys) == 0:
-        msg = "No miners in the last metagraph snapshot - will NOT set compute time allowances"
-        await save_compute_time_allowance_event(SystemEvent.EventSubType.GIVING_UP, msg, data)
-        logger.warning(msg)
-        return False
-
-    total_stake = metagraph.get_total_validator_stake()
-    if total_stake is None or total_stake <= 0.0:
-        msg = "Total stake for last_metagraph snapshot is 0 - skipping compute time allowances"
-        await save_compute_time_allowance_event(SystemEvent.EventSubType.GIVING_UP, msg, data)
-        logger.warning(msg)
-        return False
-
-    # compute stake proportion for each validator
-    hotkey_to_stake_proportion = {}
-    validators_hotkeys = []
-    for hotkey, stake in zip(metagraph.hotkeys, metagraph.stake):
-        if stake > MIN_VALIDATOR_STAKE:
-            validators_hotkeys.append(hotkey)
-            hotkey_to_stake_proportion[hotkey] = stake / total_stake
-    logger.debug(f"Validator stake proportion: {hotkey_to_stake_proportion}")
-    data["validator_stake_proportion"] = hotkey_to_stake_proportion
-
-    # Fetch miners and validators from the database
-    miners = [m async for m in Miner.objects.filter(hotkey__in=miners_hotkeys)]
-    validators = [m async for m in Miner.objects.filter(hotkey__in=validators_hotkeys)]
-
-    manifests_dict = await _get_latest_manifests(miners)
-    # logger.debug(f"miners: {miners}, validators: {validators}, manifests: {manifests_dict}")
-    if not manifests_dict:
-        msg = "No manifests fetched - skipping compute time allowances"
-        await save_compute_time_allowance_event(SystemEvent.EventSubType.GIVING_UP, msg, data)
-        logger.error(msg)
-        return False
-
-    # max compute time for an executor in a full cycle
-    cycle_duration_seconds = (
-        2 * TEMPO * int(settings.BITTENSOR_APPROXIMATE_BLOCK_DURATION.total_seconds())
-        - COMPUTE_TIME_OVERHEAD_SECONDS
-    )
-
-    # determine compute-time allowances for each validator-miner pair
-    try:
-        allowance_records = []
-        for validator in validators:
-            # calculate allowance for each miner based on their manifest
-            for miner in miners:
-                manifest = manifests_dict.get(miner.hotkey, None)
-                if manifest is None:
-                    continue
-                online_executor_count = 0
-                for _executor, executor_count in manifest.items():
-                    online_executor_count += executor_count
-
-                allowance = (
-                    hotkey_to_stake_proportion[validator.hotkey]
-                    * online_executor_count
-                    * cycle_duration_seconds
-                )
-                allowance_records.append(
-                    ComputeTimeAllowance(
-                        cycle=cycle,
-                        miner=miner,
-                        validator=validator,
-                        initial_allowance=allowance,
-                        remaining_allowance=allowance,
-                    )
-                )
-        await ComputeTimeAllowance.objects.abulk_create(allowance_records)
-        data["total_allowance_records_created"] = len(allowance_records)
-
-        msg = f"Set {len(allowance_records)} compute-time allowances for cycle {cycle}"
-        await save_compute_time_allowance_event(
-            SystemEvent.EventSubType.SUCCESS,
-            msg,
-            data,
-        )
-        logger.info(msg)
-    except Exception as e:
-        msg = f"Error calculating allowances: {e}"
-        await save_compute_time_allowance_event(
-            SystemEvent.EventSubType.GENERIC_ERROR,
-            msg,
-            data,
-        )
-        logger.error(msg)
-        return False
-    return True
 
 
 @app.task

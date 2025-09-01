@@ -68,6 +68,38 @@ def get_manifests(
     return result
 
 
+def get_current_manifests() -> dict[ss58_address, dict[ExecutorClass, int]]:
+    """
+    Returns:
+        Dictionary mapping hotkey to dict of ExecutorClass and executor_count
+    """
+    # Get the newest manifest for each hotkey-executor_class combination
+    manifests = (
+        AllowanceMinerManifest.objects.values(
+            "miner_ss58address", "executor_class", "executor_count", "block_number"
+        )
+        .order_by("miner_ss58address", "executor_class", "-block_number")
+        .distinct("miner_ss58address", "executor_class")
+    )
+
+    result: dict[ss58_address, dict[ExecutorClass, int]] = {}
+
+    # Fill in the manifest data
+    for manifest in manifests:
+        hotkey = manifest["miner_ss58address"]
+        executor_class = ExecutorClass(manifest["executor_class"])
+        executor_count = manifest["executor_count"]
+
+        try:
+            executor_dict = result[hotkey]
+        except KeyError:
+            result[hotkey] = {}
+            executor_dict = result[hotkey]
+        executor_dict[executor_class] = executor_count
+
+    return result
+
+
 def get_manifest_drops(
     block_number: int, hotkeys: list[ss58_address]
 ) -> dict[tuple[ss58_address, ExecutorClass], int]:

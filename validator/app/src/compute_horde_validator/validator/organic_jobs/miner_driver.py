@@ -35,7 +35,6 @@ from compute_horde.protocol_messages import (
     MinerToValidatorMessage,
     V0StreamingJobReadyRequest,
 )
-from compute_horde.receipts.models import JobStartedReceipt
 from compute_horde_core.executor_class import ExecutorClass
 from django.conf import settings
 from pydantic import JsonValue
@@ -51,6 +50,7 @@ from compute_horde_validator.validator.models import (
     SystemEvent,
 )
 from compute_horde_validator.validator.organic_jobs.miner_client import MinerClient
+from compute_horde_validator.validator.receipts.default import receipts
 from compute_horde_validator.validator.routing.types import JobRoute
 from compute_horde_validator.validator.utils import TRUSTED_MINER_FAKE_KEY
 
@@ -210,6 +210,7 @@ async def execute_organic_job_request(
         streaming_details=job_request.streaming_details.model_dump()
         if job_request.streaming_details
         else None,
+        allowance_blocks=job_route.allowance_blocks,
         allowance_reservation_id=job_route.allowance_reservation_id,
     )
 
@@ -360,9 +361,10 @@ async def drive_organic_job(
             )  # As far as the validator is concerned, the job is as good as failed
             system_event_subtype = SystemEvent.EventSubType.JOB_REJECTED
         else:  # rejection.msg.reason == JobRejectionReason.BUSY
-            job_request_time = (
-                await JobStartedReceipt.objects.aget(job_uuid=job.job_uuid)
-            ).timestamp
+            job_started_receipt = await receipts().get_job_started_receipt_by_uuid(
+                str(job.job_uuid)
+            )
+            job_request_time = job_started_receipt.timestamp
             valid_excuses = await job_excuses.filter_valid_excuse_receipts(
                 receipts_to_check=rejection.msg.receipts or [],
                 check_time=job_request_time,

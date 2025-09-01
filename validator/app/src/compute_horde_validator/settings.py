@@ -604,13 +604,6 @@ CELERY_BEAT_SCHEDULE = {
             "expires": timedelta(days=1).total_seconds(),
         },
     },
-    "set_compute_time_allowances": {
-        "task": "compute_horde_validator.validator.tasks.set_compute_time_allowances",
-        "schedule": timedelta(minutes=1),
-        "options": {
-            "expires": timedelta(minutes=1).total_seconds(),
-        },
-    },
     "poll_miner_manifests": {
         "task": "compute_horde_validator.validator.tasks.poll_miner_manifests",
         "schedule": timedelta(minutes=5),

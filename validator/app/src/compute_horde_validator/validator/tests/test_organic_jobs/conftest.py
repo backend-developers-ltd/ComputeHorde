@@ -12,8 +12,10 @@ from compute_horde.miner_client.organic import OrganicMinerClient
 from compute_horde.transport import AbstractTransport
 from compute_horde_core.executor_class import ExecutorClass
 
+from compute_horde_validator.validator.allowance.tests.mockchain import set_block_number
+from compute_horde_validator.validator.allowance.utils import blocks, manifests
+from compute_horde_validator.validator.allowance.utils.supertensor import supertensor
 from compute_horde_validator.validator.models import (
-    ComputeTimeAllowance,
     Cycle,
     MetagraphSnapshot,
     Miner,
@@ -22,6 +24,18 @@ from compute_horde_validator.validator.models import (
 )
 from compute_horde_validator.validator.organic_jobs.facilitator_client import FacilitatorClient
 from compute_horde_validator.validator.tests.transport import SimulationTransport
+
+
+@pytest.fixture(autouse=True)
+def add_allowance():
+    with set_block_number(1000):
+        manifests.sync_manifests()
+    for block_number in range(1001, 1004):
+        with set_block_number(block_number):
+            blocks.process_block_allowance_with_reporting(block_number, supertensor_=supertensor())
+
+    with set_block_number(1005):
+        yield
 
 
 @pytest.fixture
@@ -48,17 +62,6 @@ def manifest(miner, cycle):
         executor_class=ExecutorClass.always_on__gpu_24gb,
         executor_count=5,
         online_executor_count=5,
-    )
-
-
-@pytest.fixture(autouse=True)
-def compute_time_allowance(cycle, miner, validator):
-    return ComputeTimeAllowance.objects.create(
-        cycle=cycle,
-        miner=miner,
-        validator=validator,
-        initial_allowance=1e10,
-        remaining_allowance=1e10,
     )
 
 
