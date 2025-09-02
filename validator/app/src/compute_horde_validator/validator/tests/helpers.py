@@ -10,6 +10,7 @@ from time import monotonic
 from unittest import mock
 
 import bittensor
+import constance
 import numpy as np
 from bittensor.core.errors import SubstrateRequestException
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
@@ -25,7 +26,6 @@ from compute_horde.protocol_messages import (
 )
 from compute_horde.utils import ValidatorInfo
 from compute_horde_core.signature import Signature
-from constance.base import Config
 from django.conf import settings
 from pydantic import TypeAdapter
 
@@ -380,12 +380,12 @@ def check_system_events(
 
 
 def patch_constance(config_overlay: dict):
-    old_getattr = Config.__getattr__
+    old_getattr = constance.base.Config.__getattr__
 
     def new_getattr(s, key):
         return config_overlay[key] if key in config_overlay else old_getattr(s, key)
 
-    return mock.patch.object(Config, "__getattr__", new_getattr)
+    return mock.patch.object(constance.base.Config, "__getattr__", new_getattr)
 
 
 class Celery:
