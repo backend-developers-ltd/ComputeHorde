@@ -58,7 +58,7 @@ from compute_horde_validator.validator.synthetic_jobs.batch_run import (
 from compute_horde_validator.validator.tests.transport import SimulationTransport
 
 from ...synthetic_jobs.generator import llm_prompts
-from ..helpers import mock_aiohttp_client_session
+from ..helpers import mock_manifest_endpoints
 from .helpers import (
     check_miner_job_system_events,
     check_synthetic_job,
@@ -183,7 +183,16 @@ async def test_all_succeed(
         block=1000,
         cycle=await Cycle.objects.acreate(start=708, stop=1430),
     )
-    async with mock_aiohttp_client_session(manifest_message):
+    miner_config = [
+        {
+            "hotkey": _miner.hotkey,
+            "address": _miner.address,
+            "port": _miner.port,
+            "manifest": manifest_message,
+        }
+        for _miner in miners
+    ]
+    with mock_manifest_endpoints(miner_config):
         await asyncio.wait_for(
             execute_synthetic_batch_run(
                 miners,
@@ -497,7 +506,16 @@ async def test_some_streaming_succeed(
         block=1000,
         cycle=await Cycle.objects.acreate(start=708, stop=1430),
     )
-    async with mock_aiohttp_client_session(streaming_manifest_message):
+    miner_config = [
+        {
+            "hotkey": _miner.hotkey,
+            "address": _miner.address,
+            "port": _miner.port,
+            "manifest": streaming_manifest_message,
+        }
+        for _miner in miners
+    ]
+    with mock_manifest_endpoints(miner_config):
         await asyncio.wait_for(
             execute_synthetic_batch_run(
                 miners,
@@ -786,7 +804,18 @@ async def test_complex(
         block=1000,
         cycle=await Cycle.objects.acreate(start=708, stop=1430),
     )
-    async with mock_aiohttp_client_session(manifest_message, wait_on_ports={8008: 5}):
+
+    miner_config = [
+        {
+            "hotkey": _miner.hotkey,
+            "address": _miner.address,
+            "port": _miner.port,
+            "manifest": manifest_message,
+            "wait_before": 5 if _miner.port == 8008 else 0,
+        }
+        for _miner in miners
+    ]
+    with mock_manifest_endpoints(miner_config):
         await asyncio.wait_for(
             execute_synthetic_batch_run(
                 miners,

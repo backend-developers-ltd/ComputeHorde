@@ -36,11 +36,7 @@ from compute_horde_validator.validator.synthetic_jobs.utils import (
     create_and_run_synthetic_job_batch,
 )
 
-from ..helpers import (
-    check_system_events,
-    create_mock_http_session,
-    mock_aiohttp_client_session,
-)
+from ..helpers import check_system_events, mock_manifest_endpoints
 
 MOCK_SCORE = 1
 MANIFEST_INCENTIVE_MULTIPLIER = 1.05
@@ -141,34 +137,45 @@ async def miner_synthetic_jobs_scheme(
         block=1000,
         cycle=await Cycle.objects.acreate(start=708, stop=1430),
     )
-    task = asyncio.create_task(execute_synthetic_batch_run([miner], [], batch.id))
-    try:
-        # wait for creation of mocked MinerClient to get instance
-        miner_client = await await_for_not_none(lambda: mocked_synthetic_miner_client.instance)
 
-        # wait for task to consume manifest future result and setup jobs
-        await await_for_true(lambda: len(miner_client.ctx.job_uuids) == expected_jobs)
+    miner_config = [
+        {
+            "hotkey": miner_hotkey,
+            "address": "ignore",
+            "port": 9999,
+            "manifest": {DEFAULT_EXECUTOR_CLASS: 1},
+        }
+    ]
+    with mock_manifest_endpoints(miner_config):
+        task = asyncio.create_task(execute_synthetic_batch_run([miner], [], batch.id))
+        try:
+            # wait for creation of mocked MinerClient to get instance
+            miner_client = await await_for_not_none(lambda: mocked_synthetic_miner_client.instance)
 
-        # simulate miner interaction using interaction_callback
-        call_after_job_sent = await interaction_callback(miner_client, after_job_sent=False)
+            # wait for task to consume manifest future result and setup jobs
+            await await_for_true(lambda: len(miner_client.ctx.job_uuids) == expected_jobs)
 
-        if call_after_job_sent:
-            # wait for job_request to be sent
-            job_uuid = miner_client.ctx.job_uuids[0]
-            await await_for_true(
-                lambda: miner_client.ctx.jobs[job_uuid].job_after_sent_time is not None
-            )
+            # simulate miner interaction using interaction_callback
+            call_after_job_sent = await interaction_callback(miner_client, after_job_sent=False)
 
-            await interaction_callback(miner_client, after_job_sent=True)
-    finally:
-        # wait for synthetic jobs task is finished
-        await asyncio.wait_for(task, 5)
+            if call_after_job_sent:
+                # wait for job_request to be sent
+                job_uuid = miner_client.ctx.job_uuids[0]
+                await await_for_true(
+                    lambda: miner_client.ctx.jobs[job_uuid].job_after_sent_time is not None
+                )
+
+                await interaction_callback(miner_client, after_job_sent=True)
+        finally:
+            # wait for synthetic jobs task is finished
+            await asyncio.wait_for(task, 5)
 
 
 def syntethic_batch_scheme_single_miner(
     settings,
     mocked_synthetic_miner_client,
     expected_jobs,
+    expected_manifest,
     interaction_callback,
     miner_hotkey="miner_hotkey",
 ):
@@ -182,44 +189,51 @@ def syntethic_batch_scheme_single_miner(
         cycle=Cycle.objects.create(start=708, stop=1430),
     )
 
-    async def as_coro(fun, *args, **kwargs):
-        fun(*args, *kwargs)
+    miner_config = [
+        {
+            "hotkey": miner_hotkey,
+            "address": "ignore",
+            "port": 9999,
+            "manifest": expected_manifest,
+        }
+    ]
 
-    thread = threading.Thread(
-        target=create_and_run_synthetic_job_batch, args=(1, "test", batch.id), daemon=True
-    )
-    thread.start()
-
-    try:
-        miner_client = wait_for_not_none(lambda: mocked_synthetic_miner_client.instance)
-
-        # we change async state, eg. Futures - so run as coroutine threadsafe using loop from miner_manifest Future
-        loop = miner_client.ctx._loop
-
-        wait_for_true(lambda: len(miner_client.ctx.job_uuids) == expected_jobs)
-
-        future = asyncio.run_coroutine_threadsafe(
-            interaction_callback(miner_client, after_job_sent=False), loop
+    with mock_manifest_endpoints(miner_config):
+        thread = threading.Thread(
+            target=create_and_run_synthetic_job_batch, args=(1, "test", batch.id), daemon=True
         )
-        future.result(timeout=5)
+        thread.start()
 
-        # wait for job_request to be sent
-        wait_for_true(
-            lambda: all(
-                job.job_after_sent_time is not None for job in miner_client.ctx.jobs.values()
+        try:
+            miner_client = wait_for_not_none(lambda: mocked_synthetic_miner_client.instance)
+
+            # we change async state, eg. Futures - so run as coroutine threadsafe using loop from miner_manifest Future
+            loop = miner_client.ctx._loop
+
+            wait_for_true(lambda: len(miner_client.ctx.job_uuids) == expected_jobs)
+
+            future = asyncio.run_coroutine_threadsafe(
+                interaction_callback(miner_client, after_job_sent=False), loop
             )
-        )
+            future.result(timeout=5)
 
-        future = asyncio.run_coroutine_threadsafe(
-            interaction_callback(miner_client, after_job_sent=True), loop
-        )
-        future.result(timeout=5)
-    finally:
-        # contrary to the async version this does not cancel task, so it might be left running
-        # and influence next tests
-        thread.join(timeout=5)
-        if thread.is_alive():
-            raise TimeoutError("thread still running")
+            # wait for job_request to be sent
+            wait_for_true(
+                lambda: all(
+                    job.job_after_sent_time is not None for job in miner_client.ctx.jobs.values()
+                )
+            )
+
+            future = asyncio.run_coroutine_threadsafe(
+                interaction_callback(miner_client, after_job_sent=True), loop
+            )
+            future.result(timeout=5)
+        finally:
+            # contrary to the async version this does not cancel task, so it might be left running
+            # and influence next tests
+            thread.join(timeout=5)
+            if thread.is_alive():
+                raise TimeoutError("thread still running")
 
 
 class MockSyntheticJobGeneratorFactory(BaseSyntheticJobGeneratorFactory):
@@ -326,9 +340,7 @@ async def test_execute_synthetic_job(
             )
         return f2 is not None
 
-    # Use the async context manager to mock aiohttp.ClientSession
-    async with mock_aiohttp_client_session({DEFAULT_EXECUTOR_CLASS: 1}):
-        await miner_synthetic_jobs_scheme(mocked_synthetic_miner_client, 1, interaction_callback)
+    await miner_synthetic_jobs_scheme(mocked_synthetic_miner_client, 1, interaction_callback)
 
     job = await SyntheticJob.objects.aget(job_uuid=job_uuid)
 
@@ -376,15 +388,14 @@ def test_create_and_run_synthetic_job_batch(
                     )
                 )
 
-    mock_session = create_mock_http_session({DEFAULT_EXECUTOR_CLASS: current_online_executors})
-    with patch("aiohttp.ClientSession", return_value=mock_session):
-        syntethic_batch_scheme_single_miner(
-            settings,
-            mocked_synthetic_miner_client,
-            current_online_executors,
-            interaction_callback,
-            miner_hotkey="miner_hotkey",
-        )
+    syntethic_batch_scheme_single_miner(
+        settings,
+        mocked_synthetic_miner_client,
+        current_online_executors,
+        {DEFAULT_EXECUTOR_CLASS: current_online_executors},
+        interaction_callback,
+        miner_hotkey="miner_hotkey",
+    )
 
     for job in SyntheticJob.objects.filter(job_uuid__in=job_uuids):
         assert abs(job.score - 1) < 0.0001

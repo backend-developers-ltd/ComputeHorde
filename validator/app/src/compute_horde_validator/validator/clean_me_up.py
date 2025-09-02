@@ -30,9 +30,14 @@ async def get_single_manifest(
             async with aiohttp.ClientSession() as session:
                 url = f"http://{address}:{port}/v0.1/manifest"
                 async with await session.get(url) as response:
-                    response_json = await response.json()
                     if response.status == 200:
+                        response_json = await response.json()
                         manifest = response_json.get("manifest", {})
+                        # Convert manifests back into the enums
+                        manifest = {
+                            ExecutorClass(executor_class): count
+                            for executor_class, count in manifest.items()
+                        }
                         return hotkey, manifest
                     else:
                         msg = f"HTTP {response.status} fetching manifest for {hotkey}"

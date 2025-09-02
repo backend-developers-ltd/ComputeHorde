@@ -7,7 +7,10 @@ from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.fv_protocol.facilitator_requests import V2JobRequest
 
 from compute_horde_validator.validator.allowance.default import allowance
-from compute_horde_validator.validator.allowance.tests.mockchain import set_block_number
+from compute_horde_validator.validator.allowance.tests.mockchain import (
+    mock_manifest_endpoints_for_block_number,
+    set_block_number,
+)
 from compute_horde_validator.validator.allowance.types import NotEnoughAllowanceException
 from compute_horde_validator.validator.allowance.utils import blocks, manifests
 from compute_horde_validator.validator.allowance.utils.supertensor import supertensor
@@ -36,7 +39,10 @@ async def mock_block_number():
 
 @pytest_asyncio.fixture()
 async def add_allowance():
-    with await sync_to_async(set_block_number)(1000):
+    with (
+        await sync_to_async(set_block_number)(1000),
+        await sync_to_async(mock_manifest_endpoints_for_block_number)(1000),
+    ):
         await sync_to_async(manifests.sync_manifests)()
     for block_number in range(1001, 1004):
         with await sync_to_async(set_block_number)(block_number):

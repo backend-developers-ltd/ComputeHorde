@@ -16,7 +16,7 @@ from compute_horde_validator.validator.models import (
 from compute_horde_validator.validator.synthetic_jobs.batch_run import execute_synthetic_batch_run
 from compute_horde_validator.validator.tests.transport import SimulationTransport
 
-from ..helpers import check_system_events, mock_aiohttp_client_session
+from ..helpers import check_system_events, mock_manifest_endpoints
 from .helpers import check_synthetic_job
 from .mock_generator import (
     NOT_SCORED,
@@ -46,7 +46,16 @@ async def test_execute_miner_synthetic_jobs_success(
         block=1000,
         cycle=await Cycle.objects.acreate(start=708, stop=1430),
     )
-    async with mock_aiohttp_client_session(manifest_message):
+
+    miner_config = [
+        {
+            "hotkey": miner.hotkey,
+            "address": miner.address,
+            "port": miner.port,
+            "manifest": manifest_message,
+        }
+    ]
+    with mock_manifest_endpoints(miner_config):
         await asyncio.wait_for(
             execute_synthetic_batch_run(
                 [miner],
@@ -84,7 +93,16 @@ async def test_execute_miner_synthetic_jobs_success_timeout(
         block=1000,
         cycle=await Cycle.objects.acreate(start=708, stop=1430),
     )
-    async with mock_aiohttp_client_session(manifest_message):
+
+    miner_config = [
+        {
+            "hotkey": miner.hotkey,
+            "address": miner.address,
+            "port": miner.port,
+            "manifest": manifest_message,
+        }
+    ]
+    with mock_manifest_endpoints(miner_config):
         await asyncio.wait_for(
             execute_synthetic_batch_run(
                 [miner],
@@ -120,7 +138,16 @@ async def test_execute_miner_synthetic_jobs_job_failed(
         block=1000,
         cycle=await Cycle.objects.acreate(start=708, stop=1430),
     )
-    async with mock_aiohttp_client_session(manifest_message):
+
+    miner_config = [
+        {
+            "hotkey": miner.hotkey,
+            "address": miner.address,
+            "port": miner.port,
+            "manifest": manifest_message,
+        }
+    ]
+    with mock_manifest_endpoints(miner_config):
         await asyncio.wait_for(
             execute_synthetic_batch_run(
                 [miner],
@@ -151,7 +178,16 @@ async def test_execute_miner_synthetic_jobs_job_declined(
         block=1000,
         cycle=await Cycle.objects.acreate(start=708, stop=1430),
     )
-    async with mock_aiohttp_client_session(manifest_message):
+
+    miner_config = [
+        {
+            "hotkey": miner.hotkey,
+            "address": miner.address,
+            "port": miner.port,
+            "manifest": manifest_message,
+        }
+    ]
+    with mock_manifest_endpoints(miner_config):
         await asyncio.wait_for(
             execute_synthetic_batch_run(
                 [miner],
@@ -177,7 +213,17 @@ async def test_execute_miner_synthetic_jobs_no_manifest(
         block=1000,
         cycle=await Cycle.objects.acreate(start=708, stop=1430),
     )
-    async with mock_aiohttp_client_session({}, wait_before=10):
+
+    miner_config = [
+        {
+            "hotkey": miner.hotkey,
+            "address": miner.address,
+            "port": miner.port,
+            "manifest": None,
+            "wait_before": 10,
+        }
+    ]
+    with mock_manifest_endpoints(miner_config):
         await asyncio.wait_for(
             execute_synthetic_batch_run(
                 [miner],

@@ -1,16 +1,15 @@
-import asyncio
 import datetime
 from contextlib import contextmanager
 from unittest import mock
 from unittest.mock import patch
 
 import turbobt
-from compute_horde.protocol_messages import V0ExecutorManifestRequest
 from compute_horde.test_wallet import get_test_validator_wallet
 from compute_horde_core.executor_class import ExecutorClass
-from pydantic import BaseModel
 
 from compute_horde_validator.validator.allowance.utils import supertensor
+
+from ...tests.helpers import mock_manifest_endpoints
 
 NUM_MINERS = 250
 NUM_VALIDATORS = 6
@@ -75,18 +74,13 @@ EXECUTOR_CAP = {
 }
 
 
-def manifest_responses(block_number) -> list[tuple[str, str | BaseModel, float]]:
+def manifest_responses(block_number) -> list[tuple[str, dict[ExecutorClass, int] | None, float]]:
     assert block_number >= START_BLOCK
     return [
         *[
             (
                 hotkey,
-                V0ExecutorManifestRequest(
-                    manifest={
-                        ec: (ind + uid) % (EXECUTOR_CAP[ec])
-                        for ind, ec in enumerate(EXECUTOR_CLASSES)
-                    },
-                ),
+                {ec: (ind + uid) % (EXECUTOR_CAP[ec]) for ind, ec in enumerate(EXECUTOR_CLASSES)},
                 0,
             )
             for uid, hotkey in MINER_HOTKEYS.items()
@@ -95,12 +89,10 @@ def manifest_responses(block_number) -> list[tuple[str, str | BaseModel, float]]
         *[
             (
                 hotkey,
-                V0ExecutorManifestRequest(
-                    manifest={
-                        ec: (ind + uid + cmbm(block_number)) % (EXECUTOR_CAP[ec])
-                        for ind, ec in enumerate(EXECUTOR_CLASSES)
-                    },
-                ),
+                {
+                    ec: (ind + uid + cmbm(block_number)) % (EXECUTOR_CAP[ec])
+                    for ind, ec in enumerate(EXECUTOR_CLASSES)
+                },
                 0,
             )
             for uid, hotkey in MINER_HOTKEYS.items()
@@ -109,12 +101,10 @@ def manifest_responses(block_number) -> list[tuple[str, str | BaseModel, float]]
         *[
             (
                 hotkey,
-                V0ExecutorManifestRequest(
-                    manifest={
-                        ec: (ind + uid) % (EXECUTOR_CAP[ec]) + cmbm(block_number) - START_BLOCK
-                        for ind, ec in enumerate(EXECUTOR_CLASSES)
-                    },
-                ),
+                {
+                    ec: (ind + uid) % (EXECUTOR_CAP[ec]) + cmbm(block_number) - START_BLOCK
+                    for ind, ec in enumerate(EXECUTOR_CLASSES)
+                },
                 0,
             )
             for uid, hotkey in MINER_HOTKEYS.items()
@@ -123,16 +113,11 @@ def manifest_responses(block_number) -> list[tuple[str, str | BaseModel, float]]
         *[
             (
                 hotkey,
-                V0ExecutorManifestRequest(
-                    manifest={
-                        ec: (ind + uid + cmbm(block_number)) % (EXECUTOR_CAP[ec])
-                        for ind, ec in enumerate(EXECUTOR_CLASSES)
-                        if (
-                            block_number < START_CHANGING_MANIFESTS_BLOCK
-                            or (block_number + ind) % 2
-                        )
-                    },
-                ),
+                {
+                    ec: (ind + uid + cmbm(block_number)) % (EXECUTOR_CAP[ec])
+                    for ind, ec in enumerate(EXECUTOR_CLASSES)
+                    if (block_number < START_CHANGING_MANIFESTS_BLOCK or (block_number + ind) % 2)
+                },
                 0,
             )
             for uid, hotkey in MINER_HOTKEYS.items()
@@ -141,12 +126,7 @@ def manifest_responses(block_number) -> list[tuple[str, str | BaseModel, float]]
         *[
             (
                 hotkey,
-                V0ExecutorManifestRequest(
-                    manifest={
-                        ec: (ind + uid) % (EXECUTOR_CAP[ec])
-                        for ind, ec in enumerate(EXECUTOR_CLASSES)
-                    },
-                ),
+                {ec: (ind + uid) % (EXECUTOR_CAP[ec]) for ind, ec in enumerate(EXECUTOR_CLASSES)},
                 0
                 if block_number < START_CHANGING_MANIFESTS_BLOCK
                 else (MANIFEST_FETCHING_TIMEOUT * 2 * (block_number % 2)),
@@ -157,14 +137,9 @@ def manifest_responses(block_number) -> list[tuple[str, str | BaseModel, float]]
         *[
             (
                 hotkey,
-                V0ExecutorManifestRequest(
-                    manifest={
-                        ec: (ind + uid) % (EXECUTOR_CAP[ec])
-                        for ind, ec in enumerate(EXECUTOR_CLASSES)
-                    },
-                )
+                {ec: (ind + uid) % (EXECUTOR_CAP[ec]) for ind, ec in enumerate(EXECUTOR_CLASSES)}
                 if (block_number < START_CHANGING_MANIFESTS_BLOCK or not (block_number % 2))
-                else "wrong",
+                else None,
                 0,
             )
             for uid, hotkey in MINER_HOTKEYS.items()
@@ -301,84 +276,37 @@ def set_block_number(block_number_):
         def wallet(self):
             return get_test_validator_wallet()
 
-    responses = manifest_responses(block_number_)
+    with patch.object(supertensor, "_supertensor_instance", MockSuperTensor()):
+        yield
 
-    # Create mock HTTP responses from manifest responses
-    def create_mock_http_responses():
-        http_responses = {}
 
-        for hotkey, manifest_request, _ in responses:
-            if isinstance(manifest_request, V0ExecutorManifestRequest):
-                # Convert the manifest to the HTTP response format
-                http_response = {"manifest": manifest_request.manifest}
-                http_responses[hotkey] = http_response
+@contextmanager
+def mock_manifest_endpoints_for_block_number(block_number_):
+    # Create miner configs from the manifest response and the corresponding IP/port combination
+    def create_miner_config():
+        miners = {
+            miner.hotkey: (miner.axon_info.ip, miner.axon_info.port)
+            for miner in list_neurons(block_number_, with_shield=False)
+        }
+        responses = manifest_responses(block_number_)
+        configs = []
+        for _hotkey, _manifest, _delay in responses:
+            # Some miners are designed to be missing for certain block numbers
+            try:
+                ip, port = miners[_hotkey]
+            except KeyError:
+                continue
 
-        return http_responses
+            configs.append(
+                {
+                    "hotkey": _hotkey,
+                    "address": ip,
+                    "port": port,
+                    "manifest": _manifest,
+                    "wait_before": _delay,
+                }
+            )
+        return configs
 
-    # Create mock HTTP session
-    def create_mock_http_session(http_responses):
-        class MockResponse:
-            def __init__(self, status, data):
-                self.status = status
-                self._data = data
-
-            async def json(self):
-                return self._data
-
-            async def __aenter__(self):
-                return self
-
-            async def __aexit__(self, exc_type, exc_val, exc_tb):
-                return None
-
-        class MockSession:
-            def __init__(self, http_responses):
-                self.http_responses = http_responses
-
-            async def get(self, url):
-                # Extract hotkey from URL by looking up the address in neurons
-                # URL format: http://{address}:{port}/v0.1/manifest
-                address = url.split("://")[1].split(":")[0]
-
-                # Find the hotkey for this address by looking up in neurons
-                neurons = list_neurons(block_number_, with_shield=False)
-                target_hotkey = None
-                for neuron in neurons:
-                    if neuron.axon_info.ip == address:
-                        target_hotkey = neuron.hotkey
-                        break
-
-                if target_hotkey and target_hotkey in http_responses:
-                    # Find the delay for this hotkey
-                    target_delay = 0.0
-                    for response_hotkey, _, delay in responses:
-                        if response_hotkey == target_hotkey:
-                            target_delay = delay
-                            break
-
-                    # Simulate delay if specified
-                    if target_delay > 0:
-                        await asyncio.sleep(target_delay)
-
-                    # Return successful response
-                    return MockResponse(200, http_responses[target_hotkey])
-                else:
-                    # Return error response for unknown miners
-                    return MockResponse(404, {"error": "Miner not found"})
-
-            async def __aenter__(self):
-                return self
-
-            async def __aexit__(self, exc_type, exc_val, exc_tb):
-                return None
-
-        return MockSession(http_responses)
-
-    http_responses = create_mock_http_responses()
-    mock_session = create_mock_http_session(http_responses)
-
-    with (
-        patch.object(supertensor, "_supertensor_instance", MockSuperTensor()),
-        patch("aiohttp.ClientSession", return_value=mock_session),
-    ):
+    with mock_manifest_endpoints(create_miner_config()):
         yield

@@ -23,7 +23,7 @@ from compute_horde_validator.validator.models import (
 from compute_horde_validator.validator.synthetic_jobs.batch_run import execute_synthetic_batch_run
 from compute_horde_validator.validator.tests.transport import SimulationTransport
 
-from ..helpers import mock_aiohttp_client_session
+from ..helpers import mock_manifest_endpoints
 from .mock_generator import (
     TimeTookScoreMockSyntheticJobGeneratorFactory,
 )
@@ -77,7 +77,15 @@ async def test_synthetic_job_batch(
         block=1000,
         cycle=await Cycle.objects.acreate(start=708, stop=1430),
     )
-    async with mock_aiohttp_client_session({DEFAULT_EXECUTOR_CLASS: executor_count}):
+    miner_config = [
+        {
+            "hotkey": miner.hotkey,
+            "address": miner.address,
+            "port": miner.port,
+            "manifest": {DEFAULT_EXECUTOR_CLASS: executor_count},
+        }
+    ]
+    with mock_manifest_endpoints(miner_config):
         await asyncio.wait_for(
             execute_synthetic_batch_run(
                 [miner],
@@ -170,7 +178,15 @@ async def test_synthetic_job_batch_non_peak_limits(
         block=current_block,
         cycle=await Cycle.objects.acreate(start=708, stop=1430),
     )
-    async with mock_aiohttp_client_session({DEFAULT_EXECUTOR_CLASS: executor_count}):
+    miner_config = [
+        {
+            "hotkey": miner.hotkey,
+            "address": miner.address,
+            "port": miner.port,
+            "manifest": {DEFAULT_EXECUTOR_CLASS: executor_count},
+        }
+    ]
+    with mock_manifest_endpoints(miner_config):
         await asyncio.wait_for(
             execute_synthetic_batch_run(
                 [miner],
@@ -241,7 +257,15 @@ async def test_synthetic_job_batch_non_peak_limits__validator_missed_peak(
         block=current_block,
         cycle=await Cycle.objects.acreate(start=708, stop=1430),
     )
-    async with mock_aiohttp_client_session({DEFAULT_EXECUTOR_CLASS: executor_count}):
+    miner_config = [
+        {
+            "hotkey": miner.hotkey,
+            "address": miner.address,
+            "port": miner.port,
+            "manifest": {DEFAULT_EXECUTOR_CLASS: executor_count},
+        }
+    ]
+    with mock_manifest_endpoints(miner_config):
         await asyncio.wait_for(
             execute_synthetic_batch_run(
                 [miner],
@@ -326,7 +350,15 @@ async def test_synthetic_job_batch_non_peak_limits__miner_missed_peak(
         block=current_block,
         cycle=await Cycle.objects.acreate(start=708, stop=1430),
     )
-    async with mock_aiohttp_client_session({DEFAULT_EXECUTOR_CLASS: executor_count}):
+    miner_config = [
+        {
+            "hotkey": miner.hotkey,
+            "address": miner.address,
+            "port": miner.port,
+            "manifest": {DEFAULT_EXECUTOR_CLASS: executor_count},
+        }
+    ]
+    with mock_manifest_endpoints(miner_config):
         await asyncio.wait_for(
             execute_synthetic_batch_run(
                 [miner],

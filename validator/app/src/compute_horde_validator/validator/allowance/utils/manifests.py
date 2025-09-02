@@ -237,8 +237,8 @@ async def fetch_manifests_from_miners(
     # Process results and build the manifest dictionary
     result_manifests = {}
     for hotkey, manifest in results:
-        for executor_class in ExecutorClass:
-            if manifest is not None:
+        if manifest is not None:
+            for executor_class in ExecutorClass:
                 result_manifests[hotkey, executor_class] = manifest.get(executor_class, 0)
 
     return result_manifests

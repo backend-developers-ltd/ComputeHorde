@@ -12,7 +12,10 @@ from compute_horde.miner_client.organic import OrganicMinerClient
 from compute_horde.transport import AbstractTransport
 from compute_horde_core.executor_class import ExecutorClass
 
-from compute_horde_validator.validator.allowance.tests.mockchain import set_block_number
+from compute_horde_validator.validator.allowance.tests.mockchain import (
+    mock_manifest_endpoints_for_block_number,
+    set_block_number,
+)
 from compute_horde_validator.validator.allowance.utils import blocks, manifests
 from compute_horde_validator.validator.allowance.utils.supertensor import supertensor
 from compute_horde_validator.validator.models import (
@@ -28,7 +31,7 @@ from compute_horde_validator.validator.tests.transport import SimulationTranspor
 
 @pytest.fixture(autouse=True)
 def add_allowance():
-    with set_block_number(1000):
+    with set_block_number(1000), mock_manifest_endpoints_for_block_number(1000):
         manifests.sync_manifests()
     for block_number in range(1001, 1004):
         with set_block_number(block_number):

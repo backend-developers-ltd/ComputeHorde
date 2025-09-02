@@ -16,8 +16,8 @@ async def get_main_hotkey(request):
     try:
         main_hotkey = await current.executor_manager.get_main_hotkey()
         return JsonResponse({"main_hotkey": main_hotkey})
-    except Exception as e:
-        return JsonResponse({"error": str(e)}, status=500)
+    except Exception:
+        return JsonResponse({"error": "Could not get main hotkey"}, status=500)
 
 
 async def get_manifest(request):
@@ -25,5 +25,5 @@ async def get_manifest(request):
     try:
         manifest = await current.executor_manager.get_manifest()
         return JsonResponse({"manifest": manifest})
-    except Exception as e:
-        return JsonResponse({"error": str(e)}, status=500)
+    except Exception:
+        return JsonResponse({"error": "Could not get manifest"}, status=500)

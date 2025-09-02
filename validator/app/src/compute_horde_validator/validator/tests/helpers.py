@@ -5,14 +5,16 @@ import numbers
 import os
 import shlex
 import subprocess
-from contextlib import asynccontextmanager
+from contextlib import contextmanager
 from datetime import timedelta
 from pathlib import Path
 from time import monotonic
+from typing import TypedDict
 from unittest import mock
 
 import bittensor
 import numpy as np
+from aioresponses import CallbackResult, aioresponses
 from bittensor.core.errors import SubstrateRequestException
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.fv_protocol.facilitator_requests import V0JobCheated, V2JobRequest
@@ -60,96 +62,41 @@ def get_miner_client(MINER_CLIENT, job_uuid: str) -> MinerClient:
     )
 
 
-def create_mock_http_session(
-    manifest: dict,
-    wait_before: int = 0,
-    wait_on_ports: dict[int, int] = None,
-    fail_on_ports: list[int] = None,
-):
+class MinerConfig(TypedDict):
+    """Configuration for creating a test miner with transport."""
+
+    hotkey: str
+    address: str
+    port: int
+    manifest: dict[ExecutorClass, int]
+    wait_before: int
+
+
+@contextmanager
+def mock_manifest_endpoints(miner_configs: list[MinerConfig]):
     """
-    Create a mock HTTP session for testing.
-
-    Args:
-        manifest: The manifest to return for each port.
-        wait_before: The number of seconds to wait before returning the manifest.
-        wait_on_ports: The number of seconds to wait before returning the manifest for
-            specific ports. Should be a dictionary mapping port to wait time. Note that
-            total wait time will be this value + `wait_before`.
-        fail_on_ports: The ports to fail on.
+    Mock the manifest endpoints for the given miners.
     """
+    with aioresponses() as mock:
+        for config in miner_configs:
+            url = f"http://{config['address']}:{config['port']}/v0.1/manifest"
 
-    class MockResponse:
-        def __init__(self, status, data):
-            self.status = status
-            self._data = data
+            async def _handler(url, *, cfg=config, **kwargs):
+                wait_time = cfg.get("wait_before", 0)
+                if wait_time:
+                    await asyncio.sleep(wait_time)
 
-        async def json(self):
-            return self._data
+                manifest = cfg.get("manifest", None)
+                if manifest:
+                    return CallbackResult(status=200, payload={"manifest": manifest})
+                else:
+                    return CallbackResult(
+                        status=404, payload={"error": "Could not get manifest from miner"}
+                    )
 
-        async def __aenter__(self):
-            return self
+            mock.get(url, callback=_handler)
 
-        async def __aexit__(self, exc_type, exc_val, exc_tb):
-            return None
-
-    class MockSession:
-        def __init__(self, manifest, wait_before, wait_on_ports, fail_on_ports):
-            self.manifest = manifest
-            self.wait_before = int(wait_before)
-
-            if wait_on_ports is None:
-                self.wait_on_ports = {}
-            else:
-                self.wait_on_ports = {int(_e): int(_t) for _e, _t in wait_on_ports.items()}
-
-            if fail_on_ports is None:
-                self.fail_on_ports = set()
-            else:
-                self.fail_on_ports = set([int(_e) for _e in fail_on_ports])
-
-        async def get(self, url):
-            # URL format: http://{address}:{port}/v0.1/manifest
-            _, port = url.split("://")[1].split("/")[0].split(":")
-            port = int(port)
-
-            # Fail on pre-defined ports
-            if port in self.fail_on_ports:
-                return MockResponse(404, {"error": "Mock miner offline or unavailable"})
-
-            if self.wait_before > 0:
-                await asyncio.sleep(self.wait_before)
-
-            # Wait on pre-defined ports
-            if port in self.wait_on_ports:
-                await asyncio.sleep(self.wait_on_ports[port])
-
-            return MockResponse(200, {"manifest": self.manifest})
-
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, exc_type, exc_val, exc_tb):
-            return None
-
-    return MockSession(manifest, wait_before, wait_on_ports, fail_on_ports)
-
-
-@asynccontextmanager
-async def mock_aiohttp_client_session(
-    manifest: dict[ExecutorClass, int],
-    wait_before: int = 0,
-    wait_on_ports: dict[int, int] = None,
-    fail_on_ports: list[int] = None,
-):
-    """Context manager for mocking aiohttp.ClientSession."""
-    mock_session = create_mock_http_session(
-        manifest=manifest,
-        wait_before=wait_before,
-        wait_on_ports=wait_on_ports,
-        fail_on_ports=fail_on_ports,
-    )
-    with mock.patch("aiohttp.ClientSession", return_value=mock_session):
-        yield
+        yield mock
 
 
 class MockAxonInfo:

@@ -8,7 +8,10 @@ import pytest
 from freezegun import freeze_time
 
 from compute_horde_validator.validator.allowance import tasks as allowance_tasks
-from compute_horde_validator.validator.allowance.tests.mockchain import set_block_number
+from compute_horde_validator.validator.allowance.tests.mockchain import (
+    mock_manifest_endpoints_for_block_number,
+    set_block_number,
+)
 from compute_horde_validator.validator.allowance.utils import blocks, manifests
 from compute_horde_validator.validator.allowance.utils.supertensor import supertensor
 
@@ -54,6 +57,7 @@ def test_blocks_scan_blocks_calls_process_for_missing_blocks_and_times_out(monke
 def test_tasks_scan_blocks_and_calculate_allowance_uses_real_lock_allows_single_parallel_execution_without_patching_lock():
     with (
         set_block_number(1000),
+        mock_manifest_endpoints_for_block_number(1000),
         mock.patch.object(allowance_tasks, "LOCK_WAIT_TIMEOUT", new=0.5),
         mock.patch.object(
             blocks,
@@ -90,7 +94,7 @@ def test_find_missing_blocks():
         blocks.process_block_allowance_with_reporting(1003, supertensor_=supertensor())
 
     for block_number in range(1005, 1010):
-        with set_block_number(block_number):
+        with set_block_number(block_number), mock_manifest_endpoints_for_block_number(block_number):
             manifests.sync_manifests()
             blocks.process_block_allowance_with_reporting(block_number, supertensor_=supertensor())
 

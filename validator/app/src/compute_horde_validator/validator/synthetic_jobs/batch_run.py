@@ -985,12 +985,25 @@ async def _get_miner_manifest(
         async with aiohttp.ClientSession() as session:
             url = f"http://{miner.address}:{miner.port}/v0.1/manifest"
             async with await session.get(url) as response:
-                data = await response.json()
+                # Try to parse the response as JSON and ensure that it has an "error" key if
+                # anything goes wrong
+                try:
+                    data = await response.json()
+                except Exception:
+                    try:
+                        data = {"error": await response.text()}
+                    except Exception:
+                        data = {"error": "No response body"}
+
                 if response.status == 200:
                     manifest = data.get("manifest", {})
+                    # Convert manifests back into the enums
+                    manifest = {
+                        ExecutorClass(executor_class): count
+                        for executor_class, count in manifest.items()
+                    }
                 else:
                     name = ctx.names[miner_hotkey]
-                    data = await response.json()
                     logger.warning(
                         "%s HTTP connection error (%s): %s", name, response.status, data["error"]
                     )
@@ -1004,6 +1017,7 @@ async def _get_miner_manifest(
                     return
 
     ctx.manifests[miner_hotkey] = manifest
+    assert manifest is not None
 
     executors = ctx.executors[miner_hotkey]
     for executor_class, count in manifest.items():
@@ -2393,6 +2407,7 @@ async def execute_synthetic_batch_run(
     try:
         await _multi_close_client(ctx)
     except (Exception, asyncio.CancelledError) as exc:
+        raise exc
         logger.error("Synthetic jobs batch failure: %r", exc)
         ctx.system_event(
             type=SystemEvent.EventType.VALIDATOR_FAILURE,
@@ -2408,6 +2423,7 @@ async def execute_synthetic_batch_run(
     try:
         await _emit_telemetry_events(ctx)
     except (Exception, asyncio.CancelledError) as exc:
+        raise exc
         logger.error("Synthetic jobs batch failure: %r", exc)
         ctx.system_event(
             type=SystemEvent.EventType.VALIDATOR_FAILURE,

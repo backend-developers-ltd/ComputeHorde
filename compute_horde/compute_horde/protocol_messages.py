@@ -62,22 +62,6 @@ class UnauthorizedError(BaseModel):
     details: str | None = None
 
 
-# miner.vc -> validator
-class V0ExecutorManifestRequest(BaseModel):
-    message_type: Literal["V0ExecutorManifestRequest"] = "V0ExecutorManifestRequest"
-    manifest: dict[ExecutorClass, int]
-
-    @property
-    def total_count(self) -> int:
-        return sum(self.manifest.values())
-
-
-# validator -> miner.vc and miner.vc -> validator
-class V0MainHotkeyMessage(BaseModel):
-    message_type: Literal["V0MainHotkeyMessage"] = "V0MainHotkeyMessage"
-    main_hotkey: str | None = None
-
-
 # validator -> miner.vc -> miner.ec -> executor
 class V0InitialJobRequest(BaseModel):
     class ExecutorTimingDetails(BaseModel):
@@ -285,7 +269,6 @@ ExecutorToMinerMessage = Annotated[
 MinerToValidatorMessage = Annotated[
     GenericError
     | UnauthorizedError
-    | V0MainHotkeyMessage
     | V0DeclineJobRequest
     | V0AcceptJobRequest
     | V0ExecutorFailedRequest
