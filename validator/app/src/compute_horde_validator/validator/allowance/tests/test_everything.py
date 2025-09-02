@@ -753,4 +753,4 @@ def test_manifests(configure_logs):
 # system events: supertensor failures from process_block_allowance and sync_manifests - asserting that no stack trace is printed?
 
 # all the whacky precaching supertensor stuff, including errors (connection errors etc.) and the fact
-# that they geenrate system events and not stack traces. clean ups (maybe) and archive missing.
+# that they generate system events and not stack traces. clean ups (maybe) and archive missing.
