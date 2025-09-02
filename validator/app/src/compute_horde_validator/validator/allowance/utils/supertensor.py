@@ -15,6 +15,7 @@ from typing import Any, TypeVar, assert_never
 import bittensor_wallet
 import tenacity
 import turbobt
+import websockets
 from bt_ddos_shield.shield_metagraph import ShieldMetagraphOptions
 from bt_ddos_shield.turbobt import ShieldedBittensor
 from compute_horde.blockchain.block_cache import get_current_block
@@ -31,7 +32,19 @@ subnet_context: contextvars.ContextVar[turbobt.subnet.SubnetReference] = context
 logger = logging.getLogger(__name__)
 
 
-class SuperTensorTimeout(TimeoutError):
+class SuperTensorError(Exception):
+    pass
+
+
+class ArchiveSubtensorNotConfigured(SuperTensorError):
+    pass
+
+
+class SuperTensorTimeout(SuperTensorError, TimeoutError):
+    pass
+
+
+class CannotGetCurrentBlock(SuperTensorError):
     pass
 
 
@@ -57,6 +70,8 @@ def make_sync(func: Callable[..., Awaitable[T]]) -> Callable[..., T]:
             )
         except TimeoutError as ex:
             raise SuperTensorTimeout from ex
+        except RuntimeError:
+            raise
 
     return wrapper
 
@@ -73,6 +88,8 @@ def archive_fallback(func: F) -> F:
             subnet_context.set(s.subnet)
             return func(s, *args, **kwargs)
         except turbobt.substrate.exceptions.UnknownBlock:
+            if s.archive_bittensor is None:
+                raise ArchiveSubtensorNotConfigured
             # Set archive context variables and call the function
             bittensor_context.set(s.archive_bittensor)
             subnet_context.set(s.archive_subnet)
@@ -99,6 +116,12 @@ class BaseSuperTensor(abc.ABC):
 
     @abc.abstractmethod
     def wallet(self) -> bittensor_wallet.Wallet: ...
+
+    @abc.abstractmethod
+    def oldest_reachable_block(self) -> float | int: ...
+
+
+LITE_BLOCK_LOOKBACK = 200
 
 
 class SuperTensor(BaseSuperTensor):
@@ -140,12 +163,21 @@ class SuperTensor(BaseSuperTensor):
         self.bittensor = turbobt.Bittensor(self.network)
         self.subnet = self.bittensor.subnet(netuid)
 
-        self.archive_bittensor = turbobt.Bittensor(self.archive_network)
-        self.archive_subnet = self.archive_bittensor.subnet(netuid)
+        if self.archive_network:
+            self.archive_bittensor = turbobt.Bittensor(self.archive_network)
+            self.archive_subnet = self.archive_bittensor.subnet(netuid)
+        else:
+            self.archive_bittensor = None
+            self.archive_subnet = None
 
         self.loop = asyncio.get_event_loop()
 
         self._neuron_list_cache: deque[tuple[int, list[turbobt.Neuron]]] = deque(maxlen=15)
+
+    def oldest_reachable_block(self) -> float | int:
+        if self.archive_bittensor is not None:
+            return float("-inf")
+        return self.get_current_block() - LITE_BLOCK_LOOKBACK
 
     def _list_neurons(self, block_number: int) -> list[turbobt.Neuron]:
         cache = dict(self._neuron_list_cache)
@@ -168,11 +200,8 @@ class SuperTensor(BaseSuperTensor):
             result: list[turbobt.Neuron] = await subnet.list_neurons()
             return result
 
-    @RETRY_ON_TIMEOUT
-    @archive_fallback
-    @make_sync
-    async def list_validators(self, block_number: int) -> list[turbobt.Neuron]:
-        return [n for n in self._list_neurons(block_number) if n.stake >= 1000]
+    def list_validators(self, block_number: int) -> list[turbobt.Neuron]:
+        return [n for n in self.list_neurons(block_number) if n.stake >= 1000]
         # TODO: yes this is reimplementing `subnet.list_validators()` but since turbobt doesn't support caching yet
         # (or i don't know how to use it) it's just too time consuming to be doing it properly
 
@@ -206,7 +235,16 @@ class SuperTensor(BaseSuperTensor):
         return self._wallet
 
     def get_current_block(self) -> int:
-        return get_current_block() - 5
+        try:
+            current_block = get_current_block()
+        except websockets.exceptions.ConcurrencyError as ex:
+            raise CannotGetCurrentBlock("Cannot get current block from blockchain") from ex
+        return current_block - 5
+
+    def close(self):
+        self.loop.run_until_complete(self.bittensor.close())
+        if self.archive_bittensor is not None:
+            self.loop.run_until_complete(self.archive_bittensor.close())
 
 
 N_THREADS = 10
@@ -216,6 +254,7 @@ CACHE_AHEAD = 10
 class TaskType(enum.Enum):
     NEURONS = "NEURONS"
     BLOCK_TIMESTAMP = "BLOCK_TIMESTAMP"
+    THE_END = "THE_END"
 
 
 class BaseCache(abc.ABC):
@@ -250,7 +289,7 @@ class InMemoryCache(BaseCache):
         return self._block_timestamp_cache.get(block_number)
 
 
-class PrecachingSuperTensorCacheMiss(Exception):
+class PrecachingSuperTensorCacheMiss(SuperTensorError):
     pass
 
 
@@ -266,6 +305,7 @@ class PrecachingSuperTensor(SuperTensor):
         throw_on_cache_miss: bool = False,
         **kwargs,
     ):
+        self.closing = False
         if cache is None:
             cache = InMemoryCache()
         self.cache = cache
@@ -279,21 +319,27 @@ class PrecachingSuperTensor(SuperTensor):
 
     def worker(self, ind: int):
         while True:
+            asyncio.set_event_loop(asyncio.new_event_loop())
+            super_tensor = SuperTensor(
+                network=self.network,
+                archive_network=self.archive_network,
+                netuid=self.netuid,
+                wallet=self._wallet,
+                shield_metagraph_options=self._shield_metagraph_options,
+            )
             try:
-                asyncio.set_event_loop(asyncio.new_event_loop())
-                super_tensor = SuperTensor(
-                    network=self.network,
-                    archive_network=self.archive_network,
-                    netuid=self.netuid,
-                    wallet=self._wallet,
-                    shield_metagraph_options=self._shield_metagraph_options,
-                )
                 while True:
                     task: TaskType
                     block_number: int
+                    if self.closing:
+                        logger.debug(f"Worker {ind} quitting")
+                        return
                     task, block_number = self.task_queue.get()
                     logger.debug(f"Worker {ind} processing task {task} for block {block_number}")
-                    if task == TaskType.NEURONS:
+                    if task == TaskType.THE_END:
+                        logger.debug(f"Worker {ind} quitting")
+                        return
+                    elif task == TaskType.NEURONS:
                         if self.cache.get_neurons(block_number) is not None:
                             logger.debug(
                                 f"Worker {ind} skipping task {task} for block {block_number} (cached)"
@@ -314,9 +360,13 @@ class PrecachingSuperTensor(SuperTensor):
                     else:
                         assert_never(task)
                     logger.debug(f"Worker {ind} finished task {task} for block {block_number}")
+            except ArchiveSubtensorNotConfigured:
+                pass
             except Exception as e:
                 logger.error(f"Error in worker ({ind=}) thread: {e}", exc_info=True)
                 time.sleep(1)
+            finally:
+                super_tensor.close()
 
     def start_workers(self):
         for ind in range(N_THREADS):
@@ -325,6 +375,9 @@ class PrecachingSuperTensor(SuperTensor):
     def produce_thread(self):
         while True:
             try:
+                if self.closing:
+                    logger.debug("Producer quitting")
+                    return
                 current_block = self.get_current_block()
                 if self.highest_block_requested is None or self.highest_block_submitted is None:
                     time.sleep(0.1)
@@ -340,6 +393,9 @@ class PrecachingSuperTensor(SuperTensor):
                 self.task_queue.put((TaskType.NEURONS, block_to_submit))
                 self.task_queue.put((TaskType.BLOCK_TIMESTAMP, block_to_submit))
                 self.highest_block_submitted = block_to_submit
+            except CannotGetCurrentBlock:
+                time.sleep(1)
+                continue
             except Exception as e:
                 logger.error(f"Error in producer thread: {e}", exc_info=True)
                 time.sleep(1)
@@ -361,7 +417,9 @@ class PrecachingSuperTensor(SuperTensor):
             raise PrecachingSuperTensorCacheMiss(f"Cache miss for block {block_number}")
         else:
             logger.debug(f"Cache miss for block {block_number}")
-            return super()._list_neurons(block_number)
+            neurons = super()._list_neurons(block_number)
+            self.cache.put_neurons(block_number, neurons)
+            return neurons
 
     @RETRY_ON_TIMEOUT
     def get_block_timestamp(self, block_number: int) -> datetime.datetime:
@@ -374,6 +432,18 @@ class PrecachingSuperTensor(SuperTensor):
         else:
             logger.debug(f"Cache miss for block {block_number}")
             return super()._get_block_timestamp(block_number)
+
+    def close(self):
+        self.closing = True
+        for _ in range(N_THREADS):
+            self.task_queue.put((TaskType.THE_END, 0))
+        super().close()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
 
 
 _supertensor_instance: SuperTensor | None = None
