@@ -783,7 +783,7 @@ LOGGING = {
 BITTENSOR_NETUID = env.int("BITTENSOR_NETUID")
 BITTENSOR_NETWORK = env.str("BITTENSOR_NETWORK")
 # This can be explicitly set to None, which will cause some backfilling operations to never succeed. Useful when running
-# on a private stagingnet etc.
+# on a private staging net etc.
 BITTENSOR_ARCHIVE_NETWORK = env.str("BITTENSOR_ARCHIVE_NETWORK", "archive")
 
 BITTENSOR_WALLET_DIRECTORY = env.path(
