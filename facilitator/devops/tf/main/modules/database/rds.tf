@@ -28,8 +28,8 @@ resource "aws_db_parameter_group" "dont_force_ssl" {
 resource "aws_db_instance" "self" {
   identifier             = "${var.name}-${var.env}-db"
   publicly_accessible    = true
-  allocated_storage      = 15
-  max_allocated_storage  = 500
+  allocated_storage      = 50
+  max_allocated_storage  = 100
   storage_encrypted      = true
   engine                 = "postgres"
   instance_class         = var.instance_type
@@ -57,7 +57,7 @@ resource "aws_db_instance" "replica" {
   publicly_accessible    = true
   storage_encrypted      = true
   engine                 = "postgres"
-  max_allocated_storage  = 500
+  max_allocated_storage  = 100
   instance_class         = "db.t3.small"
   skip_final_snapshot    = true
   availability_zone      = var.azs[0]
