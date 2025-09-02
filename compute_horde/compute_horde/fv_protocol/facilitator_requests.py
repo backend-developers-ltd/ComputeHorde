@@ -49,6 +49,7 @@ class V2JobRequest(SignedRequest, BaseModel, extra="forbid"):
     message_type: Literal["V2JobRequest"] = "V2JobRequest"
 
     uuid: str
+    job_namespace: str | None = None
 
     # !!! all fields below are included in the signed json payload
     executor_class: ExecutorClass

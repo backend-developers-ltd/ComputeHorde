@@ -1,10 +1,12 @@
 import json
 import time
+from http import HTTPStatus
 from unittest.mock import patch
 
 import jwt
 import pytest
 from bittensor_wallet import Wallet
+from compute_horde_core.executor_class import ExecutorClass
 from django.conf import settings
 from django.contrib.auth.models import User
 from rest_framework.exceptions import ErrorDetail
@@ -408,3 +410,26 @@ def test_cheated_job_viewset(authenticated_api_client, job_docker):
         "/api/v1/cheated-job/", {"job_uuid": "00000000-0000-0000-0000-000000000000"}, format="json"
     )
     assert response.status_code == 404
+
+
+@pytest.mark.django_db
+def test_create_job_with_namespace(api_client, user, connected_validator, mock_signature_from_request):
+    """
+    Test facilitator API creates a job with namespace.
+    """
+    job_data = {
+        "job_namespace": "SN123.1.0",
+        "docker_image": "test/image",
+        "executor_class": ExecutorClass.always_on__llm__a6000,
+        "target_validator_hotkey": connected_validator.ss58_address,
+        "download_time_limit": 300,
+        "execution_time_limit": 600,
+        "streaming_start_time_limit": 600,
+        "upload_time_limit": 300,
+    }
+    api_client.force_authenticate(user=user)
+    response = api_client.post("/api/v1/job-docker/", job_data, format="json")
+    data = response.json()
+    assert response.status_code == HTTPStatus.CREATED
+    job = Job.objects.get(uuid=data["uuid"])
+    assert job.job_namespace == job_data["job_namespace"]

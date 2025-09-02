@@ -139,6 +139,9 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
         max_length=255, default=DEFAULT_EXECUTOR_CLASS, help_text="executor hardware class"
     )
     docker_image = models.CharField(max_length=255, blank=True, help_text="docker image for job execution")
+    job_namespace = models.CharField(
+        max_length=100, blank=True, null=True, help_text="namespace specifying where the job comes from"
+    )
 
     args = ArrayField(
         models.TextField(),
@@ -270,6 +273,7 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
             uuid=str(self.uuid),
             executor_class=self.executor_class,
             docker_image=self.docker_image,
+            job_namespace=self.job_namespace,
             args=self.args,
             env=self.env,
             use_gpu=self.use_gpu,

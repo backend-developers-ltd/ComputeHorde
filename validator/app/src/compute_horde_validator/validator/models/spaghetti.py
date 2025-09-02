@@ -388,6 +388,7 @@ class OrganicJob(JobBase):
     error_detail = models.TextField(null=True, default=None)
     artifacts = models.JSONField(blank=True, default=dict)
     upload_results = models.JSONField(blank=True, default=dict)
+    namespace = models.CharField(max_length=100, blank=True, null=True)
     cheated = models.BooleanField(default=False)
     slashed = models.BooleanField(default=False)
     block = models.BigIntegerField(
