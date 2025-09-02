@@ -16,7 +16,7 @@ This project has several subprojects:
 3. executor
 4. facilitator
 5. compute_horde_sdk
-6. compute_horde lub
+6. compute_horde lib
 
 to run type checking in validator: `cd validator; uv run nox -s type_check`
 
