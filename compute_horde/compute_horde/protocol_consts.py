@@ -54,7 +54,7 @@ class JobStatus(StrEnum):
 
     @classmethod
     def end_states(cls) -> set["JobStatus"]:
-        return {cls.COMPLETED, cls.REJECTED, cls.FAILED}
+        return {cls.COMPLETED, cls.REJECTED, cls.FAILED, cls.HORDE_FAILED}
 
     def is_in_progress(self) -> bool:
         return self not in self.end_states()
@@ -63,7 +63,7 @@ class JobStatus(StrEnum):
         return self == self.COMPLETED
 
     def is_failed(self) -> bool:
-        return self in {self.REJECTED, self.FAILED}
+        return self in {self.REJECTED, self.FAILED, self.HORDE_FAILED}
 
     @classmethod
     def _missing_(cls, value: Any) -> "JobStatus":
