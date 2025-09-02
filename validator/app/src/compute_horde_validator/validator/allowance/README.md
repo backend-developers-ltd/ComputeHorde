@@ -25,7 +25,7 @@ This module provides facilities for:
 As of now, this module will likely not perform well if the validator hotkey or bittensor chain is changed with the 
 database state left intact.
 
-To properly function, this module needs to have a lite subtensor and an archive subtensor addresses configured. Archive
+To properly function, this module needs to have a lite subtensor and an archive subtensor address configured. Archive
 is optional, but will result in an inability to properly backfill all the required information after a longer downtime
 or upon initial startup. That is useful for testing on private chains.
 
