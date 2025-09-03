@@ -80,7 +80,7 @@ def sync_manifests():
 
 @app.task()
 def evict_old_data():
-    with transaction.atomic(using=settings.DEFAULT_DB_ALIAS):
+    with transaction.atomic():
         try:
             get_advisory_lock(LockType.ALLOWANCE_EVICTING)
         except Locked:
