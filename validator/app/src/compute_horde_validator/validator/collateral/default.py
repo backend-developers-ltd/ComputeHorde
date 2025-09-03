@@ -106,33 +106,6 @@ class Collateral(CollateralBase):
     def get_collateral_contract_address(self) -> str | None:
         return async_to_sync(self._get_collateral_contract_address_async)()
 
-    def get_miner_collateral(
-        self,
-        w3: Web3,
-        contract_address: str,
-        miner_address: str,
-        block_identifier: int | None = None,
-    ) -> int:
-        abi = self._get_collateral_abi()
-        contract_checksum_address = w3.to_checksum_address(contract_address)
-        miner_checksum_address = w3.to_checksum_address(miner_address)
-
-        contract = w3.eth.contract(address=contract_checksum_address, abi=abi)
-        collateral: int = contract.functions.collaterals(miner_checksum_address).call(
-            block_identifier=block_identifier
-        )
-        return collateral
-
-    async def get_evm_key_associations(
-        self, subtensor: turbobt.Subtensor, netuid: int, block_hash: str | None = None
-    ) -> dict[int, str]:
-        associations = await subtensor.subtensor_module.AssociatedEvmAddress.fetch(
-            netuid,
-            block_hash=block_hash,
-        )
-
-        return {uid: evm_address for (netuid, uid), (evm_address, block) in associations}
-
     def _get_private_key(self) -> str | None:
         return _get_private_key()
 
