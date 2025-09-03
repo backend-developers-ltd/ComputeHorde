@@ -67,6 +67,11 @@ class CannotSpend(Exception):
         self.issues = issues
 
 
+class ErrorWhileSpending(Exception):
+    def __init__(self, msg: str):
+        super().__init__(msg)
+
+
 class CannotReserveAllowanceException(AllowanceException):
     """Exception raised when there is not enough allowance from a particular miner."""
 

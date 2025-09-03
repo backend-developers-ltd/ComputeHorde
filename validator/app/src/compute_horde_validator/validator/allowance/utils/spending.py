@@ -1,20 +1,31 @@
 import datetime
-from abc import abstractmethod, ABC
+from abc import ABC, abstractmethod
 from collections import defaultdict
 from typing import NamedTuple
 
 from compute_horde_core.executor_class import ExecutorClass
-from ..types import ss58_address, block_ids, block_id, SpendingIssue, BlocksOutsideRange, DoubleSpentBlocks, \
-    InvalidatedBlocks, InsufficientAllowance, CannotSpend
+
 from ...models import Block
 from .. import settings
+from ..types import (
+    BlocksOutsideRange,
+    CannotSpend,
+    DoubleSpentBlocks,
+    ErrorWhileSpending,
+    InsufficientAllowance,
+    InvalidatedBlocks,
+    SpendingIssue,
+    block_id,
+    block_ids,
+    ss58_address,
+)
 
 validator_ss58 = ss58_address
 miner_ss58 = ss58_address
 amount = float
 
 
-class ValidatorMinerExecutor(NamedTuple):
+class Triplet(NamedTuple):
     validator: validator_ss58
     miner: miner_ss58
     executor_class: ExecutorClass
@@ -28,7 +39,7 @@ class AllowanceInfo(NamedTuple):
 class SpendingBookkeeperBase(ABC):
     def spend(
         self,
-        triplet: ValidatorMinerExecutor,
+        triplet: Triplet,
         spend_time: datetime.datetime,
         payment_blocks: block_ids,
         spend_amount: float,
@@ -42,6 +53,9 @@ class SpendingBookkeeperBase(ABC):
 
         # Filter out blocks that are either expired or in the future relative to the spending time
         block_at_spend_time = self._get_block_at_time(spend_time)
+        if block_at_spend_time is None:
+            raise ErrorWhileSpending(f"Cannot find a block at time {spend_time}")
+
         allowed_block_range = range(
             block_at_spend_time - settings.BLOCK_EXPIRY, block_at_spend_time + 1
         )
@@ -82,7 +96,7 @@ class SpendingBookkeeperBase(ABC):
     @abstractmethod
     def _get_blocks_allowances(
         self,
-        triplet: ValidatorMinerExecutor,
+        triplet: Triplet,
         blocks: set[block_id],
     ) -> dict[block_id, amount]:
         """Get allowance amounts for multiple blocks for specific validator/miner/executor_class combination."""
@@ -91,7 +105,7 @@ class SpendingBookkeeperBase(ABC):
     @abstractmethod
     def _check_for_spent_blocks(
         self,
-        triplet: ValidatorMinerExecutor,
+        triplet: Triplet,
         blocks: set[block_id],
     ) -> set[block_id]:
         """Get set of blocks that have already been spent for the triplet."""
@@ -100,7 +114,7 @@ class SpendingBookkeeperBase(ABC):
     @abstractmethod
     def _check_for_invalidated_blocks(
         self,
-        triplet: ValidatorMinerExecutor,
+        triplet: Triplet,
         blocks: set[block_id],
         at_block: block_id,
     ) -> set[block_id]:
@@ -115,7 +129,7 @@ class SpendingBookkeeperBase(ABC):
     @abstractmethod
     def _register_transaction(
         self,
-        triplet: ValidatorMinerExecutor,
+        triplet: Triplet,
         blocks: block_ids,
         spent_at: datetime.datetime,
     ) -> None:
@@ -126,17 +140,15 @@ class SpendingBookkeeperBase(ABC):
 class InMemorySpendingBookkeeper(SpendingBookkeeperBase):
     def __init__(
         self,
-        known_allowances: dict[ValidatorMinerExecutor, dict[block_id, AllowanceInfo]],
+        known_allowances: dict[Triplet, dict[block_id, AllowanceInfo]],
         blocks: list[Block],
     ) -> None:
         self._allowances = known_allowances
         self._blocks = blocks
-        self._spendings_per_triplet: defaultdict[ValidatorMinerExecutor, set[block_id]] = (
-            defaultdict(set)
-        )
+        self._spendings_per_triplet: defaultdict[Triplet, set[block_id]] = defaultdict(set)
 
     def _get_blocks_allowances(
-        self, triplet: ValidatorMinerExecutor, blocks: set[block_id]
+        self, triplet: Triplet, blocks: set[block_id]
     ) -> dict[block_id, float]:
         triplet_allowances = self._allowances.get(triplet, {})
         return {
@@ -145,14 +157,12 @@ class InMemorySpendingBookkeeper(SpendingBookkeeperBase):
             if (allowance := triplet_allowances.get(block)) is not None
         }
 
-    def _check_for_spent_blocks(
-        self, triplet: ValidatorMinerExecutor, blocks: set[block_id]
-    ) -> set[block_id]:
+    def _check_for_spent_blocks(self, triplet: Triplet, blocks: set[block_id]) -> set[block_id]:
         spent_blocks = self._spendings_per_triplet.get(triplet, set())
         return spent_blocks & set(blocks)
 
     def _check_for_invalidated_blocks(
-        self, triplet: ValidatorMinerExecutor, blocks: set[block_id], at_block: block_id
+        self, triplet: Triplet, blocks: set[block_id], at_block: block_id
     ) -> set[block_id]:
         triplet_allowances = self._allowances.get(triplet, {})
         invalidated_blocks = set()
@@ -168,7 +178,7 @@ class InMemorySpendingBookkeeper(SpendingBookkeeperBase):
 
     def _register_transaction(
         self,
-        triplet: ValidatorMinerExecutor,
+        triplet: Triplet,
         blocks: list[block_id],
         spent_at: datetime.datetime,
     ) -> None:

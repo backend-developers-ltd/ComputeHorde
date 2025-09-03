@@ -1,21 +1,21 @@
 # default implementation of the allowance module interface
 from collections import defaultdict
 
+from compute_horde_core.executor_class import ExecutorClass
 from django.db.models import Q
 
-from compute_horde_core.executor_class import ExecutorClass
-
+from ..models import Block, BlockAllowance
+from . import settings
 from .base import AllowanceBase
 from .types import Miner, Neuron, block_id, block_ids, reservation_id, ss58_address
 from .utils import blocks, booking, manifests, metagraph
 from .utils.spending import (
-    SpendingBookkeeperBase,
     AllowanceInfo,
-    InMemorySpendingBookkeeper, ValidatorMinerExecutor,
+    InMemorySpendingBookkeeper,
+    SpendingBookkeeperBase,
+    Triplet,
 )
 from .utils.supertensor import supertensor
-from . import settings
-from ..models import BlockAllowance, Block
 
 
 class Allowance(AllowanceBase):
@@ -92,10 +92,10 @@ class Allowance(AllowanceBase):
             )
         )
 
-        allowances: defaultdict[ValidatorMinerExecutor, dict[block_id, AllowanceInfo]] = defaultdict(dict)
+        allowances: defaultdict[Triplet, dict[block_id, AllowanceInfo]] = defaultdict(dict)
         for row in block_allowances_qs:
             block = row["block"]
-            triplet = ValidatorMinerExecutor(
+            triplet = Triplet(
                 row["validator_ss58"],
                 row["miner_ss58"],
                 ExecutorClass(row["executor_class"]),
