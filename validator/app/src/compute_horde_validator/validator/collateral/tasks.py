@@ -5,6 +5,7 @@ import turbobt
 from asgiref.sync import async_to_sync
 from compute_horde.smart_contracts.utils import get_web3_connection
 from django.conf import settings
+from web3 import Web3
 
 from compute_horde_validator.celery import app
 from compute_horde_validator.validator.models import Miner, SystemEvent
@@ -13,6 +14,36 @@ from compute_horde_validator.validator.tasks import _get_metagraph_for_sync, bit
 from .default import collateral
 
 logger = logging.getLogger(__name__)
+
+
+def get_miner_collateral(
+    w3: Web3,
+    contract_address: str,
+    miner_address: str,
+    block_identifier: int | None = None,
+) -> int:
+    """Return miner collateral in Wei from chain."""
+    abi = collateral()._get_collateral_abi()
+    contract_checksum_address = w3.to_checksum_address(contract_address)
+    miner_checksum_address = w3.to_checksum_address(miner_address)
+
+    contract = w3.eth.contract(address=contract_checksum_address, abi=abi)
+    collateral_amount: int = contract.functions.collaterals(miner_checksum_address).call(
+        block_identifier=block_identifier
+    )
+    return collateral_amount
+
+
+async def get_evm_key_associations(
+    subtensor: turbobt.Subtensor, netuid: int, block_hash: str | None = None
+) -> dict[int, str]:
+    """Return uid->evm_address associations from subtensor."""
+    associations = await subtensor.subtensor_module.AssociatedEvmAddress.fetch(
+        netuid,
+        block_hash=block_hash,
+    )
+
+    return {uid: evm_address for (netuid, uid), (evm_address, block) in associations}
 
 
 @app.task
@@ -39,7 +70,7 @@ def sync_collaterals(bittensor: turbobt.Bittensor) -> None:
         )
         return
 
-    associations = async_to_sync(collateral().get_evm_key_associations)(
+    associations = async_to_sync(get_evm_key_associations)(
         subtensor=bittensor.subtensor,
         netuid=settings.BITTENSOR_NETUID,
         block_hash=block.hash,
@@ -62,7 +93,7 @@ def sync_collaterals(bittensor: turbobt.Bittensor) -> None:
 
         if contract_address:
             try:
-                collateral_wei = collateral().get_miner_collateral(
+                collateral_wei = get_miner_collateral(
                     w3, contract_address, miner.evm_address, block.number
                 )
                 miner.collateral_wei = Decimal(collateral_wei)

@@ -36,25 +36,3 @@ class CollateralBase(ABC):
         Return the current collateral contract address or None if unavailable.
         """
         pass
-
-    @abstractmethod
-    def get_miner_collateral(
-        self,
-        w3,
-        contract_address: str,
-        miner_address: str,
-        block_identifier: int | None = None,
-    ) -> int:
-        """
-        Return miner collateral in Wei from chain.
-        """
-        pass
-
-    @abstractmethod
-    async def get_evm_key_associations(
-        self, subtensor, netuid: int, block_hash: str | None = None
-    ) -> dict[int, str]:
-        """
-        Return uid->evm_address associations from subtensor.
-        """
-        pass
