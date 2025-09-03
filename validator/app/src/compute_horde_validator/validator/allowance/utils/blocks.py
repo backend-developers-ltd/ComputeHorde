@@ -224,7 +224,10 @@ def process_block_allowance(
                                 )
                             )
                 if new_block_allowances:
-                    BlockAllowance.objects.bulk_create(new_block_allowances)
+                    # TODO: Temporarily adding the batch_size to reduce database pressure.
+                    #       We need to identify the root cause of the high database pressure.
+                    #       We may need to tune on the infra side, or tune the batch_size here.
+                    BlockAllowance.objects.bulk_create(new_block_allowances, batch_size=2000)
                     logger.info(
                         f"Created {len(new_block_allowances)} block allowances for block "
                         f"{finalized_block.block_number}"
