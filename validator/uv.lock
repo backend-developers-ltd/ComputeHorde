@@ -2701,7 +2701,6 @@ version = "0"
 source = { editable = "." }
 dependencies = [
     { name = "aiohttp", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
-    { name = "aioresponses", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "boto3", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "bt-ddos-shield-client", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "celery", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
@@ -2754,6 +2753,7 @@ security-check = [
     { name = "bandit", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
 ]
 test = [
+    { name = "aioresponses", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "freezegun", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "ipdb", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "moto", extra = ["s3"], marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
@@ -2777,7 +2777,6 @@ type-check = [
 [package.metadata]
 requires-dist = [
     { name = "aiohttp", specifier = ">=3.12.0" },
-    { name = "aioresponses", specifier = ">=0.7.8" },
     { name = "boto3", specifier = ">=1.35.11" },
     { name = "bt-ddos-shield-client", specifier = "~=0.3.1" },
     { name = "celery", specifier = "~=5.3.1" },
@@ -2828,6 +2827,7 @@ lint = [
 ]
 security-check = [{ name = "bandit", specifier = ">=1.7.7" }]
 test = [
+    { name = "aioresponses", specifier = ">=0.7.8" },
     { name = "freezegun" },
     { name = "ipdb" },
     { name = "moto", extras = ["s3"], specifier = ">=5.0.13" },
