@@ -1899,7 +1899,7 @@ def slash_collateral_task(job_uuid: str) -> None:
             logger.info(f"Already slashed for this job {job_uuid}")
             return
 
-        contract_address = collateral().get_collateral_contract_address()
+        contract_address = async_to_sync(collateral().get_collateral_contract_address)()
         slash_amount: int = config.DYNAMIC_COLLATERAL_SLASH_AMOUNT_WEI
         if contract_address and slash_amount > 0 and job.miner.evm_address:
             try:

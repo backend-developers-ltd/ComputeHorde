@@ -9,10 +9,6 @@ class CollateralException(Exception):
     pass
 
 
-class SlashInputError(CollateralException):
-    pass
-
-
 class SlashCollateralError(Exception):
     pass
 

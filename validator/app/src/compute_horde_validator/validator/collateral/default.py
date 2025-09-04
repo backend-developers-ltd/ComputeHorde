@@ -8,7 +8,6 @@ from typing import Any
 
 import requests
 import turbobt
-from asgiref.sync import async_to_sync
 from django.conf import settings
 from eth_account import Account
 from eth_account.signers.local import LocalAccount
@@ -51,10 +50,8 @@ def _get_collateral_abi() -> Any:
 
 class Collateral(CollateralBase):
     def list_miners_with_sufficient_collateral(self, min_amount_wei: int) -> list[MinerCollateral]:
-        threshold = min_amount_wei
-
-        miners = Miner.objects.filter(collateral_wei__gte=Decimal(threshold))
-        result: list[MinerCollateral] = [
+        miners = Miner.objects.filter(collateral_wei__gte=Decimal(min_amount_wei))
+        return [
             MinerCollateral(
                 hotkey=m.hotkey,
                 uid=m.uid,
@@ -63,11 +60,9 @@ class Collateral(CollateralBase):
             )
             for m in miners
         ]
-        return result
 
     def slash_collateral(
         self,
-        *,
         w3: Web3,
         contract_address: str,
         miner_address: str,
@@ -103,13 +98,7 @@ class Collateral(CollateralBase):
         raw_event = contract.events.Slashed().process_receipt(receipt)
         return SlashedEvent.from_dict(raw_event[0])
 
-    def get_collateral_contract_address(self) -> str | None:
-        return async_to_sync(self._get_collateral_contract_address_async)()
-
-    def _get_private_key(self) -> str | None:
-        return _get_private_key()
-
-    async def _get_collateral_contract_address_async(self) -> str | None:
+    async def get_collateral_contract_address(self) -> str | None:
         global _cached_contract_address
         if _cached_contract_address:
             return _cached_contract_address
@@ -128,6 +117,9 @@ class Collateral(CollateralBase):
                 return _cached_contract_address
             except (TypeError, KeyError, json.JSONDecodeError):
                 return None
+
+    def _get_private_key(self) -> str | None:
+        return _get_private_key()
 
     def _get_collateral_abi(self) -> Any:
         """Retrieve the ABI definition for the collateral smart contract."""

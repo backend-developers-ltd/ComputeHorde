@@ -22,7 +22,16 @@ def get_miner_collateral(
     miner_address: str,
     block_identifier: int | None = None,
 ) -> int:
-    """Return miner collateral in Wei from chain."""
+    """
+    Query the collateral amount for a given miner address.
+    Args:
+        w3: Web3 instance to use for blockchain interaction.
+        contract_address: Address of the Collateral contract.
+        miner_address: EVM address of the miner to query.
+        block_identifier: Block number to query the latest block. Defaults to None, which queries the latest block.
+    Returns:
+        Collateral amount in Wei
+    """
     abi = collateral()._get_collateral_abi()
     contract_checksum_address = w3.to_checksum_address(contract_address)
     miner_checksum_address = w3.to_checksum_address(miner_address)
@@ -37,7 +46,15 @@ def get_miner_collateral(
 async def get_evm_key_associations(
     subtensor: turbobt.Subtensor, netuid: int, block_hash: str | None = None
 ) -> dict[int, str]:
-    """Return uid->evm_address associations from subtensor."""
+    """
+    Retrieve all EVM key associations for a specific subnet.
+    Arguments:
+        subtensor (turbobt.Subtensor): The Subtensor object to use for querying the network.
+        netuid (int): The NetUID for which to retrieve EVM key associations.
+        block_hash (str | None, optional): The block hash to query. Defaults to None, which queries the latest block.
+    Returns:
+        dict: A dictionary mapping UIDs (int) to their associated EVM key addresses (str).
+    """
     associations = await subtensor.subtensor_module.AssociatedEvmAddress.fetch(
         netuid,
         block_hash=block_hash,
@@ -77,7 +94,7 @@ def sync_collaterals(bittensor: turbobt.Bittensor) -> None:
     )
     miners = Miner.objects.filter(hotkey__in=hotkeys)
     w3 = get_web3_connection(network=settings.BITTENSOR_NETWORK)
-    contract_address = collateral().get_collateral_contract_address()
+    contract_address = async_to_sync(collateral().get_collateral_contract_address)()
 
     to_update = []
     for miner in miners:

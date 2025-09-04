@@ -1,5 +1,5 @@
 from decimal import Decimal
-from unittest.mock import Mock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 from hexbytes import HexBytes
@@ -18,7 +18,7 @@ from compute_horde_validator.validator.models import Miner
 
 class TestCollateral:
     @pytest.mark.django_db(transaction=True)
-    def test_list_miners_with_sufficient_collateral_mixed_miners(self, db):
+    def test_list_miners_with_sufficient_collateral(self, db):
         """Test filtering with mixed miners above and below threshold."""
         # Miners below threshold
         Miner.objects.create(
@@ -211,7 +211,8 @@ class TestSyncCollaterals:
         mock_w3 = Mock()
         mock_get_web3.return_value = mock_w3
 
-        mock_collateral.return_value.get_collateral_contract_address.return_value = "0xcontract"
+        mock_get_contract_address = AsyncMock(return_value="0xcontract")
+        mock_collateral.return_value.get_collateral_contract_address = mock_get_contract_address
         mock_get_collateral.return_value = 5000
 
         miner1 = Miner.objects.create(
