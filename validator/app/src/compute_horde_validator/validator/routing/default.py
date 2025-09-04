@@ -20,7 +20,7 @@ from compute_horde_validator.validator.allowance.types import (
 from compute_horde_validator.validator.allowance.types import (
     Miner as AllowanceMiner,
 )
-from compute_horde_validator.validator.models import Miner
+from compute_horde_validator.validator.models import Miner, MinerIncident
 from compute_horde_validator.validator.receipts.default import receipts
 from compute_horde_validator.validator.routing.base import RoutingBase
 from compute_horde_validator.validator.routing.types import (
@@ -42,6 +42,20 @@ class Routing(RoutingBase):
                 return await sync_to_async(_pick_miner_for_job_v2)(request)
 
         assert_never(request)
+
+    async def report_miner_incident(
+        self,
+        type: MinerIncident.IncidentType,
+        hotkey_ss58address: str,
+        job_uuid: str,
+        executor_class: ExecutorClass,
+    ) -> None:
+        await MinerIncident.objects.acreate(
+            type=type,
+            hotkey_ss58address=hotkey_ss58address,
+            job_uuid=job_uuid,
+            executor_class=executor_class.value,
+        )
 
 
 _routing_instance: Routing | None = None
