@@ -42,29 +42,36 @@ class SpendingIssue:
 
 @dataclass
 class BlocksOutsideRange(SpendingIssue):
-    allowed_range: range
-    blocks_outside_range: block_ids
+    allowed: range
+    rejected: block_ids
 
 
 @dataclass
 class DoubleSpentBlocks(SpendingIssue):
-    double_spent_blocks: block_ids
+    rejected: block_ids
 
 
 @dataclass
 class InvalidatedBlocks(SpendingIssue):
-    invalidated_blocks: block_ids
+    rejected: block_ids
 
 
 @dataclass
 class InsufficientAllowance(SpendingIssue):
     spendable_amount: float
+    required_amount: float
     blocks: block_ids
+
+    def __str__(self):
+        return f"Insufficient allowance (offered {self.spendable_amount}ð from {len(self.blocks)} valid blocks, required {self.required_amount}ð)"
 
 
 class CannotSpend(Exception):
     def __init__(self, issues: list[SpendingIssue]):
         self.issues = issues
+
+    def __str__(self):
+        return f"Spending caused issues: {[str(issue) for issue in self.issues]}"
 
 
 class ErrorWhileSpending(Exception):

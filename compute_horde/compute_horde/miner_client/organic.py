@@ -300,12 +300,12 @@ class OrganicMinerClient(AbstractMinerClient[MinerToValidatorMessage, ValidatorT
                 assert_never(msg)
 
             for future in (
-                self.job_accepted_future,
-                self.executor_ready_future,
-                self.streaming_ready_future,
-                self.volumes_ready_future,
-                self.execution_done_future,
-                self.job_finished_future,
+                    self.job_accepted_future,
+                    self.executor_ready_future,
+                    self.streaming_ready_future,
+                    self.volumes_ready_future,
+                    self.execution_done_future,
+                    self.job_finished_future,
             ):
                 try:
                     future.set_exception(exc)
@@ -395,6 +395,7 @@ class OrganicMinerClient(AbstractMinerClient[MinerToValidatorMessage, ValidatorT
         started_timestamp: float,
         time_took_seconds: float,
         score: float,
+        allowance_blocks: list[int],
     ) -> V0JobFinishedReceiptRequest:
         time_started = datetime.datetime.fromtimestamp(started_timestamp, datetime.UTC)
         receipt_payload = JobFinishedReceiptPayload(
@@ -404,6 +405,7 @@ class OrganicMinerClient(AbstractMinerClient[MinerToValidatorMessage, ValidatorT
             timestamp=datetime.datetime.now(datetime.UTC),
             time_started=time_started,
             time_took_us=int(time_took_seconds * 1_000_000),
+            block_numbers=allowance_blocks,
             score_str=f"{score:.6f}",
         )
         return V0JobFinishedReceiptRequest(
@@ -416,10 +418,11 @@ class OrganicMinerClient(AbstractMinerClient[MinerToValidatorMessage, ValidatorT
         started_timestamp: float,
         time_took_seconds: float,
         score: float,
+        allowance_blocks: list[int],
     ) -> None:
         try:
             receipt_message = self.generate_job_finished_receipt_message(
-                started_timestamp, time_took_seconds, score
+                started_timestamp, time_took_seconds, score, allowance_blocks
             )
             await self.send_model(receipt_message)
             await JobFinishedReceipt.from_payload(
@@ -498,6 +501,7 @@ class OrganicJobDetails:
     output: OutputUpload | None = None
     artifacts_dir: str | None = None
     streaming_details: StreamingDetails | None = None
+    allowance_blocks: list[int] = field(default_factory=list)
 
 
 async def execute_organic_job_on_miner(
@@ -689,10 +693,12 @@ async def execute_organic_job_on_miner(
                 logger.debug(f"Upload done with {deadline.time_left():.2f}s left")
 
                 logger.info(f"Job finished in time with {deadline.time_left():.2f}s left")
+
                 await client.send_job_finished_receipt_message(
                     started_timestamp=timer.start_time.timestamp(),
                     time_took_seconds=timer.passed_time(),
-                    score=0,  # no score for organic jobs (at least right now)
+                    score=0,
+                    allowance_blocks=job_details.allowance_blocks,
                 )
 
                 return (
@@ -713,6 +719,7 @@ async def execute_organic_job_on_miner(
                 started_timestamp=timer.start_time.timestamp(),
                 time_took_seconds=timer.passed_time(),
                 score=0,
+                allowance_blocks=[],
             )
             raise
 

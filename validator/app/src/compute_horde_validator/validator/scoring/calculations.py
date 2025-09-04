@@ -7,7 +7,7 @@ from compute_horde_core.executor_class import ExecutorClass
 from constance import config
 
 from compute_horde_validator.validator.allowance.default import allowance
-from compute_horde_validator.validator.allowance.types import CannotSpend
+from compute_horde_validator.validator.allowance.types import CannotSpend, ErrorWhileSpending
 from compute_horde_validator.validator.allowance.utils.spending import Triplet
 from compute_horde_validator.validator.models import Miner, OrganicJob, SyntheticJob
 from compute_horde_validator.validator.receipts import receipts
@@ -31,6 +31,12 @@ def calculate_allowance_paid_job_scores(
             start_block, end_block, executor_class
         )
 
+        logger.info(
+            f"Found {len(job_spendings)} jobs "
+            f"for {executor_class} "
+            f"between blocks {start_block} and {end_block}"
+        )
+
         # Ask allowance module for a bookkeeper, which will be used to validate the spendings in-memory
         bookkeeper = allowance().get_temporary_bookkeeper(start_block, end_block)
 
@@ -40,12 +46,25 @@ def calculate_allowance_paid_job_scores(
                 spending.validator_hotkey, spending.miner_hotkey, spending.executor_class
             )
             job_cost = spending.executor_seconds_cost
+            logger.debug(
+                "Validating spending job=%s validator=%s miner=%s value=%s blocks=%s",
+                spending.job_uuid,
+                spending.validator_hotkey,
+                spending.miner_hotkey,
+                job_cost,
+                spending.paid_with_blocks,
+            )
             try:
                 bookkeeper.spend(triplet, spending.started_at, spending.paid_with_blocks, job_cost)
                 scores[triplet.executor_class][triplet.miner] += job_cost
             except CannotSpend as e:
-                # TODO: System event
-                logger.warning(f"Spending on job {spending.job_uuid} is invalid: {e}")
+                # TODO(new scoring): System event
+                # TODO(new scoring): What errors should stop the scoring completely?
+                logger.warning(e)
+            except ErrorWhileSpending as e:
+                # TODO(new scoring): System event
+                # TODO(new scoring): What errors should stop the scoring completely?
+                logger.warning(e)
 
     # Convert back to regular dicts and return
     return {
@@ -96,8 +115,8 @@ def horde_score(
     sum_agent = sum(benchmarks)
     inverted_n = 1 / len(benchmarks)
     avg_benchmark = sum_agent * inverted_n
-    scaled_inverted_n = reversed_sigmoid(inverted_n, beta=10**beta, delta=delta)
-    scaled_avg_benchmark = float(avg_benchmark**alpha)
+    scaled_inverted_n = reversed_sigmoid(inverted_n, beta=10 ** beta, delta=delta)
+    scaled_avg_benchmark = float(avg_benchmark ** alpha)
     return scaled_avg_benchmark * sum_agent * scaled_inverted_n
 
 

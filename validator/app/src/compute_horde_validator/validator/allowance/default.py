@@ -1,19 +1,13 @@
 # default implementation of the allowance module interface
-from collections import defaultdict
 
 from compute_horde_core.executor_class import ExecutorClass
-from django.db.models import Q
 
-from ..models import Block, BlockAllowance
-from . import settings
 from .base import AllowanceBase
-from .types import Miner, Neuron, block_id, block_ids, reservation_id, ss58_address
+from .types import Miner, Neuron, block_ids, reservation_id, ss58_address
 from .utils import blocks, booking, manifests, metagraph
 from .utils.spending import (
-    AllowanceInfo,
     InMemorySpendingBookkeeper,
     SpendingBookkeeperBase,
-    Triplet,
 )
 from .utils.supertensor import supertensor
 
@@ -69,51 +63,7 @@ class Allowance(AllowanceBase):
         )
 
     def get_temporary_bookkeeper(self, block_start: int, block_end: int) -> SpendingBookkeeperBase:
-        # TODO: Check for off-by-one errors - lower and upper
-        lower_bound = block_start - settings.BLOCK_EXPIRY
-        upper_bound = block_end + 1
-
-        block_allowances_qs = (
-            BlockAllowance.objects.filter(
-                block_id__gte=lower_bound,
-                block_id__lte=upper_bound + 1,  # +1 so that we know when the last block ends
-                allowance__gt=0,
-            )
-            .filter(
-                Q(allowance_booking__is_spent=False) | Q(allowance_booking__isnull=True),
-            )
-            .values(
-                "validator_ss58",
-                "miner_ss58",
-                "executor_class",
-                "block",
-                "allowance",
-                "invalidated_at_block",
-            )
-        )
-
-        allowances: defaultdict[Triplet, dict[block_id, AllowanceInfo]] = defaultdict(dict)
-        for row in block_allowances_qs:
-            block = row["block"]
-            triplet = Triplet(
-                row["validator_ss58"],
-                row["miner_ss58"],
-                ExecutorClass(row["executor_class"]),
-            )
-            info = AllowanceInfo(
-                allowance=row["allowance"],
-                invalidated_at_block=row["invalidated_at_block"],
-            )
-            allowances[triplet][block] = info
-
-        blocks = [
-            *Block.objects.filter(
-                block_number__gte=lower_bound,
-                block_number__lte=upper_bound,
-            ).order_by("block_number")
-        ]
-
-        return InMemorySpendingBookkeeper(known_allowances=allowances, blocks=blocks)
+        return InMemorySpendingBookkeeper.for_block_range(block_start, block_end)
 
 
 _allowance_instance: Allowance | None = None

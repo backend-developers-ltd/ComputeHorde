@@ -145,5 +145,5 @@ class AllowanceBase(ABC):
     ) -> SpendingBookkeeperBase:
         """
         Get an object that can consume a sequence of allowance spending transactions and validate them one by one,
-        keeping the ongoing state of the allowances.
+        keeping the ongoing state of the allowances, without persisting it afterward.
         """

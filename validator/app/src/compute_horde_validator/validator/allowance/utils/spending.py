@@ -1,11 +1,12 @@
 import datetime
+import logging
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from typing import NamedTuple
 
 from compute_horde_core.executor_class import ExecutorClass
 
-from ...models import Block
+from ...models import Block, BlockAllowance
 from .. import settings
 from ..types import (
     BlocksOutsideRange,
@@ -19,6 +20,8 @@ from ..types import (
     block_ids,
     ss58_address,
 )
+
+logger = logging.getLogger(__name__)
 
 validator_ss58 = ss58_address
 miner_ss58 = ss58_address
@@ -54,7 +57,7 @@ class SpendingBookkeeperBase(ABC):
         # Filter out blocks that are either expired or in the future relative to the spending time
         block_at_spend_time = self._get_block_at_time(spend_time)
         if block_at_spend_time is None:
-            raise ErrorWhileSpending(f"Cannot find a block at time {spend_time}")
+            raise ErrorWhileSpending(f"Cannot find current block at job submission time: {spend_time}")
 
         allowed_block_range = range(
             block_at_spend_time - settings.BLOCK_EXPIRY, block_at_spend_time + 1
@@ -85,7 +88,7 @@ class SpendingBookkeeperBase(ABC):
         if spendable_amount < spend_amount:
             # Not enough allowance to cover the spending. Fail and bail.
             issues.append(
-                InsufficientAllowance(spendable_amount, list(spendable_allowances.keys()))
+                InsufficientAllowance(spendable_amount, spend_amount, list(spendable_allowances.keys()))
             )
             raise CannotSpend(issues)
         else:
@@ -138,6 +141,13 @@ class SpendingBookkeeperBase(ABC):
 
 
 class InMemorySpendingBookkeeper(SpendingBookkeeperBase):
+    """
+    In-memory implementation of a spending bookkeeper.
+    Requires prior knowledge - a "starting state" - of the allowances and blocks.
+    For efficiency, only load allowance and block data that is relevant for the time range you're validating.
+    Or better yet, ask the allowance module to give you an instance of the bookkeeper.
+    """
+
     def __init__(
         self,
         known_allowances: dict[Triplet, dict[block_id, AllowanceInfo]],
@@ -214,3 +224,61 @@ class InMemorySpendingBookkeeper(SpendingBookkeeperBase):
             return None
 
         return self._blocks[result_idx].block_number
+
+    @classmethod
+    def for_block_range(cls, block_start: int, block_end: int) -> "InMemorySpendingBookkeeper":
+        """
+        Factory method to create a spending bookkeeper for validating spendings within the given block range.
+        The actual range of loaded data will be extended to include blocks that may be used for payment.
+        """
+        # TODO(new scoring): Check for off-by-one errors - lower and upper
+
+        # Older blocks may be used for spending, so we need to extend the range backward
+        block_start -= settings.BLOCK_EXPIRY
+
+        # TODO(new scoring): current_block at job creation time causes a -5 offset
+        block_start -= 5
+
+        # TODO(new scoring): we're off-by-1
+        block_start -= 1
+
+        logger.info(f"Creating spending bookkeeper for block range {block_start} to {block_end}")
+
+        block_allowances_qs = (
+            BlockAllowance.objects.filter(
+                block_id__gte=block_start,
+                block_id__lt=block_end + 1,  # Block N can be immediately used for a job submitted at block N
+                allowance__gt=0,
+            )
+            .values(
+                "validator_ss58",
+                "miner_ss58",
+                "executor_class",
+                "block",
+                "allowance",
+                "invalidated_at_block",
+            )
+        )
+
+        allowances: defaultdict[Triplet, dict[block_id, AllowanceInfo]] = defaultdict(dict)
+        for row in block_allowances_qs:
+            block = row["block"]
+            triplet = Triplet(
+                row["validator_ss58"],
+                row["miner_ss58"],
+                ExecutorClass(row["executor_class"]),
+            )
+            info = AllowanceInfo(
+                allowance=row["allowance"],
+                invalidated_at_block=row["invalidated_at_block"],
+            )
+            allowances[triplet][block] = info
+
+        blocks = [
+            *Block.objects.filter(
+                block_number__gte=block_start,
+                block_number__lt=block_end + 1,  # +1 so that we know when the last block ends
+            ).order_by("block_number")
+        ]
+
+        return InMemorySpendingBookkeeper(known_allowances=allowances, blocks=blocks)
