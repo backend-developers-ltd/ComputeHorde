@@ -26,7 +26,6 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - "$HOME/.bittensor/wallets:/root/.bittensor/wallets"
-      - "$HOME/.pylon:/root/.pylon"
       - ./.env:/root/validator/.env
     labels:
       - "com.centurylinklabs.watchtower.enable=true"

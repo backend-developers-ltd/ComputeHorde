@@ -14,16 +14,18 @@ from typing import ParamSpec, TypeVar, Union
 
 import billiard.exceptions
 import bittensor
+import celery.exceptions
 import numpy as np
 import requests
 import turbobt
 import turbobt.substrate.exceptions
 from asgiref.sync import async_to_sync, sync_to_async
+from bittensor.core.errors import SubstrateRequestException
 from bittensor.utils import u16_normalized_float
 from bittensor.utils.weight_utils import process_weights
 from bt_ddos_shield.turbobt import ShieldedBittensor
 from celery import shared_task
-from celery.result import AsyncResult
+from celery.result import AsyncResult, allow_join_result
 from celery.utils.log import get_task_logger
 from compute_horde.dynamic_config import fetch_dynamic_configs_from_contract, sync_dynamic_config
 from compute_horde.fv_protocol.facilitator_requests import OrganicJobRequest
@@ -62,7 +64,6 @@ from compute_horde_validator.validator.organic_jobs.miner_driver import (
     drive_organic_job,
     execute_organic_job_request,
 )
-from compute_horde_validator.validator.pylon import pylon_client
 from compute_horde_validator.validator.routing.types import JobRoute
 from compute_horde_validator.validator.s3 import (
     download_prompts_from_s3_url,
@@ -103,6 +104,10 @@ COMPUTE_TIME_OVERHEAD_SECONDS = 30  # TODO: approximate a realistic value
 
 P = ParamSpec("P")
 R = TypeVar("R")
+
+
+class WeightsRevealError(Exception):
+    pass
 
 
 class ScheduleError(Exception):
@@ -207,16 +212,34 @@ class CommitRevealInterval:
     Subtensor uses the actual subnet hyperparam to determine the interval:
     https://github.com/opentensor/subtensor/blob/af585b9b8a17d27508431257052da502055477b7/pallets/subtensor/src/subnets/weights.rs#L482
 
+    Each interval is divided into reveal and commit windows based on dynamic parameters:
+
+    722                                                                          1443
+    |______________________________________|_______________________________________|
+    ^                                      ^                              ^
+    |-----------------------------|--------|------------------------------|-------_|
+    |       REVEAL WINDOW         | BUFFER |        COMMIT WINDOW         | BUFFER |
+    |                                      |
+    |            COMMIT OFFSET             |
+
     """
 
     def __init__(
         self,
         current_block: int,
+        *,
+        length: int | None = None,
+        commit_start_offset: int | None = None,
+        commit_end_buffer: int | None = None,
+        reveal_end_buffer: int | None = None,
     ):
         self.current_block = current_block
-        self.length = settings.COMMIT_WEIGHTS_INTERVAL
-        self.commit_start_offset = settings.COMMIT_WINDOW_START_OFFSET
-        self.commit_end_buffer = settings.COMMIT_WINDOW_END_BUFFER
+        self.length = length or config.DYNAMIC_COMMIT_REVEAL_WEIGHTS_INTERVAL
+        self.commit_start_offset = (
+            commit_start_offset or config.DYNAMIC_COMMIT_REVEAL_COMMIT_START_OFFSET
+        )
+        self.commit_end_buffer = commit_end_buffer or config.DYNAMIC_COMMIT_REVEAL_COMMIT_END_BUFFER
+        self.reveal_end_buffer = reveal_end_buffer or config.DYNAMIC_COMMIT_REVEAL_REVEAL_END_BUFFER
 
     @cached_property
     def start(self):
@@ -228,6 +251,18 @@ class CommitRevealInterval:
     @cached_property
     def stop(self):
         return self.start + self.length
+
+    @property
+    def reveal_start(self):
+        return self.start
+
+    @cached_property
+    def reveal_stop(self):
+        return self.start + self.commit_start_offset - self.reveal_end_buffer
+
+    @property
+    def reveal_window(self):
+        return range(self.reveal_start, self.reveal_stop)
 
     @cached_property
     def commit_start(self):
@@ -477,6 +512,118 @@ def _normalize_weights_for_committing(weights: list[float], max_: int):
     return [round(w * factor) for w in weights]
 
 
+@app.task()
+@bittensor_client
+def do_set_weights(
+    netuid: int,
+    uids: list[int],
+    weights: list[float],
+    wait_for_inclusion: bool,
+    wait_for_finalization: bool,
+    version_key: int,
+    bittensor: turbobt.Bittensor,
+) -> tuple[bool, str]:
+    """
+    Set weights. To be used in other celery tasks in order to facilitate a timeout,
+     since the multiprocessing version of this doesn't work in celery.
+    """
+    commit_reveal_weights_enabled = config.DYNAMIC_COMMIT_REVEAL_WEIGHTS_ENABLED
+    max_weight = config.DYNAMIC_MAX_WEIGHT
+
+    def _commit_weights() -> tuple[bool, str]:
+        subtensor_ = _get_subtensor_for_setting_scores(network=settings.BITTENSOR_NETWORK)
+        current_block = subtensor_.get_current_block()
+
+        normalized_weights = _normalize_weights_for_committing(weights, max_weight)
+        weights_in_db = Weights(
+            uids=uids,
+            weights=normalized_weights,
+            block=current_block,
+            version_key=version_key,
+        )
+        try:
+            is_success, message = subtensor_.commit_weights(
+                wallet=settings.BITTENSOR_WALLET(),
+                netuid=netuid,
+                uids=uids,
+                weights=normalized_weights,
+                salt=weights_in_db.salt,
+                version_key=version_key,
+                wait_for_inclusion=wait_for_inclusion,
+                wait_for_finalization=wait_for_finalization,
+                max_retries=2,
+            )
+        except SubstrateRequestException as e:
+            # Consider the following exception as success:
+            # The transaction has too low priority to replace another transaction already in the pool.
+            if e.args[0]["code"] == 1014:
+                is_success = True
+                message = "transaction already in the pool"
+            else:
+                raise
+        except Exception:
+            is_success = False
+            message = traceback.format_exc()
+
+        if is_success:
+            logger.info("Successfully committed weights!!!")
+            weights_in_db.save()
+            save_weight_setting_event(
+                type_=SystemEvent.EventType.WEIGHT_SETTING_SUCCESS,
+                subtype=SystemEvent.EventSubType.COMMIT_WEIGHTS_SUCCESS,
+                long_description=f"message from chain: {message}",
+                data={"weights_id": weights_in_db.id},
+            )
+        else:
+            logger.info("Failed to commit weights due to: %s", message)
+            save_weight_setting_failure(
+                subtype=SystemEvent.EventSubType.COMMIT_WEIGHTS_ERROR,
+                long_description=f"message from chain: {message}",
+                data={
+                    "weights_id": weights_in_db.id,
+                    "current_block": current_block,
+                },
+            )
+        return is_success, message
+
+    def _set_weights() -> tuple[bool, str]:
+        subnet = bittensor.subnet(netuid)
+
+        try:
+            reveal_round = async_to_sync(subnet.weights.commit)(
+                dict(zip(uids, weights)),
+                version_key=version_key,
+            )
+        except Exception:
+            is_success = False
+            message = traceback.format_exc()
+        else:
+            is_success = True
+            message = f"reveal_round:{reveal_round}"
+
+        if is_success:
+            logger.info("Successfully set weights!!!")
+            save_weight_setting_event(
+                type_=SystemEvent.EventType.WEIGHT_SETTING_SUCCESS,
+                subtype=SystemEvent.EventSubType.SET_WEIGHTS_SUCCESS,
+                long_description=message,
+                data={},
+            )
+        else:
+            logger.info(f"Failed to set weights due to {message=}")
+            save_weight_setting_failure(
+                subtype=SystemEvent.EventSubType.SET_WEIGHTS_ERROR,
+                long_description=message,
+                data={},
+            )
+        return is_success, message
+
+    if commit_reveal_weights_enabled:
+        return _commit_weights()
+    else:
+        return _set_weights()
+
+
 @shared_task
 def trigger_run_admin_job_request(job_request_id: int):
     async_to_sync(run_admin_job_request)(job_request_id)
@@ -553,6 +700,15 @@ def save_weight_setting_event(type_: str, subtype: str, long_description: str, d
 
 
 def save_weight_setting_failure(subtype: str, long_description: str, data: JsonValue):
+    save_weight_setting_event(
+        type_=SystemEvent.EventType.WEIGHT_SETTING_FAILURE,
+        subtype=subtype,
+        long_description=long_description,
+        data=data,
+    )
+
+
+def save_weight_revealing_failure(subtype: str, long_description: str, data: JsonValue):
     save_weight_setting_event(
         type_=SystemEvent.EventType.WEIGHT_SETTING_FAILURE,
         subtype=subtype,
@@ -797,16 +953,20 @@ def set_scores(bittensor: turbobt.Bittensor):
         logger.warning("Not setting scores, SERVING is disabled in constance config")
         return
 
-    current_block = pylon_client().get_latest_block()
-    block_hash = pylon_client().get_block_hash(current_block)
-    interval = CommitRevealInterval(current_block)
-    if current_block not in interval.commit_window:
-        logger.debug(
-            "Outside of commit window, skipping, current block: %s, window: %s",
-            current_block,
-            interval.commit_window,
-        )
-        return
+    commit_reveal_weights_enabled = config.DYNAMIC_COMMIT_REVEAL_WEIGHTS_ENABLED
+
+    current_block = async_to_sync(bittensor.blocks.head)()
+
+    if commit_reveal_weights_enabled:
+        interval = CommitRevealInterval(current_block.number)
+
+        if current_block.number not in interval.commit_window:
+            logger.debug(
+                "Outside of commit window, skipping, current block: %s, window: %s",
+                current_block.number,
+                interval.commit_window,
+            )
+            return
 
     with save_event_on_error(SystemEvent.EventSubType.GENERIC_ERROR):
         with transaction.atomic():
@@ -817,8 +977,8 @@ def set_scores(bittensor: turbobt.Bittensor):
                 return
 
             subnet = bittensor.subnet(settings.BITTENSOR_NETUID)
-            hyperparameters = async_to_sync(subnet.get_hyperparameters)(block_hash)
-            neurons = async_to_sync(subnet.list_neurons)(block_hash)
+            hyperparameters = async_to_sync(subnet.get_hyperparameters)(current_block.hash)
+            neurons = async_to_sync(subnet.list_neurons)(current_block.hash)
 
             batches = list(
                 SyntheticJobBatch.objects.select_related("cycle")
@@ -826,15 +986,13 @@ def set_scores(bittensor: turbobt.Bittensor):
                     scored=False,
                     should_be_scored=True,
                     started_at__gte=now() - timedelta(days=1),
-                    cycle__stop__lt=current_block,
+                    cycle__stop__lt=current_block.number,
                 )
                 .order_by("started_at")
             )
-
             if not batches:
                 logger.info("No batches - nothing to score")
                 return
-
             if len(batches) > 1:
                 logger.error("Unexpected number batches eligible for scoring: %s", len(batches))
                 for batch in batches[:-1]:
@@ -847,7 +1005,8 @@ def set_scores(bittensor: turbobt.Bittensor):
                 ", ".join(str(batch.id) for batch in batches),
             )
 
-            hotkey_scores = _score_cycles(current_block)
+            hotkey_scores = _score_cycles(current_block.number)
+
             if not hotkey_scores:
                 logger.warning("No scores calculated")
 
@@ -867,70 +1026,235 @@ def set_scores(bittensor: turbobt.Bittensor):
                 max_weight_limit=hyperparameters["max_weights_limit"],
             )
 
-            max_weight = config.DYNAMIC_MAX_WEIGHT
-            normalized_weights = _normalize_weights_for_committing(weights.tolist(), max_weight)
-
-            weights_in_db = Weights(
-                uids=uids.tolist(),
-                weights=normalized_weights,
-                block=current_block,
-                version_key=SCORING_ALGO_VERSION,
-            )
-
-            uid_to_hotkey = {n.uid: n.hotkey for n in neurons}
-            weights_dict = {
-                uid_to_hotkey[uid]: float(weight) for uid, weight in zip(uids, normalized_weights)
-            }
-
-            if weights_dict is None:
-                logger.warning("No scores calculated, skipping weight setting")
-                return
-
             for batch in batches:
                 batch.scored = True
                 batch.save()
 
-            # Send weights to the pylon database
-            try:
-                pylon_client().set_weights(weights_dict)
-                logger.info("Successfully broadcasted latest weights to pylon client")
+            for try_number in range(WEIGHT_SETTING_ATTEMPTS):
+                logger.debug(
+                    f"Setting weights (attempt #{try_number}):\nuids={uids}\nscores={weights}"
+                )
+                success = False
 
-            except Exception as e:
-                msg = f"Failed to broadcast latest weights to pylon client: {e}"
+                try:
+                    result = do_set_weights.apply_async(
+                        kwargs=dict(
+                            netuid=settings.BITTENSOR_NETUID,
+                            uids=uids.tolist(),
+                            weights=weights.tolist(),
+                            wait_for_inclusion=True,
+                            wait_for_finalization=False,
+                            version_key=SCORING_ALGO_VERSION,
+                        ),
+                        soft_time_limit=WEIGHT_SETTING_TTL,
+                        time_limit=WEIGHT_SETTING_HARD_TTL,
+                    )
+                    logger.info(f"Setting weights task id: {result.id}")
+                    try:
+                        with allow_join_result():
+                            success, msg = result.get(timeout=WEIGHT_SETTING_TTL)
+                    except (celery.exceptions.TimeoutError, billiard.exceptions.TimeLimitExceeded):
+                        result.revoke(terminate=True)
+                        logger.info(f"Setting weights timed out (attempt #{try_number})")
+                        save_weight_setting_failure(
+                            subtype=SystemEvent.EventSubType.WRITING_TO_CHAIN_TIMEOUT,
+                            long_description=traceback.format_exc(),
+                            data={"try_number": try_number, "operation": "setting/committing"},
+                        )
+                        continue
+                except Exception:
+                    logger.warning("Encountered when setting weights: ", exc_info=True)
+                    save_weight_setting_failure(
+                        subtype=SystemEvent.EventSubType.WRITING_TO_CHAIN_GENERIC_ERROR,
+                        long_description=traceback.format_exc(),
+                        data={"try_number": try_number, "operation": "setting/committing"},
+                    )
+                    continue
+                if success:
+                    break
+                time.sleep(WEIGHT_SETTING_FAILURE_BACKOFF)
+            else:
+                msg = f"Failed to set weights after {WEIGHT_SETTING_ATTEMPTS} attempts"
                 logger.warning(msg)
                 save_weight_setting_failure(
-                    subtype=SystemEvent.EventSubType.SET_WEIGHTS_ERROR,
+                    subtype=SystemEvent.EventSubType.GIVING_UP,
                     long_description=msg,
-                    data={"operation": "committing", "current_block": current_block},
+                    data={"try_number": WEIGHT_SETTING_ATTEMPTS, "operation": "setting/committing"},
                 )
-                return
 
-            # trigger weights committing
+
+@app.task()
+def reveal_scores() -> None:
+    """
+    Select latest Weights that are older than `commit_reveal_weights_interval`
+    and haven't been revealed yet, and reveal them.
+    """
+    last_weights = Weights.objects.order_by("-created_at").first()
+    if not last_weights or last_weights.revealed_at is not None:
+        logger.debug("No weights to reveal")
+        return
+
+    subtensor_ = _get_subtensor_for_setting_scores(network=settings.BITTENSOR_NETWORK)
+    current_block = subtensor_.get_current_block()
+    interval = CommitRevealInterval(current_block)
+    if current_block not in interval.reveal_window:
+        logger.debug(
+            "Outside of reveal window, skipping, current block: %s, window: %s",
+            current_block,
+            interval.reveal_window,
+        )
+        return
+
+    # find the interval in which the commit occurred
+    block_interval = CommitRevealInterval(last_weights.block)
+    # revealing starts in the next interval
+    reveal_start = block_interval.stop
+
+    if current_block < reveal_start:
+        logger.warning(
+            "Too early to reveal weights weights_id: %s, reveal starts: %s, current block: %s",
+            last_weights.pk,
+            reveal_start,
+            current_block,
+        )
+        return
+
+    reveal_end = reveal_start + block_interval.length
+    if current_block > reveal_end:
+        logger.error(
+            "Weights are too old to be revealed weights_id: %s, reveal_ended: %s, current block: %s",
+            last_weights.pk,
+            reveal_end,
+            current_block,
+        )
+        return
+
+    WEIGHT_REVEALING_TTL = config.DYNAMIC_WEIGHT_REVEALING_TTL
+    WEIGHT_REVEALING_HARD_TTL = config.DYNAMIC_WEIGHT_REVEALING_HARD_TTL
+    WEIGHT_REVEALING_ATTEMPTS = config.DYNAMIC_WEIGHT_REVEALING_ATTEMPTS
+    WEIGHT_REVEALING_FAILURE_BACKOFF = config.DYNAMIC_WEIGHT_REVEALING_FAILURE_BACKOFF
+
+    weights_id = last_weights.id
+    with transaction.atomic():
+        last_weights = (
+            Weights.objects.filter(id=weights_id, revealed_at=None)
+            .select_for_update(skip_locked=True)
+            .first()
+        )
+        if not last_weights:
+            logger.debug(
+                "Weights have already been revealed or are being revealed at this moment: %s",
+                weights_id,
+            )
+            return
+
+        for try_number in range(WEIGHT_REVEALING_ATTEMPTS):
+            logger.debug(f"Revealing weights (attempt #{try_number}): weights_id={weights_id}")
+            success = False
+
             try:
-                result = pylon_client().force_commit_weights()
-                weights_in_db.save()
-
-                msg = f"Pylon successfully committed weights: {weights_in_db.id}, {result}"
-                logger.info(msg)
-                save_weight_setting_event(
-                    type_=SystemEvent.EventType.WEIGHT_SETTING_SUCCESS,
-                    subtype=SystemEvent.EventSubType.COMMIT_WEIGHTS_SUCCESS,
-                    long_description=msg,
-                    data={
-                        "operation": "committing",
-                        "weights_id": weights_in_db.id,
-                        "current_block": current_block,
-                    },
+                result = do_reveal_weights.apply_async(
+                    kwargs=dict(
+                        weights_id=last_weights.id,
+                    ),
+                    soft_time_limit=WEIGHT_REVEALING_TTL,
+                    time_limit=WEIGHT_REVEALING_HARD_TTL,
                 )
-
-            except Exception as e:
-                msg = f"Pylon failed to commit weights: {e}"
-                logger.warning(msg)
+                logger.info(f"Revealing weights task id: {result.id}")
+                try:
+                    with allow_join_result():
+                        success, msg = result.get(timeout=WEIGHT_REVEALING_TTL)
+                except (celery.exceptions.TimeoutError, billiard.exceptions.TimeLimitExceeded):
+                    result.revoke(terminate=True)
+                    logger.info(f"Revealing weights timed out (attempt #{try_number})")
+                    save_weight_setting_failure(
+                        subtype=SystemEvent.EventSubType.WRITING_TO_CHAIN_TIMEOUT,
+                        long_description=traceback.format_exc(),
+                        data={"try_number": try_number, "operation": "revealing"},
+                    )
+                    continue
+            except Exception:
+                logger.warning("Encountered when revealing weights: ")
                 save_weight_setting_failure(
-                    subtype=SystemEvent.EventSubType.COMMIT_WEIGHTS_ERROR,
-                    long_description=msg,
-                    data={"operation": "committing", "current_block": current_block},
+                    subtype=SystemEvent.EventSubType.WRITING_TO_CHAIN_GENERIC_ERROR,
+                    long_description=traceback.format_exc(),
+                    data={"try_number": try_number, "operation": "revealing"},
                 )
+                continue
+            if success:
+                last_weights.revealed_at = now()
+                last_weights.save()
+                break
+            time.sleep(WEIGHT_REVEALING_FAILURE_BACKOFF)
+        else:
+            msg = f"Failed to set weights after {WEIGHT_REVEALING_ATTEMPTS} attempts"
+            logger.warning(msg)
+            save_weight_setting_failure(
+                subtype=SystemEvent.EventSubType.GIVING_UP,
+                long_description=msg,
+                data={"try_number": WEIGHT_REVEALING_ATTEMPTS, "operation": "revealing"},
+            )
+
+
+@app.task()
+def do_reveal_weights(weights_id: int) -> tuple[bool, str]:
+    weights = Weights.objects.filter(id=weights_id, revealed_at=None).first()
+    if not weights:
+        logger.debug(
+            "Weights have already been revealed or are being revealed at this moment: %s",
+            weights_id,
+        )
+        return True, "nothing_to_do"
+
+    wallet = settings.BITTENSOR_WALLET()
+    subtensor_ = _get_subtensor_for_setting_scores(network=settings.BITTENSOR_NETWORK)
+    try:
+        is_success, message = subtensor_.reveal_weights(
+            wallet=wallet,
+            netuid=settings.BITTENSOR_NETUID,
+            uids=weights.uids,
+            weights=weights.weights,
+            salt=weights.salt,
+            version_key=weights.version_key,
+            wait_for_inclusion=True,
+            wait_for_finalization=True,
+            max_retries=2,
+        )
+    except SubstrateRequestException as e:
+        # Consider the following exception as success:
+        # The transaction has too low priority to replace another transaction already in the pool.
+        if e.args[0]["code"] == 1014:
+            is_success = True
+            message = "transaction already in the pool"
+        else:
+            raise
+    except Exception:
+        logger.warning("Encountered when setting weights: ", exc_info=True)
+        is_success = False
+        message = traceback.format_exc()
+    if is_success:
+        save_weight_setting_event(
+            type_=SystemEvent.EventType.WEIGHT_SETTING_SUCCESS,
+            subtype=SystemEvent.EventSubType.REVEAL_WEIGHTS_SUCCESS,
+            long_description=message,
+            data={"weights_id": weights.id},
+        )
+    else:
+        current_block = "unknown"
+        try:
+            current_block = subtensor_.get_current_block()
+        except Exception as e:
+            logger.warning("Failed to get current block: %s", e)
+        finally:
+            save_weight_setting_failure(
+                subtype=SystemEvent.EventSubType.REVEAL_WEIGHTS_ERROR,
+                long_description=message,
+                data={
+                    "weights_id": weights.id,
+                    "current_block": current_block,
+                },
+            )
+    return is_success, message
 
 
 @shared_task

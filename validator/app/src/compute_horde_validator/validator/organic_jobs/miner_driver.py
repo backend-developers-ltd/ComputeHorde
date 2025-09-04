@@ -203,6 +203,7 @@ async def execute_organic_job_request(
         miner_address=miner_ip,
         miner_address_ip_version=ip_type,
         miner_port=miner_port,
+        namespace=job_request.job_namespace or job_request.docker_image or None,
         executor_class=job_request.executor_class,
         job_description="User job from facilitator",
         block=block,

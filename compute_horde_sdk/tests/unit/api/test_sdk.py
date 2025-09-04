@@ -856,3 +856,41 @@ async def test_create_and_wait_for_streaming_job(
     # Wait for job completion
     await job.wait(timeout=10)
     assert job.status == apiver_module.ComputeHordeJobStatus.COMPLETED
+
+
+@pytest.mark.asyncio
+async def test_job_spec_includes_namespace_in_payload(apiver_module, httpx_mock, keypair):
+    """
+    Test that job_namespace is included in HTTP request to Facilitator.
+    """
+    httpx_mock.add_response(
+        url=TEST_FACILITATOR_URL + "/api/v1/job-docker/",
+        json=get_job_response(
+            info=TEST_JOB_UUID,
+            status="sent",
+        ),
+    )
+
+    client: ComputeHordeClient = apiver_module.ComputeHordeClient(
+        hotkey=keypair,
+        compute_horde_validator_hotkey="abcdef",
+        job_queue="sn123",
+        facilitator_url=TEST_FACILITATOR_URL,
+    )
+
+    client._token = "test_jwt_token"
+
+    job_spec = apiver_module.ComputeHordeJobSpec(
+        executor_class=apiver_module.ExecutorClass.spin_up_4min__gpu_24gb,
+        job_namespace="SN123.0",
+        docker_image=TEST_DOCKER_IMAGE,
+        download_time_limit_sec=1,
+        execution_time_limit_sec=1,
+        upload_time_limit_sec=1,
+        streaming_start_time_limit_sec=1,
+    )
+
+    await client.create_job(job_spec)
+    json_data = json.loads(httpx_mock.get_request().content)
+    assert "job_namespace" in json_data
+    assert json_data["job_namespace"] == job_spec.job_namespace

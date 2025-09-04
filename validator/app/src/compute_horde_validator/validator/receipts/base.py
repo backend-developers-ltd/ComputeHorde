@@ -1,10 +1,12 @@
 import datetime
 from abc import ABC, abstractmethod
 
-from compute_horde.receipts import Receipt
 from compute_horde.receipts.models import JobFinishedReceipt, JobStartedReceipt
 from compute_horde.receipts.schemas import JobStartedReceiptPayload
+from compute_horde_core.executor_class import ExecutorClass
 from typing_extensions import deprecated
+
+from .types import FinishedJobInfo
 
 
 class ReceiptsBase(ABC):
@@ -39,7 +41,7 @@ class ReceiptsBase(ABC):
         job_uuid: str,
         miner_hotkey: str,
         validator_hotkey: str,
-        executor_class: str,
+        executor_class: ExecutorClass,
         is_organic: bool,
         ttl: int,
     ) -> tuple[JobStartedReceiptPayload, str]:
@@ -134,17 +136,23 @@ class ReceiptsBase(ABC):
         pass
 
     @abstractmethod
-    async def get_completed_job_receipts_for_block_range(
-        self, start_block: int, end_block: int
-    ) -> list[Receipt]:
+    async def get_finished_jobs_for_block_range(
+        self, start_block: int, end_block: int, executor_class: ExecutorClass
+    ) -> list[FinishedJobInfo]:
         """
-        Get all receipts for jobs that were completed between the specified blocks.
+        Returns tuples for jobs whose finish (receipt) timestamp falls within the
+        given block range [start_block, end_block), filtered by executor class.
+        """
+        pass
 
-        Args:
-            start_block: Start block (inclusive)
-            end_block: End block (exclusive)
+    @abstractmethod
+    async def get_busy_executor_count(
+        self, executor_class: ExecutorClass, at_time: datetime.datetime
+    ) -> dict[str, int]:
+        """
+        Return counts of ongoing jobs per miner at the given time for the executor_class.
 
-        Returns:
-            List of receipts for completed jobs in the block range
+        A job counts as ongoing if its JobStartedReceipt is valid at at_time and there
+        is no JobFinishedReceipt with timestamp <= at_time for the same job_uuid.
         """
         pass

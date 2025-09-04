@@ -28,6 +28,12 @@ JOB_REQUEST = V2JobRequest(
 )
 
 
+@pytest_asyncio.fixture(autouse=True)
+async def mock_block_number():
+    with await sync_to_async(set_block_number)(1005):
+        yield
+
+
 @pytest_asyncio.fixture()
 async def add_allowance():
     with await sync_to_async(set_block_number)(1000):
@@ -37,8 +43,6 @@ async def add_allowance():
             await sync_to_async(blocks.process_block_allowance_with_reporting)(
                 block_number, supertensor_=supertensor()
             )
-
-    await sync_to_async(set_block_number)(1005)
 
 
 @pytest.mark.django_db(transaction=True)

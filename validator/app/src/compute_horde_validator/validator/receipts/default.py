@@ -7,7 +7,6 @@ from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 
 import aiohttp
-from compute_horde.receipts import Receipt
 from compute_horde.receipts.models import (
     JobFinishedReceipt,
     JobStartedReceipt,
@@ -16,7 +15,9 @@ from compute_horde.receipts.schemas import JobFinishedReceiptPayload, JobStarted
 from compute_horde.receipts.store.local import N_ACTIVE_PAGES, LocalFilesystemPagedReceiptStore
 from compute_horde.receipts.transfer import MinerInfo, ReceiptsTransfer, TransferResult
 from compute_horde.utils import sign_blob
+from compute_horde_core.executor_class import ExecutorClass
 from django.conf import settings
+from django.db.models import Count, Exists, OuterRef
 from django.utils import timezone
 from prometheus_client import Counter, Gauge, Histogram
 from typing_extensions import deprecated
@@ -27,7 +28,7 @@ from compute_horde_validator.validator.models import MetagraphSnapshot, Miner
 from compute_horde_validator.validator.models.allowance.internal import Block
 
 from .base import ReceiptsBase
-from .types import TransferIsDisabled
+from .types import FinishedJobInfo, TransferIsDisabled
 
 logger = logging.getLogger(__name__)
 
@@ -149,7 +150,10 @@ class Receipts(ReceiptsBase):
         time_started: datetime.datetime,
         time_took_us: int,
         score_str: str,
+        block_numbers: list[int] | None = None,
     ) -> JobFinishedReceipt:
+        if block_numbers is None:
+            block_numbers = []
         payload = JobFinishedReceiptPayload(
             job_uuid=job_uuid,
             miner_hotkey=miner_hotkey,
@@ -158,6 +162,7 @@ class Receipts(ReceiptsBase):
             time_started=time_started,
             time_took_us=time_took_us,
             score_str=score_str,
+            block_numbers=block_numbers,
         )
 
         validator_kp = settings.BITTENSOR_WALLET().get_hotkey()
@@ -172,6 +177,7 @@ class Receipts(ReceiptsBase):
             time_started=time_started,
             time_took_us=time_took_us,
             score_str=score_str,
+            block_numbers=block_numbers,
         )
 
     def create_job_started_receipt(
@@ -179,7 +185,7 @@ class Receipts(ReceiptsBase):
         job_uuid: str,
         miner_hotkey: str,
         validator_hotkey: str,
-        executor_class: str,
+        executor_class: ExecutorClass,
         is_organic: bool,
         ttl: int,
     ) -> tuple[JobStartedReceiptPayload, str]:
@@ -188,7 +194,7 @@ class Receipts(ReceiptsBase):
             miner_hotkey=miner_hotkey,
             validator_hotkey=validator_hotkey,
             timestamp=datetime.datetime.now(datetime.UTC),
-            executor_class=executor_class,
+            executor_class=str(executor_class),
             is_organic=is_organic,
             ttl=ttl,
         )
@@ -224,9 +230,9 @@ class Receipts(ReceiptsBase):
     async def get_job_started_receipt_by_uuid(self, job_uuid: str) -> JobStartedReceipt:
         return await JobStartedReceipt.objects.aget(job_uuid=job_uuid)
 
-    async def get_completed_job_receipts_for_block_range(
-        self, start_block: int, end_block: int
-    ) -> list[Receipt]:
+    async def get_finished_jobs_for_block_range(
+        self, start_block: int, end_block: int, executor_class: ExecutorClass
+    ) -> list[FinishedJobInfo]:
         if start_block >= end_block:
             logger.warning(
                 "Invalid block range provided: start_block (%s) >= end_block (%s)",
@@ -238,11 +244,69 @@ class Receipts(ReceiptsBase):
         start_timestamp = await self._get_block_timestamp(start_block)
         end_timestamp = await self._get_block_timestamp(end_block)
 
-        finished_receipts_qs = JobFinishedReceipt.objects.filter(
+        finished_qs = JobFinishedReceipt.objects.filter(
             timestamp__gte=start_timestamp,
             timestamp__lt=end_timestamp,
         )
-        return [receipt_data.to_receipt() async for receipt_data in finished_receipts_qs]
+
+        starts = JobStartedReceipt.objects.filter(
+            job_uuid=OuterRef("job_uuid"), executor_class=str(executor_class)
+        )
+        finished_qs = finished_qs.filter(Exists(starts))
+
+        receipts: list[JobFinishedReceipt] = [receipt async for receipt in finished_qs]
+
+        earliest_block_numbers = {min(r.block_numbers) for r in receipts if r.block_numbers}
+        block_number_to_timestamp: dict[int, datetime.datetime] = {}
+        if earliest_block_numbers:
+            async for block in Block.objects.filter(block_number__in=earliest_block_numbers):
+                block_number_to_timestamp[block.block_number] = block.creation_timestamp
+
+            missing_blocks = earliest_block_numbers - set(block_number_to_timestamp.keys())
+            for block_number in missing_blocks:
+                block_number_to_timestamp[block_number] = await self._get_block_timestamp(
+                    block_number
+                )
+
+        result: list[FinishedJobInfo] = []
+        for r in receipts:
+            block_start_time: datetime.datetime | None = None
+            if r.block_numbers:
+                earliest = min(r.block_numbers)
+                block_start_time = block_number_to_timestamp.get(earliest)
+
+            result.append(
+                FinishedJobInfo(
+                    validator_hotkey=r.validator_hotkey,
+                    miner_hotkey=r.miner_hotkey,
+                    job_run_time_us=r.time_took_us,
+                    block_start_time=block_start_time,
+                    block_ids=r.block_numbers,
+                )
+            )
+
+        return result
+
+    async def get_busy_executor_count(
+        self, executor_class: ExecutorClass, at_time: datetime.datetime
+    ) -> dict[str, int]:
+        starts_qs = JobStartedReceipt.objects.valid_at(at_time).filter(
+            executor_class=str(executor_class)
+        )
+
+        finishes = JobFinishedReceipt.objects.filter(
+            job_uuid=OuterRef("job_uuid"), timestamp__lte=at_time
+        )
+
+        ongoing = starts_qs.annotate(has_finished=Exists(finishes)).filter(has_finished=False)
+
+        rows = [
+            row
+            async for row in ongoing.values("miner_hotkey")
+            .annotate(n=Count("id"))
+            .values("miner_hotkey", "n")
+        ]
+        return {row["miner_hotkey"]: int(row["n"]) for row in rows}
 
     async def _catch_up(
         self,
