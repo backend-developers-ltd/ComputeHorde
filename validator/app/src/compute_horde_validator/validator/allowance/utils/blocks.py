@@ -5,7 +5,7 @@ from typing import Any
 import turbobt
 from celery.utils.log import get_task_logger
 from compute_horde_core.executor_class import ExecutorClass
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.db.models import Case, FloatField, Max, Min, Q, Sum, Value, When
 
 from compute_horde_validator.validator.locks import Lock, LockType
@@ -23,7 +23,7 @@ from ..metrics import (
 )
 from ..types import AllowanceException, NotEnoughAllowanceException, ss58_address
 from .manifests import get_manifest_drops, get_manifests
-from .supertensor import SuperTensor, supertensor
+from .supertensor import CannotGetCurrentBlock, SuperTensor, SuperTensorError, supertensor
 
 logger = get_task_logger(__name__)
 
@@ -45,9 +45,9 @@ def find_missing_blocks(current_block: int) -> list[int]:
     expected_block_numbers = set(range(lookback_block, current_block + 1))
 
     # Get existing block numbers from the database
-    existing_blocks = Block.objects.filter(
-        block_number__gte=lookback_block, block_number__lt=current_block
-    ).values_list("block_number", flat=True)
+    existing_blocks = Block.objects.filter(block_number__gte=lookback_block).values_list(
+        "block_number", flat=True
+    )
     existing_block_numbers = set(existing_blocks)
 
     # Find missing block numbers
@@ -57,7 +57,6 @@ def find_missing_blocks(current_block: int) -> list[int]:
     return sorted(list(missing_block_numbers))
 
 
-MAX_RUN_TIME = 90
 MIN_BLOCK_WAIT_TIME = 15
 
 
@@ -66,21 +65,29 @@ class TimesUpError(Exception):
 
 
 class Timer:
-    def __init__(self):
+    def __init__(self, max_run_time):
         self.start_time = time.time()
+        self.max_run_time = max_run_time
 
     def check_time(self):
         if self.time_left() < 0:
             raise TimesUpError
 
     def time_left(self):
-        return MAX_RUN_TIME - (time.time() - self.start_time)
+        return self.max_run_time - (time.time() - self.start_time)
 
 
 def wait_for_block(target_block: int, timeout_seconds: float):
     timeout_seconds = max(timeout_seconds, MIN_BLOCK_WAIT_TIME)
     start = time.time()
-    while target_block > supertensor().get_current_block():
+
+    def safe_get_current_block():
+        try:
+            return supertensor().get_current_block()
+        except CannotGetCurrentBlock:
+            return target_block - 1
+
+    while target_block > safe_get_current_block():
         if time.time() - start > timeout_seconds:
             logger.warning(
                 f"Timeout waiting for block {target_block} after {timeout_seconds} seconds"
@@ -224,33 +231,38 @@ def process_block_allowance(
 
 
 def process_block_allowance_with_reporting(
-    block_number: int, supertensor_: SuperTensor, live=False
+    block_number: int,
+    supertensor_: SuperTensor,
+    live=False,
+    blocks_behind: int = 0,
 ):
     """
     Only call this once the block is already minted
     """
     try:
-        start = time.time()
-        data = process_block_allowance(block_number, supertensor_)
-        end = time.time()
-        if live and data:
-            stake_shares, manifests, duration = data[max(data.keys())]
-
-            for validator_ss58, stake_share in stake_shares.items():
-                VALIDATOR_STAKE_SHARE_REPORT.labels(validator_ss58).set(stake_share)
-
-            for miner_exec_class, count in manifests.items():
-                miner_hotkey, executor_class = miner_exec_class
-                VALIDATOR_MINER_MANIFEST_REPORT.labels(miner_hotkey, executor_class.value).set(
-                    count
-                )
-
-            VALIDATOR_BLOCK_DURATION.set(duration)
-
+        try:
+            start = time.time()
+            data = process_block_allowance(block_number, supertensor_)
+            end = time.time()
+        except IntegrityError as e:
+            if "validator_block_pkey" not in str(e):
+                raise
+            logger.info(f"Block {block_number} already processed but still attempted")
+            SystemEvent.objects.create(
+                type=SystemEvent.EventType.COMPUTE_TIME_ALLOWANCE,
+                subtype=SystemEvent.EventSubType.BLOCK_ALREADY_INSERTED_PROBABLY_BLOCK_CACHE_JITTER_IGNORE_ME_FOR_NOW,
+                data={
+                    "block_number": block_number,
+                    "error": str(e),
+                },
+            )
+            return
     except Exception as e:
-        logger.error(
-            f"Error processing block allowance for block {block_number}: {e!r}", exc_info=True
-        )
+        msg = f"Error processing block allowance for block {block_number}: {e!r}"
+        if isinstance(e, SuperTensorError):
+            logger.info(msg)
+        else:
+            logger.error(msg, exc_info=True)
         SystemEvent.objects.create(
             type=SystemEvent.EventType.COMPUTE_TIME_ALLOWANCE,
             subtype=SystemEvent.EventSubType.FAILURE,
@@ -261,9 +273,30 @@ def process_block_allowance_with_reporting(
         )
     else:
         duration = end - start
-        logger.info(f"Block allowance processing for block {block_number} took {duration} seconds")
+        msg = f"Block allowance processing for block {block_number} took {duration:0.2f} seconds"
+        if blocks_behind:
+            msg += f" ({blocks_behind} blocks behind)"
+        else:
+            msg += " (blocks up to date)"
+        logger.info(msg)
         # Record processing duration in Prometheus metric instead of SystemEvent
         VALIDATOR_BLOCK_ALLOWANCE_PROCESSING_DURATION.observe(duration)
+
+        if live and data:
+            stake_shares, manifests, duration = data[max(data.keys())]
+
+            VALIDATOR_STAKE_SHARE_REPORT.clear()
+            for validator_ss58, stake_share in stake_shares.items():
+                VALIDATOR_STAKE_SHARE_REPORT.labels(validator_ss58).set(stake_share)
+
+            VALIDATOR_MINER_MANIFEST_REPORT.clear()
+            for miner_exec_class, count in manifests.items():
+                miner_hotkey, executor_class = miner_exec_class
+                VALIDATOR_MINER_MANIFEST_REPORT.labels(miner_hotkey, executor_class.value).set(
+                    count
+                )
+
+            VALIDATOR_BLOCK_DURATION.set(duration)
 
 
 def report_checkpoint(block_number_lt: int, block_number_gte: int):
@@ -290,43 +323,51 @@ def report_checkpoint(block_number_lt: int, block_number_gte: int):
         ).set(allowance["total_allowance"])
 
 
-def scan_blocks_and_calculate_allowance(
+def backfill_blocks_if_necessary(
+    current_block: int,
+    max_run_time: float | int,
     report_callback: Callable[[int, int], Any] | None = None,
     backfilling_supertensor: SuperTensor | None = None,
-    livefilling_supertensor: SuperTensor | None = None,
 ):
     if backfilling_supertensor is None:
         backfilling_supertensor = supertensor()
-    if livefilling_supertensor is None:
-        livefilling_supertensor = supertensor()
-    timer = Timer()
+    timer = Timer(max_run_time)
     try:
-        current_block = livefilling_supertensor.get_current_block()
         missing_block_numbers = find_missing_blocks(current_block)
+        oldest_reachable_block = backfilling_supertensor.oldest_reachable_block()
+        missing_block_numbers = [bn for bn in missing_block_numbers if bn >= oldest_reachable_block]
         for block_number in missing_block_numbers:
             # TODO process_block_allowance_with_reporting never throws, but logs errors appropriately. maybe it should
             # be retried? otherwise random failures will leave holes until they are backfilled
-            process_block_allowance_with_reporting(block_number, backfilling_supertensor)
+            process_block_allowance_with_reporting(
+                block_number, backfilling_supertensor, blocks_behind=current_block - block_number
+            )
             if not block_number % 100 and report_callback:
                 report_callback(block_number, block_number - 100)
             timer.check_time()
+    except TimesUpError:
+        logger.debug("backfill_blocks_if_necessary times out gracefully, spawning a new task")
+        raise
 
+
+def livefill_blocks(
+    current_block: int,
+    max_run_time: float | int,
+    report_callback: Callable[[int, int], Any] | None = None,
+):
+    timer = Timer(max_run_time)
+    try:
         while True:
             wait_for_block(current_block + 1, timer.time_left())
             current_block += 1
 
-            process_block_allowance_with_reporting(
-                current_block, livefilling_supertensor, live=True
-            )
-            # no precaching needed in live sampling
+            process_block_allowance_with_reporting(current_block, supertensor(), live=True)
             if not current_block % 100 and report_callback:
                 report_callback(current_block, current_block - 100)
             timer.check_time()
 
     except TimesUpError:
-        logger.debug(
-            "scan_blocks_and_calculate_allowance times out gracefully, spawning a new task"
-        )
+        logger.debug("livefill_blocks times out gracefully, spawning a new task")
         raise
 
 

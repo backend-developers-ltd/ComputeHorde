@@ -1,3 +1,6 @@
+import contextlib
+import time
+
 from celery.utils.log import get_task_logger
 from django.conf import settings
 from django.db import transaction
@@ -8,6 +11,7 @@ from compute_horde_validator.validator.allowance.utils import blocks, manifests
 from compute_horde_validator.validator.allowance.utils.supertensor import (
     PrecachingSuperTensor,
     SuperTensor,
+    SuperTensorError,
     supertensor,
 )
 from compute_horde_validator.validator.allowance.utils.supertensor_django_cache import DjangoCache
@@ -28,8 +32,11 @@ logger = get_task_logger(__name__)
 LOCK_WAIT_TIMEOUT = 5.0
 
 
+MAX_RUN_TIME = 90
+
+
 @app.task(
-    time_limit=blocks.MAX_RUN_TIME + 30,
+    time_limit=MAX_RUN_TIME + 60,
 )
 def scan_blocks_and_calculate_allowance(
     backfilling_supertensor: SuperTensor | None = None,
@@ -38,13 +45,32 @@ def scan_blocks_and_calculate_allowance(
     if not AllowanceMinerManifest.objects.exists():
         logger.warning("No miner manifests found, skipping allowance calculation")
         return
+    current_block = supertensor().get_current_block()
     with transaction.atomic(using=settings.DEFAULT_DB_ALIAS):
         try:
             with Lock(LockType.ALLOWANCE_FETCHING, LOCK_WAIT_TIMEOUT, settings.DEFAULT_DB_ALIAS):
-                blocks.scan_blocks_and_calculate_allowance(
+                start_time = time.time()
+
+                cm: contextlib.AbstractContextManager[SuperTensor]
+                if backfilling_supertensor is None:
+                    cm = PrecachingSuperTensor(cache=DjangoCache())
+                else:
+                    cm = contextlib.nullcontext(backfilling_supertensor)
+                with cm as backfilling_supertensor:
+                    blocks.backfill_blocks_if_necessary(
+                        current_block,
+                        MAX_RUN_TIME,
+                        report_allowance_checkpoint.delay,
+                        backfilling_supertensor,
+                    )
+                time_left = MAX_RUN_TIME - (time.time() - start_time)
+                if time_left < 0:
+                    raise blocks.TimesUpError
+
+                blocks.livefill_blocks(
+                    current_block,
+                    time_left,
                     report_allowance_checkpoint.delay,
-                    backfilling_supertensor or PrecachingSuperTensor(cache=DjangoCache()),
-                    supertensor(),
                 )
         except Locked:
             logger.debug("Another thread already fetching blocks")
@@ -63,12 +89,14 @@ def report_allowance_checkpoint(block_number_lt: int, block_number_gte: int):
 
 @app.task()
 def sync_manifests():
-    # TODO: write tests and add to celery beat config
     try:
         manifests.sync_manifests()
     except Exception as e:
         msg = f"Failed to sync manifests: {e}"
-        logger.error(msg, exc_info=True)
+        if isinstance(e, SuperTensorError):
+            logger.info(msg)
+        else:
+            logger.error(msg, exc_info=True)
         SystemEvent.objects.create(
             type=SystemEvent.EventType.COMPUTE_TIME_ALLOWANCE,
             subtype=SystemEvent.EventSubType.FAILURE,

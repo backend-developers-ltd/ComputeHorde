@@ -212,3 +212,7 @@ def get_metric_values_by_remaining_labels(
             result[key] = float(sample.value)
 
     return result
+
+
+def normalize_stake_dict(dict_: dict[str, int | float]) -> dict[str, float]:
+    return {k: LF(v / sum(dict_.values())) for k, v in dict_.items()}

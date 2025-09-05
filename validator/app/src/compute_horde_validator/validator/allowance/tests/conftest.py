@@ -1,3 +1,4 @@
+import logging
 from unittest import mock
 
 import pytest
@@ -32,5 +33,15 @@ def basic_mocks():
                 "DYNAMIC_MINER_MAX_EXECUTORS_PER_CLASS": "always_on.llm.a6000=3,always_on.gpu-24gb=5,spin_up-4min.gpu-24gb=10"
             }
         ),
+    ):
+        yield
+
+
+@pytest.fixture
+def configure_logs(caplog):
+    with (
+        caplog.at_level(logging.CRITICAL, logger="transport"),
+        caplog.at_level(logging.CRITICAL, logger="compute_horde.miner_client.base"),
+        caplog.at_level(logging.CRITICAL, logger="compute_horde.miner_client.organic"),
     ):
         yield

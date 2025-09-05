@@ -40,7 +40,7 @@ dependencies = [
     "hexbytes>=1.3.0",
     "web3>=7.11.0",
     "requests>=2.32.3",
-    "turbobt~=0.2.2",
+    "turbobt @ git+https://github.com/bactensor/turbobt.git@close_websocket_transport",
     "aiohttp>=3.12.0",
 ]
 
