@@ -6,7 +6,7 @@ import pytest
 from compute_horde_validator.validator.allowance.types import Miner as AllowanceMiner
 from compute_horde_validator.validator.models import Miner
 from compute_horde_validator.validator.organic_jobs.miner_driver import execute_organic_job_request
-from compute_horde_validator.validator.routing.types import JobRoute
+from compute_horde_validator.validator.routing.default import JobRoute
 from compute_horde_validator.validator.tests.helpers import get_dummy_job_request_v2
 
 
