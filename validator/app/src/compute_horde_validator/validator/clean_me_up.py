@@ -1,8 +1,7 @@
 import asyncio
 
+import aiohttp
 from celery.utils.log import get_task_logger
-from compute_horde.miner_client.organic import OrganicMinerClient
-from compute_horde.transport.base import TransportConnectionError
 from compute_horde_core.executor_class import ExecutorClass
 from django.conf import settings
 
@@ -23,33 +22,37 @@ async def save_compute_time_allowance_event(subtype, msg, data):
 
 
 async def get_single_manifest(
-    client: OrganicMinerClient, timeout: float = 30
+    address: str, port: int, hotkey: str, timeout: float = 30
 ) -> tuple[str, dict[ExecutorClass, int] | None]:
-    """Get manifest from a single miner client"""
-    hotkey = client.miner_hotkey
-    data = {"hotkey": hotkey}
+    """Get manifest from a single miner via HTTP"""
     try:
         async with asyncio.timeout(timeout):
-            try:
-                # Connect to the miner - this will trigger the manifest to be sent
-                await client.connect()
-                manifest = await client.miner_manifest
-                return hotkey, manifest
-
-            except TransportConnectionError as exc:
-                msg = f"Error fetching manifest for {hotkey}: {exc}"
-                await save_compute_time_allowance_event(
-                    SystemEvent.EventSubType.MANIFEST_ERROR, msg, data=data
-                )
-                logger.warning(msg)
-                return hotkey, None
+            async with aiohttp.ClientSession() as session:
+                url = f"http://{address}:{port}/v0.1/manifest"
+                async with await session.get(url) as response:
+                    if response.status == 200:
+                        response_json = await response.json()
+                        manifest = response_json.get("manifest", {})
+                        # Convert manifests back into the enums
+                        manifest = {
+                            ExecutorClass(executor_class): count
+                            for executor_class, count in manifest.items()
+                        }
+                        return hotkey, manifest
+                    else:
+                        msg = f"HTTP {response.status} fetching manifest for {hotkey}"
+                        await save_compute_time_allowance_event(
+                            SystemEvent.EventSubType.MANIFEST_ERROR, msg, data={"hotkey": hotkey}
+                        )
+                        logger.warning(msg)
+                        return hotkey, None
 
     except TimeoutError:
         msg = f"Timeout fetching manifest for {hotkey}"
         await save_compute_time_allowance_event(
             SystemEvent.EventSubType.MANIFEST_TIMEOUT,
             msg,
-            data,
+            {"hotkey": hotkey},
         )
         logger.warning(msg)
         return hotkey, None
@@ -59,7 +62,7 @@ async def get_single_manifest(
         await save_compute_time_allowance_event(
             SystemEvent.EventSubType.MANIFEST_ERROR,
             msg,
-            data,
+            {"hotkey": hotkey},
         )
         logger.warning(msg)
         return hotkey, None

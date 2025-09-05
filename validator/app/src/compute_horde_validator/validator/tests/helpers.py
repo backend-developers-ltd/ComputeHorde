@@ -1,17 +1,21 @@
+import asyncio
 import glob
 import logging
 import numbers
 import os
 import shlex
 import subprocess
+from contextlib import contextmanager
 from datetime import timedelta
 from pathlib import Path
 from time import monotonic
+from typing import TypedDict
 from unittest import mock
 
 import bittensor
 import constance
 import numpy as np
+from aioresponses import CallbackResult, aioresponses
 from bittensor.core.errors import SubstrateRequestException
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.fv_protocol.facilitator_requests import V0JobCheated, V2JobRequest
@@ -25,6 +29,7 @@ from compute_horde.protocol_messages import (
     ValidatorToMinerMessage,
 )
 from compute_horde.utils import ValidatorInfo
+from compute_horde_core.executor_class import ExecutorClass
 from compute_horde_core.signature import Signature
 from django.conf import settings
 from pydantic import TypeAdapter
@@ -55,6 +60,43 @@ def get_miner_client(MINER_CLIENT, job_uuid: str) -> MinerClient:
         job_uuid=job_uuid,
         my_keypair=get_keypair(),
     )
+
+
+class MinerConfig(TypedDict):
+    """Configuration for creating a test miner with transport."""
+
+    hotkey: str
+    address: str
+    port: int
+    manifest: dict[ExecutorClass, int]
+    wait_before: int
+
+
+@contextmanager
+def mock_manifest_endpoints(miner_configs: list[MinerConfig]):
+    """
+    Mock the manifest endpoints for the given miners.
+    """
+    with aioresponses() as mock:
+        for config in miner_configs:
+            url = f"http://{config['address']}:{config['port']}/v0.1/manifest"
+
+            async def _handler(url, *, cfg=config, **kwargs):
+                wait_time = cfg.get("wait_before", 0)
+                if wait_time:
+                    await asyncio.sleep(wait_time)
+
+                manifest = cfg.get("manifest", None)
+                if manifest:
+                    return CallbackResult(status=200, payload={"manifest": manifest})
+                else:
+                    return CallbackResult(
+                        status=404, payload={"error": "Could not get manifest from miner"}
+                    )
+
+            mock.get(url, callback=_handler)
+
+        yield mock
 
 
 class MockAxonInfo:

@@ -84,11 +84,6 @@ async def test_receipt_is_saved(
         )
         auth_payload.signature = sign_blob(validator_wallet.hotkey, auth_payload.blob_for_signing())
         await fake_validator_channel.send_to(auth_payload.model_dump_json())
-        response = await fake_validator_channel.receive_json_from()
-        assert response == {
-            "message_type": "V0ExecutorManifestRequest",
-            "manifest": {},
-        }
 
         # Send the receipts
         job_started_receipt_payload = JobStartedReceiptPayload(

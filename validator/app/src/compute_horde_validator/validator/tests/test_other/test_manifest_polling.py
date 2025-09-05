@@ -1,12 +1,7 @@
 import logging
-from contextlib import asynccontextmanager
 from datetime import timedelta
-from typing import TypedDict
-from unittest.mock import patch
 
 import pytest
-from compute_horde.miner_client.organic import OrganicMinerClient
-from compute_horde.protocol_messages import V0ExecutorManifestRequest
 from compute_horde_core.executor_class import ExecutorClass
 from django.utils import timezone
 
@@ -21,76 +16,10 @@ from compute_horde_validator.validator.tasks import (
     get_manifests_from_miners,
 )
 from compute_horde_validator.validator.tests.helpers import patch_constance
-from compute_horde_validator.validator.tests.transport import SimulationTransport
+
+from ..helpers import mock_manifest_endpoints
 
 logger = logging.getLogger(__name__)
-
-
-class MinerConfig(TypedDict):
-    """Configuration for creating a test miner with transport."""
-
-    hotkey: str
-    address: str
-    port: int
-    manifest: dict[ExecutorClass, int]
-    job_uuid: str
-
-
-async def create_test_miners_with_transport(
-    miner_configs: list[MinerConfig],
-) -> tuple[list[Miner], dict[str, SimulationTransport]]:
-    """
-    Create test miners with transport setup.
-    """
-    miners = []
-    transport_map = {}
-
-    for config in miner_configs:
-        miner = await Miner.objects.acreate(
-            hotkey=config["hotkey"], address=config["address"], port=config["port"]
-        )
-        miners.append(miner)
-
-        transport = SimulationTransport(f"sim_{config['hotkey']}")
-
-        manifest_request = V0ExecutorManifestRequest(
-            job_uuid=config["job_uuid"], manifest=config["manifest"]
-        )
-
-        await transport.add_message(manifest_request, send_before=1)
-
-        transport_map[config["hotkey"]] = transport
-
-    return miners, transport_map
-
-
-def create_mock_init_function(transport_map: dict[str, SimulationTransport]):
-    """Create a mock init function for OrganicMinerClient."""
-    original_init = OrganicMinerClient.__init__
-
-    def mock_init(
-        self, miner_hotkey, miner_address, miner_port, job_uuid, my_keypair, transport=None
-    ):
-        simulation_transport = transport_map.get(miner_hotkey)
-        original_init(
-            self,
-            miner_hotkey,
-            miner_address,
-            miner_port,
-            job_uuid,
-            my_keypair,
-            transport=simulation_transport,
-        )
-
-    return mock_init
-
-
-@asynccontextmanager
-async def mock_organic_miner_client(transport_map: dict[str, SimulationTransport]):
-    """Context manager for mocking OrganicMinerClient with transport map."""
-    mock_init = create_mock_init_function(transport_map)
-    with patch.object(OrganicMinerClient, "__init__", mock_init):
-        yield
 
 
 def assert_manifest_contains(manifest: dict, expected_items: dict[ExecutorClass, int]):
@@ -99,16 +28,6 @@ def assert_manifest_contains(manifest: dict, expected_items: dict[ExecutorClass,
         assert manifest[executor_class] == expected_count, (
             f"Expected {executor_class} to have count {expected_count}, got {manifest.get(executor_class)}"
         )
-
-
-async def setup_single_miner_transport(
-    miner: Miner, manifest: dict[ExecutorClass, int], job_uuid: str
-) -> dict[str, SimulationTransport]:
-    """Set up transport for a single miner with a specific manifest."""
-    transport = SimulationTransport(f"sim_{miner.hotkey}")
-    manifest_request = V0ExecutorManifestRequest(job_uuid=job_uuid, manifest=manifest)
-    await transport.add_message(manifest_request, send_before=1)
-    return {miner.hotkey: transport}
 
 
 @pytest.fixture(autouse=True)
@@ -121,7 +40,7 @@ def common_test_setup():
 @pytest.mark.asyncio
 async def test_get_manifests_from_miners():
     """
-    Test get_manifests_from_miners by mocking the transport.
+    Test get_manifests_from_miners by mocking the HTTP endpoint.
     """
     miner_configs = [
         {
@@ -155,9 +74,17 @@ async def test_get_manifests_from_miners():
         },
     ]
 
-    miners, transport_map = await create_test_miners_with_transport(miner_configs)
+    # Add miners to the database
+    miners = []
+    for config in miner_configs:
+        miner = await Miner.objects.acreate(
+            hotkey=config["hotkey"],
+            address=config["address"],
+            port=config["port"],
+        )
+        miners.append(miner)
 
-    async with mock_organic_miner_client(transport_map):
+    with mock_manifest_endpoints(miner_configs):
         manifests_dict = await get_manifests_from_miners(miners, timeout=5)
 
     assert len(manifests_dict) == 3
@@ -199,19 +126,32 @@ async def test_poll_miner_manifests_with_partial_failures():
         serving_hotkeys=["test_miner_1", "test_miner_2", "test_miner_3"],
     )
 
-    transport_map = {}
-
-    transport1 = SimulationTransport("sim_test_miner_1")
-    manifest1 = V0ExecutorManifestRequest(
-        job_uuid="job_1",
-        manifest={
-            ExecutorClass.always_on__gpu_24gb: 2,
+    # Add mock manifest for miner1 and empty configs for miner2 and miner3
+    miner_configs = [
+        {
+            "hotkey": "test_miner_1",
+            "address": "192.168.1.1",
+            "port": 8080,
+            "manifest": {ExecutorClass.always_on__gpu_24gb: 2},
+            "job_uuid": "123",
         },
-    )
-    await transport1.add_message(manifest1, send_before=1)
-    transport_map["test_miner_1"] = transport1
+        {
+            "hotkey": "test_miner_2",
+            "address": "192.168.1.2",
+            "port": 8080,
+            "manifest": None,
+            "job_uuid": "456",
+        },
+        {
+            "hotkey": "test_miner_3",
+            "address": "192.168.1.3",
+            "port": 8080,
+            "manifest": None,
+            "job_uuid": "789",
+        },
+    ]
 
-    async with mock_organic_miner_client(transport_map):
+    with mock_manifest_endpoints(miner_configs):
         await _poll_miner_manifests()
 
     manifests_dict = await _get_latest_manifests([miner1, miner2, miner3])
@@ -257,15 +197,25 @@ async def test_poll_miner_manifests_multiple_calls():
         ExecutorClass.always_on__llm__a6000: 2,
     }
 
-    transport_map = await setup_single_miner_transport(miner, manifest_v1, "123")
-    async with mock_organic_miner_client(transport_map):
+    # Poll with first manifest
+    miner_config = [
+        {
+            "hotkey": "test_miner_1",
+            "address": "192.168.1.1",
+            "port": 8080,
+            "manifest": manifest_v1,
+        },
+    ]
+    with mock_manifest_endpoints(miner_config):
         await _poll_miner_manifests()
 
     manifests_dict = await _get_latest_manifests([miner])
     assert_manifest_contains(manifests_dict["test_miner_1"], {ExecutorClass.always_on__gpu_24gb: 1})
 
-    transport_map = await setup_single_miner_transport(miner, manifest_v2, "456")
-    async with mock_organic_miner_client(transport_map):
+    # Poll with second manifest
+    miner_config[0]["manifest"] = manifest_v2
+    miner_config[0]["job_uuid"] = "456"
+    with mock_manifest_endpoints(miner_config):
         await _poll_miner_manifests()
 
     manifests_dict = await _get_latest_manifests([miner])
@@ -274,8 +224,10 @@ async def test_poll_miner_manifests_multiple_calls():
         {ExecutorClass.always_on__gpu_24gb: 2, ExecutorClass.spin_up_4min__gpu_24gb: 3},
     )
 
-    transport_map = await setup_single_miner_transport(miner, manifest_v3, "789")
-    async with mock_organic_miner_client(transport_map):
+    # Poll with third manifest
+    miner_config[0]["manifest"] = manifest_v3
+    miner_config[0]["job_uuid"] = "789"
+    with mock_manifest_endpoints(miner_config):
         await _poll_miner_manifests()
 
     manifests_dict = await _get_latest_manifests([miner])
@@ -293,7 +245,7 @@ async def test_poll_miner_manifests_multiple_calls():
 @pytest.mark.asyncio
 async def test_poll_miner_manifests_with_partial_transport_failures():
     """
-    Test _poll_miner_manifests when some miners don't respond via transport.
+    Test _poll_miner_manifests when some miners don't.
     """
     miner1 = await Miner.objects.acreate(hotkey="test_miner_1", address="192.168.1.1", port=8080)
     miner2 = await Miner.objects.acreate(hotkey="test_miner_2", address="192.168.1.2", port=8080)
@@ -324,19 +276,25 @@ async def test_poll_miner_manifests_with_partial_transport_failures():
         serving_hotkeys=["test_miner_1", "test_miner_2"],
     )
 
-    transport_map = {}
-
-    transport1 = SimulationTransport("sim_test_miner_1")
-    manifest1 = V0ExecutorManifestRequest(
-        job_uuid="job_1",
-        manifest={
-            ExecutorClass.always_on__gpu_24gb: 2,
+    # Add miner manifest via HTTP view
+    # The missing entry for test_miner_2 will result in a non-200 response and
+    # be interpreted by _poll_miner_manifests as a "transport failure", e.g.
+    # an unresponsive/offline miner.
+    miner_config = [
+        {
+            "hotkey": "test_miner_1",
+            "address": "192.168.1.1",
+            "port": 8080,
+            "manifest": {ExecutorClass.always_on__gpu_24gb: 2},
         },
-    )
-    await transport1.add_message(manifest1, send_before=1)
-    transport_map["test_miner_1"] = transport1
-
-    async with mock_organic_miner_client(transport_map):
+        {
+            "hotkey": "test_miner_2",
+            "address": "192.168.1.2",
+            "port": 8080,
+            "manifest": None,
+        },
+    ]
+    with mock_manifest_endpoints(miner_config):
         await _poll_miner_manifests()
 
     manifests_dict = await _get_latest_manifests([miner1, miner2])
@@ -397,10 +355,18 @@ async def test_poll_miner_manifests_no_duplicate_offline_records():
         serving_hotkeys=["test_miner_1"],
     )
 
-    transport_map = {}
     initial_count = await MinerManifest.objects.filter(miner=miner).acount()
 
-    async with mock_organic_miner_client(transport_map):
+    # Miner config for miner with no manifest, resulting in a 404 response
+    miner_config = [
+        {
+            "hotkey": "test_miner_1",
+            "address": "192.168.1.1",
+            "port": 8080,
+            "manifest": None,
+        },
+    ]
+    with mock_manifest_endpoints(miner_config):
         await _poll_miner_manifests()
 
     final_count = await MinerManifest.objects.filter(miner=miner).acount()
