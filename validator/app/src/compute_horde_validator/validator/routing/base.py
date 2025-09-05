@@ -3,7 +3,9 @@
 from abc import ABC, abstractmethod
 
 from compute_horde.fv_protocol.facilitator_requests import OrganicJobRequest
+from compute_horde_core.executor_class import ExecutorClass
 
+from compute_horde_validator.validator.models import MinerIncident
 from compute_horde_validator.validator.routing.types import JobRoute
 
 
@@ -23,4 +25,16 @@ class RoutingBase(ABC):
         - Highest collateral as a tiebreaker
         - Available executors (less ongoing jobs than online executor count)
         - Sufficient remaining time in the current cycle
+        """
+
+    @abstractmethod
+    async def report_miner_incident(
+        self,
+        type: MinerIncident.IncidentType,
+        hotkey_ss58address: str,
+        job_uuid: str,
+        executor_class: ExecutorClass,
+    ) -> None:
+        """
+        Records a miner incident such as job rejection or failure.
         """

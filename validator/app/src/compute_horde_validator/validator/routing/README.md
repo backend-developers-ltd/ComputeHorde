@@ -19,7 +19,9 @@ When a new job request arrives, the following sequence of operations should be p
 1.  Call `routing().pick_miner_for_job_request(job_request)` to get a `JobRoute`.
 2.  This function will internally:
     1.  Query the `allowance` module to get a list of miners with enough allowance for the job's required executor-seconds.
-    2.  Iterate through the suitable miners and attempt to reserve the allowance for one of them.
+    2.  Sort the suitable miners and iterate through them, attempting to reserve the allowance for one of them.
+        -  Sorting logic: miners are ranked primarily by a per-executor reliability score (derived from recent recorded incidents for the miner and normalized by the executor count for the requested class). Higher scores are preferred. Available allowance (the number of executor-seconds the miner can still provide) is used as a secondary tiebreaker.
+        -  Availability check: before trying to reserve allowance the router checks current ongoing jobs (via the `receipts` subsystem) and skips miners whose ongoing jobs are equal to or exceed their known executor count for the requested class.
     3.  The first successful reservation will result in a `JobRoute` being returned.
 3.  If a `JobRoute` is successfully obtained, it can be used to execute the job on the specified miner. The `allowance_reservation_id` from the route must be stored and used later to either spend or release the reservation based on the job's outcome. `allowance_blocks` from the route needs to be used for the block ids in the generated receipts.
 4.  If `pick_miner_for_job_request` raises an exception (`NotEnoughAllowanceException` or `AllMinersBusy`), the job cannot be processed at this time and should be rejected.
@@ -53,6 +55,15 @@ The module exposes a singleton `routing()` which provides the following method:
     -   **Raises**:
         -   `NotEnoughAllowanceException`: If no miners have enough allowance for the job.
         -   `AllMinersBusy`: If all suitable miners with enough allowance could not be reserved (e.g., due to concurrent reservation attempts).
+
+    -  `async def report_miner_incident(self, type: MinerIncident.IncidentType, hotkey_ss58address: str, job_uuid: str, executor_class: ExecutorClass) -> None`:
+       - Records an incident for a miner (for example: job rejection, failure, or other executor-level problems).
+       - Parameters:
+           - `type`: the incident type (see `MinerIncident.IncidentType`).
+           - `hotkey_ss58address`: the miner's hotkey address used to identify the miner.
+           - `job_uuid`: the job identifier related to the incident.
+           - `executor_class`: the executor class under which the incident occurred.
+       - Effect: incidents are persisted (via the `MinerIncident` model) and are used when computing miners' reliability scores that influence future routing decisions.
 
 Access the routing functionality using the singleton: `routing.routing()`.
 
