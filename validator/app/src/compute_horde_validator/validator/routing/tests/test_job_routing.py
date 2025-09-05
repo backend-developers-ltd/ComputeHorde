@@ -225,9 +225,7 @@ async def test_pick_miner_for_job__miner_becomes_eligible_after_one_finished_rec
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_pick_miner_for_job__expired_started_receipts_do_not_block(
-    add_allowance, monkeypatch
-):
+async def test_pick_miner_for_job__miner_fully_free_picked(add_allowance, monkeypatch):
     # Pick a suitable miner and mock busy executors to 0 to simulate that
     # expired started receipts do not count towards ongoing jobs.
     executor_seconds = (
@@ -271,9 +269,7 @@ async def test_pick_miner_for_job__expired_started_receipts_do_not_block(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_pick_miner_for_job__finished_receipts_with_different_miner_do_not_free(
-    add_allowance, monkeypatch
-):
+async def test_pick_miner_for_job__miner_fully_busy_not_picked(add_allowance, monkeypatch):
     # Saturate a miner with started receipts and add finished receipts under another miner key.
     executor_seconds = (
         JOB_REQUEST.download_time_limit
@@ -319,7 +315,7 @@ async def test_pick_miner_for_job__finished_receipts_with_different_miner_do_not
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_pick_miner_for_job__all_suitable_miners_busy_raises(add_allowance, monkeypatch):
+async def test_pick_miner_for_job__all_miners_fully_busy_raises(add_allowance, monkeypatch):
     # Limit suitable miners to two with capacity, then saturate both
     executor_seconds = (
         JOB_REQUEST.download_time_limit
