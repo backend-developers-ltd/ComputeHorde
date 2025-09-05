@@ -45,6 +45,7 @@ To do this, follow these steps:
      key_path: "/root/vendor/id_ed25519_miner"
    ```
    The root keys are names of the executor machines, which can be anything you want.
+   You can set the value of `executor_class` to a special value `DEFAULT_EXECUTOR_CLASS` to use the default executor manager set in your `.env`.
    Along with other remote servers, you can also configure one executor to run locally on the miner machine:
    ```yaml
    executor-local:

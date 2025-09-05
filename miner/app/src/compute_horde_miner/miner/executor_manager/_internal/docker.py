@@ -20,10 +20,7 @@ from compute_horde_core.executor_class import ExecutorClass
 from django.conf import settings
 from pydantic import Field, field_validator
 
-from compute_horde_miner.miner.executor_manager._internal.base import (
-    BaseExecutorManager,
-    ExecutorUnavailable,
-)
+from compute_horde_miner.miner.executor_manager._internal.base import BaseExecutorManager
 from compute_horde_miner.miner.executor_manager.executor_port_dispenser import (
     executor_port_dispenser,
 )
@@ -37,8 +34,9 @@ DOCKER_KILL_TIMEOUT = 5
 logger = logging.getLogger(__name__)
 
 
-class DockerExecutorConfigError(Exception):
-    pass
+class DockerExecutorConfigError(Exception): ...
+class AllDockerExecutorsBusy(Exception): ...
+class DockerExecutorFailedToStart(Exception): ...
 
 
 class ServerConfigBase(pydantic.BaseModel):
@@ -139,7 +137,7 @@ class ServerManager:
                     self._reserved_servers.add(server_name)
                     return server_name, server_config
 
-        raise ExecutorUnavailable()
+        raise AllDockerExecutorsBusy("No free servers available!")
 
     def release_server(self, server_name: ServerName, server_config: ServerConfig) -> None:
         if server_name in self._reserved_servers:
@@ -205,10 +203,10 @@ class DockerExecutorManager(BaseExecutorManager):
                         logger.error(
                             "Pulling executor container timed out, pulling it from shell might provide more details"
                         )
-                        raise ExecutorUnavailable("Failed to pull executor image") from e
+                        raise DockerExecutorFailedToStart("Failed to pull executor image") from e
                     except aiodocker.exceptions.DockerError as e:
                         logger.error("Failed to pull executor image: %r", e)
-                        raise ExecutorUnavailable("Failed to pull executor image") from e
+                        raise DockerExecutorFailedToStart("Failed to pull executor image") from e
 
                 container = await docker.containers.run(
                     config={
