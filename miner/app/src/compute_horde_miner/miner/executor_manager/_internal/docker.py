@@ -35,7 +35,11 @@ logger = logging.getLogger(__name__)
 
 
 class DockerExecutorConfigError(Exception): ...
+
+
 class AllDockerExecutorsBusy(Exception): ...
+
+
 class DockerExecutorFailedToStart(Exception): ...
 
 
@@ -208,18 +212,22 @@ class DockerExecutorManager(BaseExecutorManager):
                         logger.error("Failed to pull executor image: %r", e)
                         raise DockerExecutorFailedToStart("Failed to pull executor image") from e
 
-                container = await docker.containers.run(
-                    config={
-                        "Image": executor_image,
-                        "Cmd": ["python", "manage.py", "run_executor", *cmdline_args],
-                        "Env": env,
-                        "HostConfig": {
-                            "AutoRemove": settings.DEBUG_AUTO_REMOVE_EXECUTOR_CONTAINERS,
-                            "Binds": binds,
+                try:
+                    container = await docker.containers.run(
+                        config={
+                            "Image": executor_image,
+                            "Cmd": ["python", "manage.py", "run_executor", *cmdline_args],
+                            "Env": env,
+                            "HostConfig": {
+                                "AutoRemove": settings.DEBUG_AUTO_REMOVE_EXECUTOR_CONTAINERS,
+                                "Binds": binds,
+                            },
                         },
-                    },
-                    name=token,
-                )
+                        name=token,
+                    )
+                except aiodocker.exceptions.DockerError as e:
+                    logger.error("Docker container failed to start: %r", e)
+                    raise DockerExecutorFailedToStart("Docker container failed to start") from e
                 return DockerExecutor(token, container.id, server_name, server_config)
         except (Exception, asyncio.CancelledError):
             self._server_manager.release_server(server_name, server_config)
