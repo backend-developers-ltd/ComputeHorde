@@ -46,11 +46,13 @@ from compute_horde_validator.validator.models import (
     AdminJobRequest,
     MetagraphSnapshot,
     Miner,
+    MinerIncident,
     OrganicJob,
     SystemEvent,
 )
 from compute_horde_validator.validator.organic_jobs.miner_client import MinerClient
 from compute_horde_validator.validator.receipts.default import receipts
+from compute_horde_validator.validator.routing.default import routing
 from compute_horde_validator.validator.routing.types import JobRoute
 from compute_horde_validator.validator.utils import TRUSTED_MINER_FAKE_KEY
 
@@ -395,6 +397,12 @@ async def drive_organic_job(
         job.comment = comment
         job.status = status
         await job.asave()
+        await routing().report_miner_incident(
+            MinerIncident.IncidentType.MINER_JOB_REJECTED,
+            hotkey_ss58address=job.miner.hotkey,
+            job_uuid=str(job.job_uuid),
+            executor_class=ExecutorClass(job.executor_class),
+        )
         await save_event(subtype=system_event_subtype, long_description=comment)
         status_update = status_update_from_miner_rejection(job, rejection, comment)
         await notify_callback(status_update)
@@ -403,6 +411,12 @@ async def drive_organic_job(
         job.status = OrganicJob.Status.FAILED
         job.comment = failure.msg.message
         await job.asave()
+        await routing().report_miner_incident(
+            MinerIncident.IncidentType.MINER_JOB_FAILED,
+            hotkey_ss58address=job.miner.hotkey,
+            job_uuid=str(job.job_uuid),
+            executor_class=ExecutorClass(job.executor_class),
+        )
         await save_event(
             subtype=_job_event_subtype_map.get(
                 failure.msg.reason, SystemEvent.EventSubType.GENERIC_JOB_FAILURE
@@ -416,6 +430,12 @@ async def drive_organic_job(
         job.status = OrganicJob.Status.FAILED
         job.comment = failure.msg.message
         await job.asave()
+        await routing().report_miner_incident(
+            MinerIncident.IncidentType.MINER_HORDE_FAILED,
+            hotkey_ss58address=job.miner.hotkey,
+            job_uuid=str(job.job_uuid),
+            executor_class=ExecutorClass(job.executor_class),
+        )
         await save_event(
             subtype=_horde_event_subtype_map.get(
                 failure.msg.reason, SystemEvent.EventSubType.GENERIC_ERROR
