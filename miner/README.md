@@ -30,6 +30,7 @@ To do this, follow these steps:
    ```yaml
    executor-1:
      executor_class: always_on.llm.a6000
+     mode: ssh
      host: "1.2.3.4"
      ssh_port: 22
      username: "ubuntu"
@@ -37,12 +38,19 @@ To do this, follow these steps:
    
    executor-2:
      executor_class: always_on.llm.a6000
+     mode: ssh
      host: "1.1.1.1"
      ssh_port: 22
      username: "ubuntu"
      key_path: "/root/vendor/id_ed25519_miner"
    ```
    The root keys are names of the executor machines, which can be anything you want.
+   Along with other remote servers, you can also configure one executor to run locally on the miner machine:
+   ```yaml
+   executor-local:
+     executor_class: always_on.llm.a6000
+     mode: local
+   ```
 4. Update your `.env` file with the following variables:
    ```
    HOST_VENDOR_DIR=/home/ubuntu/vendor

@@ -7,7 +7,7 @@ from collections import deque
 from collections.abc import AsyncGenerator
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import TypeAlias
+from typing import Annotated, Any, Literal, TypeAlias
 
 import aiodocker
 import asyncssh
@@ -15,6 +15,7 @@ import pydantic
 import yaml
 from compute_horde_core.executor_class import ExecutorClass
 from django.conf import settings
+from pydantic import Field, field_validator
 
 from compute_horde_miner.miner.executor_manager._internal.base import (
     BaseExecutorManager,
@@ -36,26 +37,35 @@ class DockerExecutorConfigError(Exception):
     pass
 
 
-class ServerConfig(pydantic.BaseModel):
-    executor_class: str
+class ServerConfigBase(pydantic.BaseModel):
+    executor_class: ExecutorClass
+
+    @field_validator("executor_class", mode="before")
+    @classmethod
+    def validate_default_executor_class(cls, value: Any) -> Any:
+        if value == "DEFAULT_EXECUTOR_CLASS":
+            return settings.DEFAULT_EXECUTOR_CLASS
+        return value
+
+
+class LocalServerConfig(ServerConfigBase):
+    mode: Literal["local"] = "local"
+
+
+class SSHServerConfig(ServerConfigBase):
+    mode: Literal["ssh"] = "ssh"
     host: str
-    ssh_port: int
+    ssh_port: int = 22
     username: str
     key_path: str
 
 
+ServerConfig: TypeAlias = Annotated[
+    LocalServerConfig | SSHServerConfig,
+    Field(discriminator="mode"),
+]
 ServerName: TypeAlias = str
-
-
-class NamedServerConfig(ServerConfig):
-    name: ServerName
-    executor_class: ExecutorClass
-
-    def is_local(self) -> bool:
-        return self.host in ("localhost", "127.0.0.1", "::1")
-
-
-ServerConfigsPerClass: TypeAlias = dict[ExecutorClass, list[NamedServerConfig]]
+ServerConfigsPerClass: TypeAlias = dict[ExecutorClass, dict[ServerName, ServerConfig]]
 
 
 class ServerManager:
@@ -94,63 +104,51 @@ class ServerManager:
         except pydantic.ValidationError as e:
             raise DockerExecutorConfigError("invalid config") from e
 
-        configs_per_class: dict[ExecutorClass, list[NamedServerConfig]] = {}
-        for name, server_config in config.items():
-            executor_class: str | ExecutorClass = server_config.executor_class
-            if executor_class == "DEFAULT_EXECUTOR_CLASS":
-                executor_class = settings.DEFAULT_EXECUTOR_CLASS
+        if sum(1 for server_config in config.values() if server_config.mode == "local") > 1:
+            raise DockerExecutorConfigError("multiple local servers are not supported")
 
-            try:
-                executor_class = ExecutorClass(executor_class)
-            except ValueError as e:
-                raise DockerExecutorConfigError("executor_class value is invalid") from e
-
-            named_config = NamedServerConfig(
-                name=name,
-                executor_class=executor_class,
-                host=server_config.host,
-                ssh_port=server_config.ssh_port,
-                username=server_config.username,
-                key_path=server_config.key_path,
-            )
-            configs_per_class.setdefault(executor_class, []).append(named_config)
+        configs_per_class: ServerConfigsPerClass = {}
+        for server_name, server_config in config.items():
+            config_for_one_class = configs_per_class.setdefault(server_config.executor_class, {})
+            config_for_one_class[server_name] = server_config
 
         self._cached_config = configs_per_class
         self._cached_config_at = datetime.now()
 
         return configs_per_class
 
-    def reserve_server(self, executor_class: ExecutorClass) -> NamedServerConfig:
+    def reserve_server(self, executor_class: ExecutorClass) -> tuple[ServerName, ServerConfig]:
         fresh_config = self.fetch_config()
         queue = self._server_queue[executor_class]
 
         # add the new servers to the end of the queues
-        for server_config in fresh_config.get(executor_class, ()):
-            if not (server_config.name in queue or server_config.name in self._reserved_servers):
-                queue.append(server_config.name)
+        for server_name in fresh_config.get(executor_class, {}):
+            if not (server_name in queue or server_name in self._reserved_servers):
+                queue.append(server_name)
 
         while queue:
-            server_name = queue.popleft()
+            picked_server_name = queue.popleft()
 
             # check if the server is still in the config
-            for server_config in fresh_config.get(executor_class, ()):
-                if server_name == server_config.name:
+            for server_name, server_config in fresh_config.get(executor_class, {}).items():
+                if server_name == picked_server_name:
                     self._reserved_servers.add(server_name)
-                    return server_config
+                    return server_name, server_config
 
         raise ExecutorUnavailable()
 
-    def release_server(self, config: NamedServerConfig) -> None:
-        if config.name in self._reserved_servers:
-            self._reserved_servers.remove(config.name)
-            self._server_queue[config.executor_class].append(config.name)
+    def release_server(self, server_name: ServerName, server_config: ServerConfig) -> None:
+        if server_name in self._reserved_servers:
+            self._reserved_servers.remove(server_name)
+            self._server_queue[server_config.executor_class].append(server_name)
 
 
 @dataclasses.dataclass
 class DockerExecutor:
     token: str
     container_id: str
-    config: NamedServerConfig
+    server_name: ServerName
+    server_config: ServerConfig
 
 
 class DockerExecutorManager(BaseExecutorManager):
@@ -164,7 +162,7 @@ class DockerExecutorManager(BaseExecutorManager):
     async def start_new_executor(
         self, token: str, executor_class: ExecutorClass, timeout: float
     ) -> DockerExecutor:
-        server_config = self._server_manager.reserve_server(executor_class)
+        server_name, server_config = self._server_manager.reserve_server(executor_class)
 
         executor_image = settings.EXECUTOR_IMAGE
         if ":" not in executor_image:
@@ -177,7 +175,7 @@ class DockerExecutorManager(BaseExecutorManager):
         ]
         if settings.HF_ACCESS_TOKEN is not None:
             env.append(f"HF_ACCESS_TOKEN={settings.HF_ACCESS_TOKEN}")
-        if server_config.is_local():
+        if server_config.mode == "local":
             nginx_port = executor_port_dispenser.get_port()
             env.append(f"NGINX_PORT={nginx_port}")
 
@@ -220,9 +218,9 @@ class DockerExecutorManager(BaseExecutorManager):
                     },
                     name=token,
                 )
-                return DockerExecutor(token, container.id, server_config)
+                return DockerExecutor(token, container.id, server_name, server_config)
         except Exception:
-            self._server_manager.release_server(server_config)
+            self._server_manager.release_server(server_name, server_config)
             raise
 
     async def get_executor_cmdline_args(self) -> list[str]:
@@ -239,7 +237,7 @@ class DockerExecutorManager(BaseExecutorManager):
         # kill executor container first so it would not be able to report anything - job simply timeouts
         logger.info("Stopping executor %s", executor.token)
 
-        async with tunneled_docker_client(executor.config) as docker:
+        async with tunneled_docker_client(executor.server_config) as docker:
             try:
                 container = await docker.containers.get(executor.container_id)
                 await asyncio.wait_for(container.stop(), timeout=DOCKER_STOP_TIMEOUT)
@@ -259,14 +257,14 @@ class DockerExecutorManager(BaseExecutorManager):
                 if e.status != 404:
                     raise
 
-        self._server_manager.release_server(executor.config)
+        self._server_manager.release_server(executor.server_name, executor.server_config)
 
     async def wait_for_executor(self, executor: DockerExecutor, timeout: float) -> int | None:
-        async with tunneled_docker_client(executor.config) as docker:
+        async with tunneled_docker_client(executor.server_config) as docker:
             try:
                 container = await docker.containers.get(executor.container_id)
                 wait_result = await asyncio.wait_for(container.wait(), timeout=timeout)
-                self._server_manager.release_server(executor.config)
+                self._server_manager.release_server(executor.server_name, executor.server_config)
                 exit_code: int | None = wait_result.get("StatusCode")
                 if exit_code is None:
                     # The container somehow exited without an exit code! This should never happen.
@@ -277,7 +275,9 @@ class DockerExecutorManager(BaseExecutorManager):
                 return None
             except aiodocker.exceptions.DockerError as e:
                 if e.status == 404:
-                    self._server_manager.release_server(executor.config)
+                    self._server_manager.release_server(
+                        executor.server_name, executor.server_config
+                    )
                     # the container exited before, so we don't know the exit code
                     return 0
                 else:
@@ -291,12 +291,12 @@ class DockerExecutorManager(BaseExecutorManager):
         }
 
     async def get_executor_public_address(self, executor: DockerExecutor) -> str | None:
-        if not executor.config.is_local():
-            return executor.config.host
+        if executor.server_config.mode == "ssh":
+            return executor.server_config.host
 
         # TODO: I am not sure if it is a good idea to return the container IP.
         #       Keeping it for now for backward compatibility.
-        async with tunneled_docker_client(executor.config) as docker:
+        async with tunneled_docker_client(executor.server_config) as docker:
             try:
                 container = await docker.containers.get(executor.container_id)
                 container_data = await container.show()
@@ -321,10 +321,8 @@ class DockerExecutorManager(BaseExecutorManager):
 
 
 @contextlib.asynccontextmanager
-async def tunneled_docker_client(
-    server_config: NamedServerConfig,
-) -> AsyncGenerator[aiodocker.Docker]:
-    if server_config.is_local():
+async def tunneled_docker_client(server_config: ServerConfig) -> AsyncGenerator[aiodocker.Docker]:
+    if server_config.mode == "local":
         # Skip tunneling if we're running locally
         async with aiodocker.Docker() as docker:
             yield docker
