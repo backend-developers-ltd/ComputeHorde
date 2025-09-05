@@ -242,33 +242,17 @@ class DockerExecutorManager(BaseExecutorManager):
         logger.info("Stopping executor %s", executor.token)
 
         async with tunneled_docker_client(executor.server_config) as docker:
-            container = None
-            try:
-                container = await docker.containers.get(
-                    executor.container_id, timeout=DOCKER_STOP_TIMEOUT
-                )
-                await asyncio.wait_for(container.stop(), timeout=DOCKER_STOP_TIMEOUT)
-            except TimeoutError:
-                if container is not None:
-                    await asyncio.wait_for(container.kill(), timeout=DOCKER_KILL_TIMEOUT)
-            except aiodocker.exceptions.DockerError as e:
-                if e.status != 404:
-                    raise
-
-            container = None
             job_container_name = f"{executor.token}-job"
-            try:
-                docker.containers.container()
-                container = await docker.containers.get(
-                    job_container_name, timeout=DOCKER_STOP_TIMEOUT
-                )
-                await asyncio.wait_for(container.stop(), timeout=DOCKER_STOP_TIMEOUT)
-            except TimeoutError:
-                if container is not None:
-                    await asyncio.wait_for(container.kill(), timeout=DOCKER_KILL_TIMEOUT)
-            except aiodocker.exceptions.DockerError as e:
-                if e.status != 404:
-                    raise
+            results = await asyncio.gather(
+                _stop_or_kill_container(docker, executor.container_id),
+                _stop_or_kill_container(docker, job_container_name),
+                return_exceptions=True,
+            )
+
+        exceptions = [r for r in results if isinstance(r, BaseException)]
+        if exceptions:
+            # Do we want to propagate all the exceptions? BaseExceptionGroup?
+            raise exceptions[0]
 
         self._server_manager.release_server(executor.server_name, executor.server_config)
 
@@ -380,3 +364,16 @@ async def _internal_get_miner_public_address() -> str | None:
         else:
             assert last_exception is not None  # mypy, Y U so naggy?
             raise last_exception
+
+
+async def _stop_or_kill_container(docker: aiodocker.Docker, container_id: str) -> None:
+    container = None
+    try:
+        container = await docker.containers.get(container_id, timeout=DOCKER_STOP_TIMEOUT)
+        await asyncio.wait_for(container.stop(), timeout=DOCKER_STOP_TIMEOUT)
+    except TimeoutError:
+        if container is not None:
+            await asyncio.wait_for(container.kill(), timeout=DOCKER_KILL_TIMEOUT)
+    except aiodocker.exceptions.DockerError as e:
+        if e.status != 404:
+            raise
