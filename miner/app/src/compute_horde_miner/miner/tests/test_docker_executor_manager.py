@@ -5,6 +5,7 @@ from textwrap import dedent
 import asyncssh
 import pytest
 import pytest_asyncio
+from asyncssh import SSHAuthorizedKeys
 from compute_horde_core.executor_class import ExecutorClass
 
 from compute_horde_miner.miner.executor_manager._internal.docker import (
@@ -44,34 +45,37 @@ async def test_docker_executor_manager_default(settings, executor_class):
 
 class LocalProxySSHServer(asyncssh.SSHServer):
     def begin_auth(self, username):
-        # Returning False means "no authentication required"
-        return False
+        return True
 
     def unix_connection_requested(self, dest_path):
         return dest_path == "/var/run/docker.sock"
 
 
 @pytest_asyncio.fixture
-async def local_proxy_ssh_server():
+async def local_proxy_ssh_server(tmp_path: Path):
     """
     A local SSH server that accepts port forwards to /var/run/docker.sock.
     Returns the port number of the server.
     """
     host_key = asyncssh.generate_private_key("ssh-ed25519")
+    client_key = asyncssh.generate_private_key("ssh-ed25519")
 
     async with asyncssh.listen(
         host="127.0.0.1",
         port=0,
         server_factory=LocalProxySSHServer,
         server_host_keys=[host_key],
+        authorized_client_keys=SSHAuthorizedKeys(client_key.export_public_key().decode()),
     ) as server:
-        yield server.get_port()
+        yield server, client_key
 
 
 @pytest_asyncio.fixture
 async def config_path(tmp_path: Path, local_proxy_ssh_server):
+    server, key = local_proxy_ssh_server
+    port = server.get_port()
     key_path = tmp_path / "id_ed25519"
-    key_path.write_text(asyncssh.generate_private_key("ssh-ed25519").export_private_key().decode())
+    key.write_private_key(key_path)
 
     config_path = tmp_path / "config.yaml"
     config_path.write_text(
@@ -80,8 +84,8 @@ async def config_path(tmp_path: Path, local_proxy_ssh_server):
               executor_class: always_on.llm.a6000
               mode: ssh
               host: "127.0.0.1"
-              ssh_port: {local_proxy_ssh_server}
-              username: "nobody"
+              ssh_port: {port}
+              username: nobody
               key_path: {key_path.as_posix()}
             """)
     )
