@@ -2,7 +2,9 @@ import asyncio
 import asyncio.subprocess
 import contextlib
 import dataclasses
+import ipaddress
 import logging
+import socket
 from collections import deque
 from collections.abc import AsyncGenerator
 from datetime import datetime, timedelta
@@ -10,6 +12,7 @@ from pathlib import Path
 from typing import Annotated, Any, Literal, TypeAlias
 
 import aiodocker
+import aiohttp
 import asyncssh
 import pydantic
 import yaml
@@ -294,30 +297,12 @@ class DockerExecutorManager(BaseExecutorManager):
         if executor.server_config.mode == "ssh":
             return executor.server_config.host
 
-        # TODO: I am not sure if it is a good idea to return the container IP.
-        #       Keeping it for now for backward compatibility.
-        async with tunneled_docker_client(executor.server_config) as docker:
-            try:
-                container = await docker.containers.get(executor.container_id)
-                container_data = await container.show()
-            except aiodocker.exceptions.DockerError as e:
-                if e.status == 404:
-                    # the container has already exited, so we don't have any IP address
-                    # TODO: should we release the server here?
-                    return None
-                else:
-                    raise
-
-        networks = container_data.get("NetworkSettings", {}).get("Networks", {})
-        if "bridge" in networks:  # check for bridge network first
-            ip: str | None = networks["bridge"].get("IPAddress")
-            return ip
-        for network_data in networks.values():
-            ip = network_data.get("IPAddress")
-            if ip:
-                return ip
-
-        return None
+        # local executors get their public address from the miner
+        try:
+            return await _get_miner_public_address()
+        except Exception:
+            logger.exception("Failed to get miner public address")
+            return None
 
 
 @contextlib.asynccontextmanager
@@ -340,3 +325,47 @@ async def tunneled_docker_client(server_config: ServerConfig) -> AsyncGenerator[
             local_port = listener.get_port()
             async with aiodocker.Docker(url=f"tcp://localhost:{local_port}") as docker:
                 yield docker
+
+
+_MISSING = object()
+_cached_miner_address = _MISSING
+
+
+async def _get_miner_public_address() -> str | None:
+    """Get the miner's public address for a local executor."""
+    global _cached_miner_address
+    if _cached_miner_address is _MISSING:
+        _cached_miner_address = await _internal_get_miner_public_address()
+    return _cached_miner_address
+
+
+async def _internal_get_miner_public_address() -> str | None:
+    if not settings.BITTENSOR_MINER_ADDRESS_IS_AUTO:
+        ip = ipaddress.ip_address(settings.BITTENSOR_MINER_ADDRESS)
+        if ip.is_global:
+            return settings.BITTENSOR_MINER_ADDRESS
+        else:
+            # most probably using ddos-shield, so we can't get the public address
+            return None
+
+    # If the miner address is set to auto, we can assume it's public.
+    # Follows the implementation of the official bittensor SDK to get the public address,
+    # but using only 2 sources instead of all the sources supported by the official SDK.
+    candidate_sources = [
+        "https://checkip.amazonaws.com",  # AWS
+        "https://icanhazip.com/",  # Cloudflare
+    ]
+    connector = aiohttp.TCPConnector(family=socket.AF_INET)  # force IPv4 connection
+    async with aiohttp.ClientSession(connector=connector) as session:
+        for candidate_source in candidate_sources:
+            last_exception = None
+            try:
+                async with session.get(candidate_source) as response:
+                    raw_ip = await response.text()
+                    raw_ip = raw_ip.strip()
+                    ipaddress.IPv4Address(raw_ip)  # validate the IP address
+                    return raw_ip
+            except (aiohttp.ClientError, ValueError) as e:
+                last_exception = e
+        else:
+            raise last_exception

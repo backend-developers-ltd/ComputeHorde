@@ -51,6 +51,8 @@ To do this, follow these steps:
      executor_class: always_on.llm.a6000
      mode: local
    ```
+   > [!NOTE]  
+   > If you use ddos-shield, your local executor cannot serve streaming jobs.
 4. Update your `.env` file with the following variables:
    ```
    HOST_VENDOR_DIR=/home/ubuntu/vendor
