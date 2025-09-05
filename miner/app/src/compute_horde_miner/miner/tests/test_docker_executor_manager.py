@@ -1,7 +1,6 @@
 import uuid
 from pathlib import Path
 from textwrap import dedent
-from unittest.mock import patch
 
 import asyncssh
 import pytest
@@ -10,7 +9,6 @@ from compute_horde_core.executor_class import ExecutorClass
 
 from compute_horde_miner.miner.executor_manager._internal.docker import (
     DockerExecutorManager,
-    NamedServerConfig,
 )
 
 # NOTE: these tests use the local docker to run containers.
@@ -35,20 +33,13 @@ async def test_docker_executor_manager_default(settings, executor_class):
         token = f"unittest-docker-{uuid.uuid4()}"
         executor = await executor_manager.reserve_executor_class(token, executor_class, 10)
         assert executor.token == token
-        assert executor.config.name == "self"
-        assert executor.config.executor_class == executor_class
+        assert executor.server_name == "self"
+        assert executor.server_config.executor_class == executor_class
 
         await executor_manager.wait_for_executor_reservation(token, executor_class)
 
         exit_code = await executor_manager.wait_for_executor(executor, 10)
         assert exit_code is not None
-
-
-@pytest.fixture
-def localhost_is_not_local():
-    """Force the DockerExecutorManager to treat localhost as remote."""
-    with patch.object(NamedServerConfig, "is_local", return_value=False):
-        yield
 
 
 class LocalProxySSHServer(asyncssh.SSHServer):
@@ -87,6 +78,7 @@ async def config_path(tmp_path: Path, local_proxy_ssh_server):
         dedent(f"""
             remote-executor:
               executor_class: always_on.llm.a6000
+              mode: ssh
               host: "127.0.0.1"
               ssh_port: {local_proxy_ssh_server}
               username: "nobody"
@@ -98,7 +90,7 @@ async def config_path(tmp_path: Path, local_proxy_ssh_server):
 
 @pytest.mark.asyncio
 @pytest.mark.django_db
-async def test_docker_executor_manager_ssh_tunnel(settings, localhost_is_not_local, config_path):
+async def test_docker_executor_manager_ssh_tunnel(settings, config_path):
     settings.ADDRESS_FOR_EXECUTORS = "127.0.0.1"
     settings.DOCKER_EXECUTORS_CONFIG_PATH = config_path
     settings.DEBUG_AUTO_REMOVE_EXECUTOR_CONTAINERS = True
@@ -113,8 +105,8 @@ async def test_docker_executor_manager_ssh_tunnel(settings, localhost_is_not_loc
             token, ExecutorClass.always_on__llm__a6000, 10
         )
         assert executor.token == token
-        assert executor.config.name == "remote-executor"
-        assert executor.config.executor_class == ExecutorClass.always_on__llm__a6000
+        assert executor.server_name == "remote-executor"
+        assert executor.server_config.executor_class == ExecutorClass.always_on__llm__a6000
 
         await executor_manager.wait_for_executor_reservation(
             token, ExecutorClass.always_on__llm__a6000
