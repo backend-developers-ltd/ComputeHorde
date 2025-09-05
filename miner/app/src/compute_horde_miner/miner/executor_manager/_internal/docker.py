@@ -9,7 +9,7 @@ from collections import deque
 from collections.abc import AsyncGenerator
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Annotated, Any, Literal, TypeAlias
+from typing import Annotated, Any, Literal, TypeAlias, cast
 
 import aiodocker
 import aiohttp
@@ -336,14 +336,14 @@ async def _get_miner_public_address() -> str | None:
     global _cached_miner_address
     if _cached_miner_address is _MISSING:
         _cached_miner_address = await _internal_get_miner_public_address()
-    return _cached_miner_address
+    return _cached_miner_address  # type: ignore[return-value]
 
 
 async def _internal_get_miner_public_address() -> str | None:
     if not settings.BITTENSOR_MINER_ADDRESS_IS_AUTO:
         ip = ipaddress.ip_address(settings.BITTENSOR_MINER_ADDRESS)
         if ip.is_global:
-            return settings.BITTENSOR_MINER_ADDRESS
+            return cast(str, settings.BITTENSOR_MINER_ADDRESS)
         else:
             # most probably using ddos-shield, so we can't get the public address
             return None
@@ -368,4 +368,5 @@ async def _internal_get_miner_public_address() -> str | None:
             except (aiohttp.ClientError, ValueError) as e:
                 last_exception = e
         else:
+            assert last_exception is not None  # mypy, Y U so naggy?
             raise last_exception
