@@ -32,6 +32,7 @@ SSH_CONNECT_TIMEOUT = 15
 SSH_KEEPALIVE_INTERVAL = 30
 PULLING_TIMEOUT = 300  # TODO: align with corresponding validator timeout
 DOCKER_STOP_TIMEOUT = 5
+DOCKER_KILL_TIMEOUT = 5
 
 logger = logging.getLogger(__name__)
 
@@ -222,7 +223,7 @@ class DockerExecutorManager(BaseExecutorManager):
                     name=token,
                 )
                 return DockerExecutor(token, container.id, server_name, server_config)
-        except Exception:
+        except (Exception, asyncio.CancelledError):
             self._server_manager.release_server(server_name, server_config)
             raise
 
@@ -241,21 +242,30 @@ class DockerExecutorManager(BaseExecutorManager):
         logger.info("Stopping executor %s", executor.token)
 
         async with tunneled_docker_client(executor.server_config) as docker:
+            container = None
             try:
-                container = await docker.containers.get(executor.container_id)
+                container = await docker.containers.get(
+                    executor.container_id, timeout=DOCKER_STOP_TIMEOUT
+                )
                 await asyncio.wait_for(container.stop(), timeout=DOCKER_STOP_TIMEOUT)
             except TimeoutError:
-                pass
+                if container is not None:
+                    await asyncio.wait_for(container.kill(), timeout=DOCKER_KILL_TIMEOUT)
             except aiodocker.exceptions.DockerError as e:
                 if e.status != 404:
                     raise
 
+            container = None
             job_container_name = f"{executor.token}-job"
             try:
-                container = await docker.containers.get(job_container_name)
+                docker.containers.container()
+                container = await docker.containers.get(
+                    job_container_name, timeout=DOCKER_STOP_TIMEOUT
+                )
                 await asyncio.wait_for(container.stop(), timeout=DOCKER_STOP_TIMEOUT)
             except TimeoutError:
-                pass
+                if container is not None:
+                    await asyncio.wait_for(container.kill(), timeout=DOCKER_KILL_TIMEOUT)
             except aiodocker.exceptions.DockerError as e:
                 if e.status != 404:
                     raise
