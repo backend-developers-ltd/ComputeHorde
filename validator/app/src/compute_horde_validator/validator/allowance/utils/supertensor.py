@@ -19,6 +19,8 @@ from bt_ddos_shield.shield_metagraph import ShieldMetagraphOptions
 from bt_ddos_shield.turbobt import ShieldedBittensor
 from compute_horde.blockchain.block_cache import get_current_block
 
+from .. import settings
+
 DEFAULT_TIMEOUT = 30.0
 
 # Context variables for bittensor and subnet
@@ -96,6 +98,9 @@ class BaseSuperTensor(abc.ABC):
 
     @abc.abstractmethod
     def get_current_block(self) -> int: ...
+
+    @abc.abstractmethod
+    def get_latest_finalized_block(self) -> int: ...
 
     @abc.abstractmethod
     def wallet(self) -> bittensor_wallet.Wallet: ...
@@ -206,7 +211,10 @@ class SuperTensor(BaseSuperTensor):
         return self._wallet
 
     def get_current_block(self) -> int:
-        return get_current_block() - 5
+        return get_current_block()
+
+    def get_latest_finalized_block(self) -> int:
+        return self.get_current_block() - settings.BLOCK_FINALIZATION_OFFSET
 
 
 N_THREADS = 10

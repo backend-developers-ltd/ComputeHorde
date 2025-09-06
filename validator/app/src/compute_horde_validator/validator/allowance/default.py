@@ -39,6 +39,9 @@ class Allowance(AllowanceBase):
     def get_current_block(self) -> int:
         return supertensor().get_current_block()
 
+    def get_latest_finalized_block(self) -> int:
+        return supertensor().get_latest_finalized_block()
+
     def get_manifests(self) -> dict[ss58_address, dict[ExecutorClass, int]]:
         return manifests.get_current_manifests()
 

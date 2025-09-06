@@ -301,7 +301,9 @@ def scan_blocks_and_calculate_allowance(
         livefilling_supertensor = supertensor()
     timer = Timer()
     try:
-        current_block = livefilling_supertensor.get_current_block()
+        # We are using the latest **finalized** block as the upper bound so that we don't calculate
+        # the allowances for blocks that may still get shuffled around or replaced.
+        current_block = livefilling_supertensor.get_latest_finalized_block()
         missing_block_numbers = find_missing_blocks(current_block)
         for block_number in missing_block_numbers:
             # TODO process_block_allowance_with_reporting never throws, but logs errors appropriately. maybe it should
