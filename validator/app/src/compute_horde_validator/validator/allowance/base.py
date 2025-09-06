@@ -11,6 +11,7 @@ from compute_horde_validator.validator.allowance.types import (
     reservation_id,
     ss58_address,
 )
+from compute_horde_validator.validator.allowance.utils.spending import SpendingBookkeeperBase
 
 
 class AllowanceBase(ABC):
@@ -134,4 +135,15 @@ class AllowanceBase(ABC):
     def neurons(self, block: int) -> list[Neuron]:
         """
         Return all neurons in the subnet for a given block. raises NeuronSnapshotMissing if the snapshot is missing.
+        """
+
+    @abstractmethod
+    def get_temporary_bookkeeper(
+        self,
+        block_start: int,
+        block_end: int,
+    ) -> SpendingBookkeeperBase:
+        """
+        Get an object that can consume a sequence of allowance spending transactions and validate them one by one,
+        keeping the ongoing state of the allowances, without persisting it afterward.
         """

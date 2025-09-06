@@ -311,6 +311,7 @@ async def drive_organic_job(
         if isinstance(job_request, V2JobRequest)
         else None,
         streaming_details=job.streaming_details,
+        allowance_blocks=job.allowance_blocks,
     )
 
     try:
