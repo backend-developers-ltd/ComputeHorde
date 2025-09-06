@@ -22,6 +22,7 @@ START_CHANGING_STAKE_BLOCK = 1005
 SYNC_MANIFESTS_INTERVAL = 25
 MANIFEST_CHANGE_INTERVAL = 300
 MANIFEST_FETCHING_TIMEOUT = 1.0
+FINALIZATION_OFFSET = 5
 
 MINER_HOTKEYS = {
     **{
@@ -286,6 +287,9 @@ def set_block_number(block_number_):
 
         def get_current_block(self):
             return self.block_number
+
+        def get_latest_finalized_block(self):
+            return self.get_current_block() - FINALIZATION_OFFSET
 
         def get_shielded_neurons(self):
             return list_neurons(block_number_, with_shield=False)

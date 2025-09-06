@@ -8,14 +8,22 @@ import pytest
 from freezegun import freeze_time
 
 from compute_horde_validator.validator.allowance import tasks as allowance_tasks
-from compute_horde_validator.validator.allowance.tests.mockchain import set_block_number
+from compute_horde_validator.validator.allowance.tests.mockchain import (
+    FINALIZATION_OFFSET,
+    set_block_number,
+)
 from compute_horde_validator.validator.allowance.utils import blocks, manifests
 from compute_horde_validator.validator.allowance.utils.supertensor import supertensor
 
 
 @pytest.mark.django_db(transaction=True, databases=["default_alias", "default"])
 def test_blocks_scan_blocks_calls_process_for_missing_blocks_and_times_out(monkeypatch):
-    missing_blocks = [1000, 1001, 1002]
+    current_block = 1003
+    missing_blocks = [
+        current_block - FINALIZATION_OFFSET - 3,  # 995
+        current_block - FINALIZATION_OFFSET - 2,  # 996
+        current_block - FINALIZATION_OFFSET - 1,  # 997
+    ]
     back_st = mock.MagicMock()
 
     def process_block_allowance_with_reporting_side_effect(block_number, st, *a, **kw):
@@ -29,7 +37,7 @@ def test_blocks_scan_blocks_calls_process_for_missing_blocks_and_times_out(monke
         mock.patch.object(blocks, "find_missing_blocks", new=lambda *_, **__: missing_blocks),
         freeze_time(datetime.datetime(2025, 1, 1, 12, 0, 0)) as freezer,
         mock.patch.object(blocks.time, "sleep"),  # type: ignore
-        set_block_number(1003),
+        set_block_number(current_block),
         mock.patch.object(
             blocks,
             "process_block_allowance_with_reporting",
@@ -43,10 +51,12 @@ def test_blocks_scan_blocks_calls_process_for_missing_blocks_and_times_out(monke
             )
 
         assert proc_mock.call_args_list == [
-            mock.call(1000, back_st),
-            mock.call(1001, back_st),
-            mock.call(1002, back_st),
-            mock.call(1004, supertensor(), live=True),
+            # missing blocks returned by mocked "find_missing_blocks" are backfilled
+            mock.call(995, back_st),
+            mock.call(996, back_st),
+            mock.call(997, back_st),
+            # latest missing block is "live"-processed
+            mock.call(999, supertensor(), live=True),
         ]
 
 
