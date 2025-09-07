@@ -1,6 +1,6 @@
 # Collateral Module
 
-This module manages miner collateral operations including querying collateral amounts, slashing collateral, and synchronizing collateral data from the blockchain.
+This module manages miner collateral operations including slashing collateral and synchronizing collateral data from the blockchain.
 
 ## API
 
