@@ -8,7 +8,6 @@ import traceback
 import uuid
 from collections.abc import Callable
 from datetime import timedelta
-from decimal import Decimal
 from functools import cached_property
 from math import ceil, floor
 from typing import ParamSpec, TypeVar, Union
@@ -43,7 +42,7 @@ from numpy.typing import NDArray
 from pydantic import JsonValue, TypeAdapter
 
 from compute_horde_validator.celery import app
-from compute_horde_validator.validator import collateral
+from compute_horde_validator.validator.collateral.default import collateral
 from compute_horde_validator.validator.cross_validation.prompt_answering import answer_prompts
 from compute_horde_validator.validator.cross_validation.prompt_generation import generate_prompts
 from compute_horde_validator.validator.locks import Locked, LockType, get_advisory_lock
@@ -1488,76 +1487,6 @@ def sync_metagraph(bittensor: turbobt.Bittensor) -> None:
         )
 
 
-@app.task
-@bittensor_client
-def sync_collaterals(bittensor: turbobt.Bittensor) -> None:
-    """
-    Synchronizes miner evm addresses and collateral amounts.
-
-    :return: None
-    """
-    # Get current metagraph data
-    try:
-        neurons, subnet_state, block = async_to_sync(_get_metagraph_for_sync)(bittensor)
-        if not block:
-            logger.warning("Could not get current block for collateral sync")
-            return
-
-        hotkeys = [neuron.hotkey for neuron in neurons]
-    except Exception as e:
-        msg = f"Error getting metagraph data for collateral sync: {e}"
-        logger.warning(msg)
-        SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).create(
-            type=SystemEvent.EventType.COLLATERAL_SYNCING,
-            subtype=SystemEvent.EventSubType.FAILURE,
-            long_description=msg,
-            data={"error": str(e)},
-        )
-        return
-    associations = async_to_sync(collateral.get_evm_key_associations)(
-        subtensor=bittensor.subtensor,
-        netuid=settings.BITTENSOR_NETUID,
-        block_hash=block.hash,
-    )
-    miners = Miner.objects.filter(hotkey__in=hotkeys)
-    w3 = collateral.get_web3_connection(network=settings.BITTENSOR_NETWORK)
-    contract_address = collateral.get_collateral_contract_address()
-
-    to_update = []
-    for miner in miners:
-        if not miner.uid:
-            continue
-
-        evm_address = associations.get(miner.uid)
-        miner.evm_address = evm_address
-        to_update.append(miner)
-
-        if not miner.evm_address:
-            continue
-
-        if contract_address:
-            try:
-                collateral_wei = collateral.get_miner_collateral(
-                    w3, contract_address, miner.evm_address, block.number
-                )
-                miner.collateral_wei = Decimal(collateral_wei)
-            except Exception as e:
-                msg = f"Error while fetching miner collateral: {e}"
-                logger.warning(msg)
-                SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).create(
-                    type=SystemEvent.EventType.COLLATERAL_SYNCING,
-                    subtype=SystemEvent.EventSubType.GETTING_MINER_COLLATERAL_FAILED,
-                    long_description=msg,
-                    data={
-                        "block": block.number,
-                        "miner_hotkey": miner.hotkey,
-                        "evm_address": evm_address,
-                    },
-                )
-
-    Miner.objects.bulk_update(to_update, fields=["evm_address", "collateral_wei"])
-
-
 async def get_manifests_from_miners(
     miners: list[Miner],
     timeout: float = 30,
@@ -1969,23 +1898,16 @@ def slash_collateral_task(job_uuid: str) -> None:
             logger.info(f"Already slashed for this job {job_uuid}")
             return
 
-        contract_address = collateral.get_collateral_contract_address()
-        slash_amount: int = config.DYNAMIC_COLLATERAL_SLASH_AMOUNT_WEI
-        if contract_address and slash_amount > 0 and job.miner.evm_address:
-            try:
-                w3 = collateral.get_web3_connection(network=settings.BITTENSOR_NETWORK)
-                collateral.slash_collateral(
-                    w3=w3,
-                    contract_address=contract_address,
-                    miner_address=job.miner.evm_address,
-                    amount_wei=slash_amount,
-                    url=f"job {job_uuid} cheated",
-                )
-            except Exception as e:
-                logger.error(f"Failed to slash collateral for job {job_uuid}: {e}")
-            else:
-                job.slashed = True
-                job.save()
+        try:
+            async_to_sync(collateral().slash_collateral)(
+                miner_hotkey=job.miner.hotkey,
+                url=f"job {job_uuid} cheated",
+            )
+        except Exception as e:
+            logger.error(f"Failed to slash collateral for job {job_uuid}: {e}")
+        else:
+            job.slashed = True
+            job.save()
 
 
 async def _get_latest_manifests(miners: list[Miner]) -> dict[str, dict[ExecutorClass, int]]:
