@@ -17,34 +17,27 @@ miners: list[MinerCollateral] = collateral().list_miners_with_sufficient_collate
 Returns miners whose collateral is at least min_amount_wei.
 Each MinerCollateral contains:
 - hotkey: str - Miner's hotkey
-- uid: int | None - Miner's UID (if available)
-- evm_address: str | None - Miner's EVM address (if available)
 - collateral_wei: int - Collateral amount in Wei
 """
 
 # Slash collateral from a miner
-w3 = Web3(...)
-slashed_event: SlashedEvent = collateral().slash_collateral(
-    w3: Web3,
-    contract_address: str,
-    miner_address: str,
-    amount_wei: int,
+await collateral().slash_collateral(
+    miner_hotkey: str,
     url: str,
 )
 """
-Slash collateral from a miner and return transaction details.
-- w3: Web3 instance for blockchain interaction
-- contract_address: Address of the Collateral contract
-- miner_address: EVM address of the miner to slash
-- amount_wei: Amount of Wei to slash
+Slash collateral from a miner.
+- miner_hotkey: SS58 address of the miner to slash (will be mapped to EVM address internally)
 - url: URL containing information about the slash (will be validated and checksummed)
 
-Returns SlashedEvent with transaction details.
-Raises SlashCollateralError if transaction fails.
+The slashing amount is determined by the DYNAMIC_COLLATERAL_SLASH_AMOUNT_WEI configuration.
+
+Returns None.
+Raises SlashCollateralError if transaction fails, slash amount is invalid, or miner not found.
 """
 
-# Get collateral contract address
-contract_address: str | None = collateral().get_collateral_contract_address()
+# Get collateral contract address (async)
+contract_address: str | None = await collateral().get_collateral_contract_address()
 """
 Returns the current collateral contract address or None if unavailable.
 Address is fetched from the validator's commitment on the Bittensor network.
@@ -79,20 +72,8 @@ Returns collateral amount in Wei.
 # MinerCollateral - Information about a miner's collateral
 class MinerCollateral(BaseModel):
     hotkey: str                    # Miner's hotkey
-    uid: int | None               # Miner's UID (if available)
-    evm_address: str | None       # Miner's EVM address (if available)
     collateral_wei: int           # Collateral amount in Wei
 
-# SlashedEvent - Transaction details from a slash operation
-@dataclass
-class SlashedEvent:
-    event: str                    # Event name
-    logIndex: int                 # Log index in the block
-    transactionIndex: int         # Transaction index in the block
-    transactionHash: HexBytes     # Transaction hash
-    address: str                  # Contract address
-    blockHash: HexBytes           # Block hash
-    blockNumber: int              # Block number
 ```
 
 ## Background Tasks

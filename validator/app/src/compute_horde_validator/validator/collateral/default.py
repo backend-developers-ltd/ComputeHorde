@@ -8,6 +8,8 @@ from typing import Any
 
 import requests
 import turbobt
+from compute_horde.smart_contracts.utils import get_web3_connection
+from constance import config
 from django.conf import settings
 from eth_account import Account
 from eth_account.signers.local import LocalAccount
@@ -19,7 +21,7 @@ from web3.types import Wei
 from compute_horde_validator.validator.models import Miner
 
 from .base import CollateralBase
-from .types import MinerCollateral, SlashCollateralError, SlashedEvent
+from .types import MinerCollateral, SlashCollateralError
 
 logger = logging.getLogger(__name__)
 
@@ -54,23 +56,36 @@ class Collateral(CollateralBase):
         return [
             MinerCollateral(
                 hotkey=m.hotkey,
-                uid=m.uid,
-                evm_address=m.evm_address,
                 collateral_wei=int(m.collateral_wei),
             )
             for m in miners
         ]
 
-    def slash_collateral(
+    async def slash_collateral(
         self,
-        w3: Web3,
-        contract_address: str,
-        miner_address: str,
-        amount_wei: int,
+        miner_hotkey: str,
         url: str,
-    ) -> SlashedEvent:
+    ) -> None:
         private_key = self._get_private_key()
         assert private_key is not None, "EVM private key not found"
+
+        try:
+            miner = await Miner.objects.aget(hotkey=miner_hotkey)
+            miner_address = miner.evm_address
+            if not miner_address:
+                raise SlashCollateralError(f"Miner {miner_hotkey} has no associated EVM address")
+        except Miner.DoesNotExist:
+            raise SlashCollateralError(f"Miner {miner_hotkey} not found")
+
+        w3 = get_web3_connection(network=settings.BITTENSOR_NETWORK)
+
+        amount_wei = config.DYNAMIC_COLLATERAL_SLASH_AMOUNT_WEI
+        if amount_wei <= 0:
+            raise SlashCollateralError("Slash amount must be greater than 0")
+
+        contract_address = await self.get_collateral_contract_address()
+        if contract_address is None:
+            raise SlashCollateralError("Collateral contract address not configured")
 
         abi = self._get_collateral_abi()
         account: LocalAccount = Account.from_key(private_key)
@@ -94,9 +109,6 @@ class Collateral(CollateralBase):
         receipt = w3.eth.wait_for_transaction_receipt(tx_hash, 300, 2)
         if receipt["status"] == 0:
             raise SlashCollateralError("collateral slashing transaction failed")
-
-        raw_event = contract.events.Slashed().process_receipt(receipt)
-        return SlashedEvent.from_dict(raw_event[0])
 
     async def get_collateral_contract_address(self) -> str | None:
         global _cached_contract_address

@@ -31,7 +31,6 @@ from compute_horde.dynamic_config import fetch_dynamic_configs_from_contract, sy
 from compute_horde.fv_protocol.facilitator_requests import OrganicJobRequest
 from compute_horde.miner_client.organic import OrganicMinerClient
 from compute_horde.smart_contracts.map_contract import get_dynamic_config_types_from_settings
-from compute_horde.smart_contracts.utils import get_web3_connection
 from compute_horde.subtensor import get_cycle_containing_block
 from compute_horde.utils import turbobt_get_validators
 from compute_horde_core.executor_class import ExecutorClass
@@ -1899,23 +1898,16 @@ def slash_collateral_task(job_uuid: str) -> None:
             logger.info(f"Already slashed for this job {job_uuid}")
             return
 
-        contract_address = async_to_sync(collateral().get_collateral_contract_address)()
-        slash_amount: int = config.DYNAMIC_COLLATERAL_SLASH_AMOUNT_WEI
-        if contract_address and slash_amount > 0 and job.miner.evm_address:
-            try:
-                w3 = get_web3_connection(network=settings.BITTENSOR_NETWORK)
-                collateral().slash_collateral(
-                    w3=w3,
-                    contract_address=contract_address,
-                    miner_address=job.miner.evm_address,
-                    amount_wei=slash_amount,
-                    url=f"job {job_uuid} cheated",
-                )
-            except Exception as e:
-                logger.error(f"Failed to slash collateral for job {job_uuid}: {e}")
-            else:
-                job.slashed = True
-                job.save()
+        try:
+            async_to_sync(collateral().slash_collateral)(
+                miner_hotkey=job.miner.hotkey,
+                url=f"job {job_uuid} cheated",
+            )
+        except Exception as e:
+            logger.error(f"Failed to slash collateral for job {job_uuid}: {e}")
+        else:
+            job.slashed = True
+            job.save()
 
 
 async def _get_latest_manifests(miners: list[Miner]) -> dict[str, dict[ExecutorClass, int]]:

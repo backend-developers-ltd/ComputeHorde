@@ -1,8 +1,6 @@
 from abc import ABC, abstractmethod
 
-from web3 import Web3
-
-from .types import MinerCollateral, SlashedEvent
+from .types import MinerCollateral
 
 
 class CollateralBase(ABC):
@@ -22,23 +20,17 @@ class CollateralBase(ABC):
         pass
 
     @abstractmethod
-    def slash_collateral(
+    async def slash_collateral(
         self,
-        w3: Web3,
-        contract_address: str,
-        miner_address: str,
-        amount_wei: int,
+        miner_hotkey: str,
         url: str,
-    ) -> SlashedEvent:
+    ) -> None:
         """Slash collateral from a miner.
         Args:
-            w3: Web3 instance to use for blockchain interaction.
-            contract_address: Address of the Collateral contract.
-            miner_address: EVM address of the miner to slash.
-            amount_wei: Amount of Wei to slash.
+            miner_hotkey: SS58 address of the miner to slash.
             url: URL containing information about the slash.
         Returns:
-            Transaction receipt with slash event details
+            None
         """
         pass
 
