@@ -254,6 +254,9 @@ $ docker compose down --remove-orphans && docker compose up -d
 
 #### Deploying from scratch
 
+Prepare a linux box, satisfying [hardware requirements](validator/envs/runner/README.md#Usage) 
+(requires ssh server, the rest will be installed by the installator script later on).
+
 Set the following environment variables in a terminal on your **local machine** (on the machine where you have your wallet files):
 
 ```sh
