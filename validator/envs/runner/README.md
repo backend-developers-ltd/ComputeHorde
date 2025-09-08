@@ -5,9 +5,10 @@ Runner is a helper container that launches all the necessary services for a vali
 ## Usage
 
 1. Get a linux host, recommended:
-   1. 8GB RAM
+   1. 16GB RAM
    2. 4x2.3GHz CPU
-   3. 60GB SSD
+   3. 60GB SSD (heavy iops/throughput expected, e.g. AWS EBS GP2 doesn't perform well,
+   **GP3 is good**)
    4. (No GPU is used by validators)
 2. install `docker` and `docker-compose`, e.g. `apt-get install -y docker.io docker-compose`
    (has been tested on docker `24.0.5` and docker-compose `1.29.2`).
