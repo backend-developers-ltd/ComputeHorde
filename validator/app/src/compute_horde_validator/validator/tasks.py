@@ -79,6 +79,7 @@ from compute_horde_validator.validator.synthetic_jobs.utils import (
 )
 
 from . import eviction
+from .allowance import tasks  # noqa
 from .clean_me_up import get_single_manifest
 from .dynamic_config import aget_config
 from .models import AdminJobRequest, MetagraphSnapshot, MinerManifest
@@ -836,13 +837,13 @@ def normalize_batch_scores(
     uids = np.zeros(len(neurons), dtype=np.int64)
     weights = np.zeros(len(neurons), dtype=np.float32)
 
-    if not score_per_uid:
-        logger.warning("Batch produced no scores")
-        return uids, weights
-
     for ind, n in enumerate(neurons):
         uids[ind] = n.uid
         weights[ind] = score_per_uid.get(n.uid, 0)
+
+    if not score_per_uid:
+        logger.warning("Batch produced no scores")
+        return uids, weights
 
     uids, weights = process_weights(
         uids,
