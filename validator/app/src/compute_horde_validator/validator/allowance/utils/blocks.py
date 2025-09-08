@@ -81,18 +81,20 @@ def wait_for_block(target_block: int, timeout_seconds: float):
     timeout_seconds = max(timeout_seconds, MIN_BLOCK_WAIT_TIME)
     start = time.time()
 
-    def safe_get_current_block():
-        try:
-            return supertensor().get_current_block()
-        except CannotGetCurrentBlock:
-            return target_block - 1
-
-    while target_block > safe_get_current_block():
+    while True:
         if time.time() - start > timeout_seconds:
             logger.warning(
                 f"Timeout waiting for block {target_block} after {timeout_seconds} seconds"
             )
             raise TimesUpError(f"Timeout waiting for block {target_block}")
+        try:
+            current_block = supertensor().get_current_block()
+        except CannotGetCurrentBlock:
+            time.sleep(0.1)
+            continue
+
+        if current_block >= target_block:
+            return
         time.sleep(0.1)
 
 

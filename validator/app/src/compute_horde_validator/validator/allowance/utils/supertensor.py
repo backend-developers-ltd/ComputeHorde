@@ -70,8 +70,6 @@ def make_sync(func: Callable[..., Awaitable[T]]) -> Callable[..., T]:
             )
         except TimeoutError as ex:
             raise SuperTensorTimeout from ex
-        except RuntimeError:
-            raise
 
     return wrapper
 

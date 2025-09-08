@@ -45,7 +45,7 @@ def scan_blocks_prep(configure_logs):
     ):
         livefilling_supertensor = supertensor()
         assert (
-            livefilling_supertensor != backfilling_supertensor
+            livefilling_supertensor is not backfilling_supertensor
         )  # this is useful in asserting which calls get which supertensor
         yield proc_mock, livefilling_supertensor, backfilling_supertensor
 
