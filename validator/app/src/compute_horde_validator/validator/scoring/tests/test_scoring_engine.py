@@ -4,9 +4,6 @@ from datetime import timedelta
 from unittest.mock import MagicMock, patch
 
 import pytest
-from compute_horde.protocol_messages import (
-    V0MainHotkeyMessage,
-)
 from django.conf import settings
 from django.test import TestCase
 from django.utils import timezone
@@ -82,36 +79,6 @@ class TestMainHotkeyScoringEngine(TestCase):
         """Set up transport messages asynchronously."""
         self._reset_transports()
 
-        await self.transport1.add_message(
-            V0MainHotkeyMessage(main_hotkey="hotkey1").model_dump_json(),
-            send_before=2,
-        )
-
-        await self.transport1.add_message(
-            V0MainHotkeyMessage(main_hotkey="hotkey1").model_dump_json(),
-            send_before=2,
-        )
-
-        await self.transport2.add_message(
-            V0MainHotkeyMessage(main_hotkey="hotkey3").model_dump_json(),
-            send_before=2,
-        )
-
-        await self.transport2.add_message(
-            V0MainHotkeyMessage(main_hotkey="hotkey3").model_dump_json(),
-            send_before=2,
-        )
-
-        await self.transport2.add_message(
-            V0MainHotkeyMessage(main_hotkey="hotkey3").model_dump_json(),
-            send_before=2,
-        )
-
-        await self.transport3.add_message(
-            V0MainHotkeyMessage(main_hotkey="hotkey7").model_dump_json(),
-            send_before=2,
-        )
-
         self.transport_mapping = {
             "hotkey1": self.transport1,
             "hotkey2": self.transport1,
@@ -154,6 +121,16 @@ class TestMainHotkeyScoringEngine(TestCase):
 
         return mock_wstransport_constructor
 
+    def _get_mock_http_responses(self):
+        """Get a mock HTTP response for _query_single_miner."""
+
+        async def mock_http_response(miner):
+            # Return the main hotkey based on the miner's hotkey
+            # This matches the original test setup where each miner returns its own hotkey as main hotkey
+            return miner.hotkey
+
+        return mock_http_response
+
     @pytest.mark.django_db(transaction=True)
     def test_calculate_scores_for_cycles_basic(self):
         """Test basic scoring with main hotkey logic.
@@ -176,8 +153,8 @@ class TestMainHotkeyScoringEngine(TestCase):
         """
 
         with patch(
-            "compute_horde_validator.validator.scoring.main_hotkey_querying.WSTransport",
-            side_effect=self._get_mock_wstransport_constructor(),
+            "compute_horde_validator.validator.scoring.main_hotkey_querying._query_single_miner",
+            side_effect=self._get_mock_http_responses(),
         ):
             engine = DefaultScoringEngine()
 
@@ -235,8 +212,8 @@ class TestMainHotkeyScoringEngine(TestCase):
         """Test scoring when there are no jobs."""
 
         with patch(
-            "compute_horde_validator.validator.scoring.main_hotkey_querying.WSTransport",
-            side_effect=self._get_mock_wstransport_constructor(),
+            "compute_horde_validator.validator.scoring.main_hotkey_querying._query_single_miner",
+            side_effect=self._get_mock_http_responses(),
         ):
             engine = DefaultScoringEngine()
 
@@ -261,8 +238,8 @@ class TestMainHotkeyScoringEngine(TestCase):
         """
 
         with patch(
-            "compute_horde_validator.validator.scoring.main_hotkey_querying.WSTransport",
-            side_effect=self._get_mock_wstransport_constructor(),
+            "compute_horde_validator.validator.scoring.main_hotkey_querying._query_single_miner",
+            side_effect=self._get_mock_http_responses(),
         ):
             engine = DefaultScoringEngine()
 
@@ -310,8 +287,8 @@ class TestMainHotkeyScoringEngine(TestCase):
         """
 
         with patch(
-            "compute_horde_validator.validator.scoring.main_hotkey_querying.WSTransport",
-            side_effect=self._get_mock_wstransport_constructor(),
+            "compute_horde_validator.validator.scoring.main_hotkey_querying._query_single_miner",
+            side_effect=self._get_mock_http_responses(),
         ):
             engine = DefaultScoringEngine()
 
@@ -374,8 +351,8 @@ class TestMainHotkeyScoringEngine(TestCase):
         """
 
         with patch(
-            "compute_horde_validator.validator.scoring.main_hotkey_querying.WSTransport",
-            side_effect=self._get_mock_wstransport_constructor(),
+            "compute_horde_validator.validator.scoring.main_hotkey_querying._query_single_miner",
+            side_effect=self._get_mock_http_responses(),
         ):
             engine = DefaultScoringEngine()
 
@@ -439,8 +416,8 @@ class TestMainHotkeyScoringEngine(TestCase):
         """
 
         with patch(
-            "compute_horde_validator.validator.scoring.main_hotkey_querying.WSTransport",
-            side_effect=self._get_mock_wstransport_constructor(),
+            "compute_horde_validator.validator.scoring.main_hotkey_querying._query_single_miner",
+            side_effect=self._get_mock_http_responses(),
         ):
             engine = DefaultScoringEngine()
 
@@ -514,8 +491,8 @@ class TestMainHotkeyScoringEngine(TestCase):
         """
 
         with patch(
-            "compute_horde_validator.validator.scoring.main_hotkey_querying.WSTransport",
-            side_effect=self._get_mock_wstransport_constructor(),
+            "compute_horde_validator.validator.scoring.main_hotkey_querying._query_single_miner",
+            side_effect=self._get_mock_http_responses(),
         ):
             engine = DefaultScoringEngine()
 
@@ -572,8 +549,8 @@ class TestMainHotkeyScoringEngine(TestCase):
         """
 
         with patch(
-            "compute_horde_validator.validator.scoring.main_hotkey_querying.WSTransport",
-            side_effect=self._get_mock_wstransport_constructor(),
+            "compute_horde_validator.validator.scoring.main_hotkey_querying._query_single_miner",
+            side_effect=self._get_mock_http_responses(),
         ):
             engine = DefaultScoringEngine()
             for _ in range(5):

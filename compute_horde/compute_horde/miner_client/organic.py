@@ -30,7 +30,6 @@ from compute_horde.protocol_messages import (
     V0DeclineJobRequest,
     V0ExecutionDoneRequest,
     V0ExecutorFailedRequest,
-    V0ExecutorManifestRequest,
     V0ExecutorReadyRequest,
     V0HordeFailedRequest,
     V0InitialJobRequest,
@@ -40,7 +39,6 @@ from compute_horde.protocol_messages import (
     V0JobFinishedRequest,
     V0JobRequest,
     V0MachineSpecsRequest,
-    V0MainHotkeyMessage,
     V0StreamingJobNotReadyRequest,
     V0StreamingJobReadyRequest,
     V0VolumesReadyRequest,
@@ -191,12 +189,6 @@ class OrganicMinerClient(AbstractMinerClient[MinerToValidatorMessage, ValidatorT
     async def notify_streaming_readiness(self, msg: V0StreamingJobReadyRequest) -> None:
         """This method is called when miner sends streaming ready message"""
 
-    async def handle_manifest_request(self, msg: V0ExecutorManifestRequest) -> None:
-        try:
-            self.miner_manifest.set_result(msg.manifest)
-        except asyncio.InvalidStateError:
-            logger.warning(f"Received manifest from {msg} but future was already set")
-
     async def handle_machine_specs_request(self, msg: V0MachineSpecsRequest) -> None:
         self.miner_machine_specs = msg.specs
 
@@ -211,9 +203,6 @@ class OrganicMinerClient(AbstractMinerClient[MinerToValidatorMessage, ValidatorT
         elif isinstance(msg, UnauthorizedError):
             logger.error(f"Unauthorized in {self.miner_name}: {msg.code}, details: {msg.details}")
             await self.notify_unauthorized_error(msg)
-            return
-        elif isinstance(msg, V0ExecutorManifestRequest):
-            await self.handle_manifest_request(msg)
             return
 
         if (received_job_uuid := getattr(msg, "job_uuid", self.job_uuid)) != self.job_uuid:
@@ -314,11 +303,6 @@ class OrganicMinerClient(AbstractMinerClient[MinerToValidatorMessage, ValidatorT
 
         elif isinstance(msg, V0MachineSpecsRequest):
             await self.handle_machine_specs_request(msg)
-
-        elif isinstance(msg, V0MainHotkeyMessage):
-            logger.info(
-                "Received a V0MainHotkeyMessage: unexpected for an organic job miner client"
-            )
 
         else:
             assert_never(msg)

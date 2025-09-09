@@ -2,11 +2,9 @@ import uuid
 
 import pytest
 import pytest_asyncio
-from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.protocol_messages import (
     V0AcceptJobRequest,
     V0ExecutionDoneRequest,
-    V0ExecutorManifestRequest,
     V0ExecutorReadyRequest,
     V0JobFailedRequest,
     V0JobFinishedRequest,
@@ -36,11 +34,6 @@ def create_miner_client(transport: SimulationTransport):
         return TrustedMinerClient(*args, **kwargs)
 
     return _create
-
-
-@pytest.fixture
-def manifest_message():
-    return V0ExecutorManifestRequest(manifest={DEFAULT_EXECUTOR_CLASS: 1}).model_dump_json()
 
 
 @pytest.fixture

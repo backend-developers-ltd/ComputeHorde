@@ -4,14 +4,12 @@ from unittest import mock
 from unittest.mock import patch
 
 import turbobt
-from compute_horde.miner_client.organic import OrganicMinerClient
-from compute_horde.protocol_messages import V0ExecutorManifestRequest
 from compute_horde.test_wallet import get_test_validator_wallet
 from compute_horde_core.executor_class import ExecutorClass
-from pydantic import BaseModel
 
 from compute_horde_validator.validator.allowance.utils import supertensor
-from compute_horde_validator.validator.tests.transport import SimulationTransport
+
+from ...tests.helpers import MinerConfig, mock_manifest_endpoints
 
 NUM_MINERS = 250
 NUM_VALIDATORS = 6
@@ -76,18 +74,13 @@ EXECUTOR_CAP = {
 }
 
 
-def manifest_responses(block_number) -> list[tuple[str, str | BaseModel, float]]:
+def manifest_responses(block_number) -> list[tuple[str, dict[ExecutorClass, int] | None, float]]:
     assert block_number >= START_BLOCK
     return [
         *[
             (
                 hotkey,
-                V0ExecutorManifestRequest(
-                    manifest={
-                        ec: (ind + uid) % (EXECUTOR_CAP[ec])
-                        for ind, ec in enumerate(EXECUTOR_CLASSES)
-                    },
-                ),
+                {ec: (ind + uid) % (EXECUTOR_CAP[ec]) for ind, ec in enumerate(EXECUTOR_CLASSES)},
                 0,
             )
             for uid, hotkey in MINER_HOTKEYS.items()
@@ -96,12 +89,10 @@ def manifest_responses(block_number) -> list[tuple[str, str | BaseModel, float]]
         *[
             (
                 hotkey,
-                V0ExecutorManifestRequest(
-                    manifest={
-                        ec: (ind + uid + cmbm(block_number)) % (EXECUTOR_CAP[ec])
-                        for ind, ec in enumerate(EXECUTOR_CLASSES)
-                    },
-                ),
+                {
+                    ec: (ind + uid + cmbm(block_number)) % (EXECUTOR_CAP[ec])
+                    for ind, ec in enumerate(EXECUTOR_CLASSES)
+                },
                 0,
             )
             for uid, hotkey in MINER_HOTKEYS.items()
@@ -110,12 +101,10 @@ def manifest_responses(block_number) -> list[tuple[str, str | BaseModel, float]]
         *[
             (
                 hotkey,
-                V0ExecutorManifestRequest(
-                    manifest={
-                        ec: (ind + uid) % (EXECUTOR_CAP[ec]) + cmbm(block_number) - START_BLOCK
-                        for ind, ec in enumerate(EXECUTOR_CLASSES)
-                    },
-                ),
+                {
+                    ec: (ind + uid) % (EXECUTOR_CAP[ec]) + cmbm(block_number) - START_BLOCK
+                    for ind, ec in enumerate(EXECUTOR_CLASSES)
+                },
                 0,
             )
             for uid, hotkey in MINER_HOTKEYS.items()
@@ -124,16 +113,11 @@ def manifest_responses(block_number) -> list[tuple[str, str | BaseModel, float]]
         *[
             (
                 hotkey,
-                V0ExecutorManifestRequest(
-                    manifest={
-                        ec: (ind + uid + cmbm(block_number)) % (EXECUTOR_CAP[ec])
-                        for ind, ec in enumerate(EXECUTOR_CLASSES)
-                        if (
-                            block_number < START_CHANGING_MANIFESTS_BLOCK
-                            or (block_number + ind) % 2
-                        )
-                    },
-                ),
+                {
+                    ec: (ind + uid + cmbm(block_number)) % (EXECUTOR_CAP[ec])
+                    for ind, ec in enumerate(EXECUTOR_CLASSES)
+                    if (block_number < START_CHANGING_MANIFESTS_BLOCK or (block_number + ind) % 2)
+                },
                 0,
             )
             for uid, hotkey in MINER_HOTKEYS.items()
@@ -142,12 +126,7 @@ def manifest_responses(block_number) -> list[tuple[str, str | BaseModel, float]]
         *[
             (
                 hotkey,
-                V0ExecutorManifestRequest(
-                    manifest={
-                        ec: (ind + uid) % (EXECUTOR_CAP[ec])
-                        for ind, ec in enumerate(EXECUTOR_CLASSES)
-                    },
-                ),
+                {ec: (ind + uid) % (EXECUTOR_CAP[ec]) for ind, ec in enumerate(EXECUTOR_CLASSES)},
                 0
                 if block_number < START_CHANGING_MANIFESTS_BLOCK
                 else (MANIFEST_FETCHING_TIMEOUT * 2 * (block_number % 2)),
@@ -158,14 +137,9 @@ def manifest_responses(block_number) -> list[tuple[str, str | BaseModel, float]]
         *[
             (
                 hotkey,
-                V0ExecutorManifestRequest(
-                    manifest={
-                        ec: (ind + uid) % (EXECUTOR_CAP[ec])
-                        for ind, ec in enumerate(EXECUTOR_CLASSES)
-                    },
-                )
+                {ec: (ind + uid) % (EXECUTOR_CAP[ec]) for ind, ec in enumerate(EXECUTOR_CLASSES)}
                 if (block_number < START_CHANGING_MANIFESTS_BLOCK or not (block_number % 2))
-                else "wrong",
+                else None,
                 0,
             )
             for uid, hotkey in MINER_HOTKEYS.items()
@@ -308,48 +282,36 @@ def set_block_number(block_number_, oldest_reachable_block: float | int = float(
         def oldest_reachable_block(self) -> float | int:
             return oldest_reachable_block
 
-    # Create transport map from manifest responses
-    def create_transport_map():
-        transport_map = {}
-        responses = manifest_responses(block_number_)
+    with patch.object(supertensor, "_supertensor_instance", MockSuperTensor()):
+        yield
 
-        for hotkey, manifest_request, delay in responses:
-            if isinstance(manifest_request, V0ExecutorManifestRequest):
-                transport = SimulationTransport(f"sim_{hotkey}")
-                transport.add_message_sync(manifest_request, send_before=1, sleep_before=delay)
-                transport_map[hotkey] = transport
 
-        return transport_map
+@contextmanager
+def mock_manifest_endpoints_for_block_number(block_number_: int):
+    # Create miner configs from the manifest response and the corresponding IP/port combination
+    miners = {
+        miner.hotkey: (miner.axon_info.ip, miner.axon_info.port)
+        for miner in list_neurons(block_number_, with_shield=False)
+    }
 
-    # Create mock init function for OrganicMinerClient
-    def create_mock_init_function(transport_map):
-        original_init = OrganicMinerClient.__init__
+    responses = manifest_responses(block_number_)
+    configs: list[MinerConfig] = []
+    for _hotkey, _manifest, _delay in responses:
+        # Some miners are designed to be missing for certain block numbers
+        try:
+            ip, port = miners[_hotkey]
+        except KeyError:
+            continue
 
-        def mock_init(
-            self, miner_hotkey, miner_address, miner_port, job_uuid, my_keypair, transport=None
-        ):
-            # if a transport is explicitly provided (e.g. by tests that need
-            # to control miner messaging), respect it and pass it through unchanged.
-            simulation_transport = (
-                transport if transport is not None else transport_map.get(miner_hotkey)
-            )
-            original_init(
-                self,
-                miner_hotkey,
-                miner_address,
-                miner_port,
-                job_uuid,
-                my_keypair,
-                transport=simulation_transport,
-            )
+        configs.append(
+            {
+                "hotkey": _hotkey,
+                "address": ip,
+                "port": port,
+                "manifest": _manifest,
+                "wait_before": _delay,
+            }
+        )
 
-        return mock_init
-
-    transport_map = create_transport_map()
-    mock_init = create_mock_init_function(transport_map)
-
-    with (
-        patch.object(supertensor, "_supertensor_instance", MockSuperTensor()),
-        patch.object(OrganicMinerClient, "__init__", mock_init),
-    ):
+    with mock_manifest_endpoints(miner_configs=configs):
         yield

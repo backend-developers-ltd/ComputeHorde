@@ -23,7 +23,10 @@ from compute_horde.fv_protocol.validator_requests import (
 )
 from django.utils import timezone
 
-from compute_horde_validator.validator.allowance.tests.mockchain import set_block_number
+from compute_horde_validator.validator.allowance.tests.mockchain import (
+    mock_manifest_endpoints_for_block_number,
+    set_block_number,
+)
 from compute_horde_validator.validator.allowance.utils import blocks, manifests
 from compute_horde_validator.validator.allowance.utils.supertensor import supertensor
 from compute_horde_validator.validator.models import (
@@ -53,7 +56,10 @@ DYNAMIC_ORGANIC_JOB_MAX_RETRIES_OVERRIDE = 3
 
 @asynccontextmanager
 async def async_patch_all():
-    with await sync_to_async(set_block_number)(1000):
+    with (
+        await sync_to_async(set_block_number)(1000),
+        await sync_to_async(mock_manifest_endpoints_for_block_number)(1000),
+    ):
         await sync_to_async(manifests.sync_manifests)()
     for block_number in range(1001, 1005):
         with await sync_to_async(set_block_number)(block_number):

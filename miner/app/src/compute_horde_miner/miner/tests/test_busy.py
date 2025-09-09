@@ -153,7 +153,6 @@ async def test_reject_as_busy_when_busy(job_uuid):
             await _authenticate(
                 validator_channel, validator_wallet, miner_wallet.hotkey.ss58_address
             )
-            await validator_channel.receive_from()  # this gets the manifest
 
             await _send_initial_job_request(validator_channel, job_uuid)
             response = await validator_channel.receive_json_from()

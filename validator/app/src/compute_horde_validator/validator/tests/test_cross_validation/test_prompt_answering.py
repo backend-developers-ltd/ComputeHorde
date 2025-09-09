@@ -55,7 +55,6 @@ async def mock_throw_error(*args, **kwargs):
 async def test_answer_prompts__success(
     transport: SimulationTransport,
     create_miner_client: Callable,
-    manifest_message: str,
     executor_ready_message: str,
     volumes_ready_message: str,
     execution_done_message: str,
@@ -63,7 +62,6 @@ async def test_answer_prompts__success(
     job_finish_message: str,
     job_uuid: uuid.UUID,
 ):
-    await transport.add_message(manifest_message, send_before=1)
     await transport.add_message(accept_job_message, send_before=1)
     await transport.add_message(executor_ready_message, send_before=0)
     await transport.add_message(volumes_ready_message, send_before=0)
@@ -89,7 +87,6 @@ async def test_answer_prompts__success(
 async def test_answer_prompts__missing_answers(
     transport: SimulationTransport,
     create_miner_client: Callable,
-    manifest_message: str,
     executor_ready_message: str,
     volumes_ready_message: str,
     execution_done_message: str,
@@ -97,7 +94,6 @@ async def test_answer_prompts__missing_answers(
     job_finish_message: str,
     job_uuid: uuid.UUID,
 ):
-    await transport.add_message(manifest_message, send_before=1)
     await transport.add_message(accept_job_message, send_before=1)
     await transport.add_message(executor_ready_message, send_before=0)
     await transport.add_message(volumes_ready_message, send_before=0)
@@ -116,13 +112,11 @@ async def test_answer_prompts__missing_answers(
 async def test_answer_prompts__job_failed(
     transport: SimulationTransport,
     create_miner_client: Callable,
-    manifest_message: str,
     executor_ready_message: str,
     accept_job_message: str,
     job_failed_message: str,
     job_uuid: uuid.UUID,
 ):
-    await transport.add_message(manifest_message, send_before=1)
     await transport.add_message(accept_job_message, send_before=1)
     await transport.add_message(executor_ready_message, send_before=0)
     await transport.add_message(job_failed_message, send_before=2)
@@ -147,7 +141,6 @@ async def test_answer_prompts__download_failed(
     settings,
     transport: SimulationTransport,
     create_miner_client: Callable,
-    manifest_message: str,
     executor_ready_message: str,
     volumes_ready_message: str,
     execution_done_message: str,
@@ -155,7 +148,6 @@ async def test_answer_prompts__download_failed(
     job_finish_message: str,
     job_uuid: uuid.UUID,
 ):
-    await transport.add_message(manifest_message, send_before=1)
     await transport.add_message(accept_job_message, send_before=1)
     await transport.add_message(executor_ready_message, send_before=0)
     await transport.add_message(volumes_ready_message, send_before=0)

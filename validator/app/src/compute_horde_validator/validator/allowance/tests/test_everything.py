@@ -37,6 +37,7 @@ from .mockchain import (
     MINER_HOTKEYS,
     VALIDATOR_HOTKEYS,
     manifest_responses,
+    mock_manifest_endpoints_for_block_number,
     set_block_number,
 )
 from .utils_for_tests import (
@@ -195,10 +196,10 @@ def assert_error_messages(block_number: int, highest_available: float):
 @pytest.mark.django_db(transaction=True, databases=["default_alias", "default"])
 @pytest.mark.filterwarnings("ignore::pytest.PytestUnraisableExceptionWarning")
 def test_complete(caplog, configure_logs):
-    with set_block_number(1000):
+    with set_block_number(1000), mock_manifest_endpoints_for_block_number(1000):
         manifests.sync_manifests()
         blocks.process_block_allowance_with_reporting(1000, supertensor_=supertensor(), live=True)
-    with set_block_number(1001):
+    with set_block_number(1001), mock_manifest_endpoints_for_block_number(1001):
         blocks.process_block_allowance_with_reporting(1001, supertensor_=supertensor(), live=True)
         resp = allowance().find_miners_with_allowance(
             1.0, ExecutorClass.always_on__llm__a6000, 1001
@@ -235,7 +236,7 @@ def test_complete(caplog, configure_logs):
     assert get_metric_values_by_remaining_labels(VALIDATOR_BLOCK_DURATION, {}) == {"": 11.99}
 
     highest_allowance = resp[0][1]
-    number_of_executors = manifest_responses(1000)[0][1].manifest[  # type: ignore[union-attr]
+    number_of_executors = manifest_responses(1000)[0][1][  # type: ignore
         ExecutorClass.always_on__llm__a6000
     ]
     assert highest_allowance == number_of_executors * 11.99 * 9009.0 / (
@@ -343,12 +344,12 @@ def test_complete(caplog, configure_logs):
         "highest_unspent_allowance": LF(highest_allowance),
         "highest_unspent_allowance_ss58": Matcher(r"stable_miner_\d{3}"),
     }
-    with set_block_number(1011):
+    with set_block_number(1011), mock_manifest_endpoints_for_block_number(1011):
         with assert_system_events(
             [
                 {
                     "type": "COMPUTE_TIME_ALLOWANCE",
-                    "subtype": "MANIFEST_TIMEOUT",
+                    "subtype": "MANIFEST_ERROR",
                     "data": {"hotkey": "malforming_miner_249"},
                 },
                 {
@@ -367,8 +368,11 @@ def test_complete(caplog, configure_logs):
         assert LF(dict(resp)[hotkey]) == allowance_, hotkey  # but nothing else should have changed
 
     for block_number in range(1011, 1102):
-        with set_block_number(block_number):
-            if not block_number % 25:
+        if not block_number % 25:
+            with (
+                set_block_number(block_number),
+                mock_manifest_endpoints_for_block_number(block_number),
+            ):
                 sync_manifests()
                 with (
                     freeze_time(datetime.datetime(2025, 1, 1, 12, 0, 0)) as freezer,
@@ -515,7 +519,7 @@ def test_complete(caplog, configure_logs):
 @pytest.mark.filterwarnings("ignore::pytest.PytestUnraisableExceptionWarning")
 def test_blocks_out_of_order(configure_logs):
     for block_number in [1000, 1011, 1025, 1050, 1075, 1100]:
-        with set_block_number(block_number):
+        with set_block_number(block_number), mock_manifest_endpoints_for_block_number(block_number):
             sync_manifests()
     block_numbers = list(range(1000, 1101))
     random.Random(42).shuffle(block_numbers)
@@ -539,7 +543,7 @@ def test_allowance_reservation_corner_cases(configure_logs):
     """Test all corner cases of reserve_allowance, undo_allowance_reservation, and spend_allowance methods."""
 
     # Set up initial state with some blocks and allowances
-    with set_block_number(1000):
+    with set_block_number(1000), mock_manifest_endpoints_for_block_number(1000):
         manifests.sync_manifests()
         blocks.process_block_allowance_with_reporting(1000, supertensor_=supertensor())
 
@@ -684,7 +688,7 @@ def test_allowance_reservation_corner_cases(configure_logs):
 
 @pytest.mark.django_db(transaction=True)
 def test_manifests(configure_logs):
-    with set_block_number(1000):
+    with set_block_number(1000), mock_manifest_endpoints_for_block_number(1000):
         sync_manifests()
 
         miner_manifests = allowance().get_manifests()
@@ -705,7 +709,7 @@ def test_manifests(configure_logs):
         assert not miner_manifests
 
     # test with a block number after START_CHANGING_MANIFESTS_BLOCK
-    with set_block_number(1020):
+    with set_block_number(1020), mock_manifest_endpoints_for_block_number(1020):
         sync_manifests()
 
         miner_manifests = allowance().get_manifests()
@@ -727,10 +731,10 @@ def test_manifests(configure_logs):
         assert whacky_miner in miner_manifests
         whacky_execs = miner_manifests[whacky_miner]
         assert (
-            whacky_execs[target_ec] == responses_1020[whacky_miner].manifest[target_ec]  # type: ignore[union-attr]
+            whacky_execs[target_ec] == responses_1020[whacky_miner][target_ec]  # type: ignore
         )
         assert (
-            whacky_execs[target_ec] != responses_1000[whacky_miner].manifest[target_ec]  # type: ignore[union-attr]
+            whacky_execs[target_ec] != responses_1000[whacky_miner][target_ec]  # type: ignore
         )
 
         # Do the same check for an always-increasing miner
@@ -739,12 +743,12 @@ def test_manifests(configure_logs):
         )
         assert always_inc_miner in miner_manifests
         always_execs = miner_manifests[always_inc_miner]
-        expected_inc_1020 = responses_1020[always_inc_miner].manifest[target_ec]  # type: ignore[union-attr]
+        expected_inc_1020 = responses_1020[always_inc_miner][target_ec]  # type: ignore
         # sync_manifests clamps by max_executors_per_class; in tests this aligns with EXECUTOR_CAP
         expected_inc_1020_clamped = min(expected_inc_1020, EXECUTOR_CAP[target_ec])
         assert always_execs[target_ec] == expected_inc_1020_clamped
         assert (
-            always_execs[target_ec] != responses_1000[always_inc_miner].manifest[target_ec]  # type: ignore[union-attr]
+            always_execs[target_ec] != responses_1000[always_inc_miner][target_ec]  # type: ignore
         )
 
 
