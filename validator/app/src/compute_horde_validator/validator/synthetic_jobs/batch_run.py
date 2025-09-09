@@ -74,6 +74,7 @@ from compute_horde_validator.validator.dynamic_config import (
     get_streaming_job_executor_classes,
     get_system_event_limits,
 )
+from compute_horde_validator.validator.manifest import parse_manifest_response
 from compute_horde_validator.validator.models import (
     Miner,
     MinerManifest,
@@ -985,35 +986,11 @@ async def _get_miner_manifest(
         async with aiohttp.ClientSession() as session:
             url = f"http://{miner.address}:{miner.port}/v0.1/manifest"
             async with await session.get(url) as response:
-                # Try to parse the response as JSON and ensure that it has an "error" key if
-                # anything goes wrong
-                try:
-                    data = await response.json()
-                except Exception:
-                    try:
-                        data = {"error": await response.text()}
-                    except Exception:
-                        data = {"error": "No response body"}
-
                 if response.status == 200:
-                    manifest = data.get("manifest", {})
-                    # Convert manifests back into the enums
-                    manifest = {
-                        ExecutorClass(executor_class): count
-                        for executor_class, count in manifest.items()
-                    }
+                    manifest = await parse_manifest_response(response)
                 else:
                     name = ctx.names[miner_hotkey]
-                    logger.warning(
-                        "%s HTTP connection error (%s): %s", name, response.status, data["error"]
-                    )
-                    ctx.system_event(
-                        type=SystemEvent.EventType.MINER_SYNTHETIC_JOB_FAILURE,
-                        subtype=SystemEvent.EventSubType.MINER_CONNECTION_ERROR,
-                        description=f"HTTP connection error ({response.status}): {data['error']}",
-                        miner_hotkey=miner_hotkey,
-                        func="connect",
-                    )
+                    logger.warning("%s HTTP connection error (Status %s)", name, response.status)
                     return
 
     ctx.manifests[miner_hotkey] = manifest
@@ -2407,7 +2384,6 @@ async def execute_synthetic_batch_run(
     try:
         await _multi_close_client(ctx)
     except (Exception, asyncio.CancelledError) as exc:
-        raise exc
         logger.error("Synthetic jobs batch failure: %r", exc)
         ctx.system_event(
             type=SystemEvent.EventType.VALIDATOR_FAILURE,
@@ -2423,7 +2399,6 @@ async def execute_synthetic_batch_run(
     try:
         await _emit_telemetry_events(ctx)
     except (Exception, asyncio.CancelledError) as exc:
-        raise exc
         logger.error("Synthetic jobs batch failure: %r", exc)
         ctx.system_event(
             type=SystemEvent.EventType.VALIDATOR_FAILURE,

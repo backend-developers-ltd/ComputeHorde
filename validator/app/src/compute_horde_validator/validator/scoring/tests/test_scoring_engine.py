@@ -1,3 +1,4 @@
+import asyncio
 import uuid
 from datetime import timedelta
 from unittest.mock import MagicMock, patch
@@ -18,6 +19,7 @@ from compute_horde_validator.validator.scoring.engine import DefaultScoringEngin
 from compute_horde_validator.validator.scoring.models import (
     MinerMainHotkey,
 )
+from compute_horde_validator.validator.tests.transport import SimulationTransport
 
 
 class TestMainHotkeyScoringEngine(TestCase):
@@ -66,8 +68,58 @@ class TestMainHotkeyScoringEngine(TestCase):
         self.validator_hotkey = keypair.ss58_address
         self.validator_keypair = keypair
 
+        # Create simulation transports
+        self.transport1 = SimulationTransport("miner1")
+        self.transport2 = SimulationTransport("miner2")
+        self.transport3 = SimulationTransport("miner3")
+
+        asyncio.run(self._setup_transports())
+
+    async def _setup_transports(self):
+        """Set up transport messages asynchronously."""
+        self._reset_transports()
+
+        self.transport_mapping = {
+            "hotkey1": self.transport1,
+            "hotkey2": self.transport1,
+            "hotkey3": self.transport2,
+            "hotkey4": self.transport2,
+            "hotkey5": self.transport2,
+            # No response from hotkey 6
+            "hotkey7": self.transport3,
+        }
+
     def tearDown(self):
         super().tearDown()
+        self._reset_transports()
+
+    def _reset_transports(self):
+        for transport in [self.transport1, self.transport2, self.transport3]:
+            transport.received.clear()
+            transport.sent.clear()
+            transport.receive_at_counter = 0
+            transport.to_receive.clear()
+
+    def _get_mock_wstransport_constructor(self):
+        """Get a mock WSTransport constructor that returns simulation transports."""
+
+        def mock_wstransport_constructor(name, url, max_retries=2):
+            if ":8081" in url:
+                return self.transport1
+            elif ":8082" in url:
+                return self.transport2
+            elif ":8083" in url:
+                return self.transport3
+            elif ":8084" in url:
+                return self.transport1
+            elif ":8085" in url:
+                return self.transport2
+            elif ":8086" in url:
+                return self.transport2
+            else:
+                raise ValueError(f"Unknown URL: {url}")
+
+        return mock_wstransport_constructor
 
     def _get_mock_http_responses(self):
         """Get a mock HTTP response for _query_single_miner."""

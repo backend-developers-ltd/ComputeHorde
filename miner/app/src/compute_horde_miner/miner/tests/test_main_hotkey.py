@@ -73,7 +73,7 @@ async def test_get_main_hotkey_exception():
         assert response.status_code == 500
         data = json.loads(response.content)
         assert "error" in data
-        assert "Test error" in data["error"]
+        assert data["error"] == "Could not get main hotkey"
 
 
 @pytest.mark.django_db

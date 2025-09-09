@@ -68,8 +68,8 @@ class MinerConfig(TypedDict):
     hotkey: str
     address: str
     port: int
-    manifest: dict[ExecutorClass, int]
-    wait_before: int
+    manifest: dict[ExecutorClass, int] | None
+    wait_before: float
 
 
 @contextmanager

@@ -5,6 +5,7 @@ from celery.utils.log import get_task_logger
 from compute_horde_core.executor_class import ExecutorClass
 from django.conf import settings
 
+from compute_horde_validator.validator.manifest import parse_manifest_response
 from compute_horde_validator.validator.models import (
     SystemEvent,
 )
@@ -31,13 +32,7 @@ async def get_single_manifest(
                 url = f"http://{address}:{port}/v0.1/manifest"
                 async with await session.get(url) as response:
                     if response.status == 200:
-                        response_json = await response.json()
-                        manifest = response_json.get("manifest", {})
-                        # Convert manifests back into the enums
-                        manifest = {
-                            ExecutorClass(executor_class): count
-                            for executor_class, count in manifest.items()
-                        }
+                        manifest = await parse_manifest_response(response)
                         return hotkey, manifest
                     else:
                         msg = f"HTTP {response.status} fetching manifest for {hotkey}"

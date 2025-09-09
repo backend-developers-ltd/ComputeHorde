@@ -9,7 +9,7 @@ from compute_horde_core.executor_class import ExecutorClass
 
 from compute_horde_validator.validator.allowance.utils import supertensor
 
-from ...tests.helpers import mock_manifest_endpoints
+from ...tests.helpers import MinerConfig, mock_manifest_endpoints
 
 NUM_MINERS = 250
 NUM_VALIDATORS = 6
@@ -281,32 +281,31 @@ def set_block_number(block_number_):
 
 
 @contextmanager
-def mock_manifest_endpoints_for_block_number(block_number_):
+def mock_manifest_endpoints_for_block_number(block_number_: int):
     # Create miner configs from the manifest response and the corresponding IP/port combination
-    def create_miner_config():
-        miners = {
-            miner.hotkey: (miner.axon_info.ip, miner.axon_info.port)
-            for miner in list_neurons(block_number_, with_shield=False)
-        }
-        responses = manifest_responses(block_number_)
-        configs = []
-        for _hotkey, _manifest, _delay in responses:
-            # Some miners are designed to be missing for certain block numbers
-            try:
-                ip, port = miners[_hotkey]
-            except KeyError:
-                continue
+    miners = {
+        miner.hotkey: (miner.axon_info.ip, miner.axon_info.port)
+        for miner in list_neurons(block_number_, with_shield=False)
+    }
 
-            configs.append(
-                {
-                    "hotkey": _hotkey,
-                    "address": ip,
-                    "port": port,
-                    "manifest": _manifest,
-                    "wait_before": _delay,
-                }
-            )
-        return configs
+    responses = manifest_responses(block_number_)
+    configs: list[MinerConfig] = []
+    for _hotkey, _manifest, _delay in responses:
+        # Some miners are designed to be missing for certain block numbers
+        try:
+            ip, port = miners[_hotkey]
+        except KeyError:
+            continue
 
-    with mock_manifest_endpoints(create_miner_config()):
+        configs.append(
+            {
+                "hotkey": _hotkey,
+                "address": ip,
+                "port": port,
+                "manifest": _manifest,
+                "wait_before": _delay,
+            }
+        )
+
+    with mock_manifest_endpoints(miner_configs=configs):
         yield
