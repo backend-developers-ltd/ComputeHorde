@@ -1,13 +1,16 @@
 import asyncio
 import logging
+from datetime import datetime
 from typing import assert_never
 
-from asgiref.sync import sync_to_async
+from asgiref.sync import async_to_sync, sync_to_async
 from compute_horde.fv_protocol.facilitator_requests import (
     OrganicJobRequest,
     V2JobRequest,
 )
+from compute_horde_core.executor_class import ExecutorClass
 from django.conf import settings
+from django.utils import timezone
 
 from compute_horde_validator.validator.allowance.default import allowance
 from compute_horde_validator.validator.allowance.types import (
@@ -17,8 +20,8 @@ from compute_horde_validator.validator.allowance.types import (
 from compute_horde_validator.validator.allowance.types import (
     Miner as AllowanceMiner,
 )
-from compute_horde_validator.validator.allowance.utils.supertensor import supertensor
 from compute_horde_validator.validator.models import Miner
+from compute_horde_validator.validator.receipts.default import receipts
 from compute_horde_validator.validator.routing.base import RoutingBase
 from compute_horde_validator.validator.routing.types import (
     AllMinersBusy,
@@ -83,7 +86,7 @@ def _pick_miner_for_job_v2(request: V2JobRequest) -> JobRoute:
         request.download_time_limit + request.execution_time_limit + request.upload_time_limit
     )
 
-    current_block = supertensor().get_current_block()
+    current_block = allowance().get_current_block()
 
     # 1. Find miners with enough allowance
     try:
@@ -100,9 +103,36 @@ def _pick_miner_for_job_v2(request: V2JobRequest) -> JobRoute:
         raise
 
     miners = {miner.hotkey_ss58: miner for miner in allowance().miners()}
+    manifests = allowance().get_manifests()
+
+    # Get receipts instance once to avoid bound method issues with async_to_sync
+    receipts_instance = receipts()
+
+    # Create async wrapper functions to avoid bound method warnings
+    async def get_busy_executor_count(executor_class: ExecutorClass, at_time: datetime):
+        return await receipts_instance.get_busy_executor_count(executor_class, at_time)
+
+    busy_executors = async_to_sync(get_busy_executor_count)(executor_class, timezone.now())
 
     # 2. Iterate and try to reserve a miner
     for miner_hotkey, _ in suitable_miners:
+        ongoing_jobs = busy_executors.get(miner_hotkey, 0)
+
+        executor_dict = manifests.get(miner_hotkey, {})
+        executor_count = executor_dict.get(executor_class, 0)
+
+        if ongoing_jobs >= executor_count:
+            logger.debug(
+                f"Skipping miner {miner_hotkey} with {executor_count} executors "
+                f"{ongoing_jobs} ongoing jobs at [{current_block}]"
+            )
+            continue
+
+        logger.info(
+            f"Picking miner {miner_hotkey} with {executor_count} executors "
+            f"{ongoing_jobs} ongoing jobs at [{current_block}]"
+        )
+
         try:
             # 3. Reserve allowance for this miner
             reservation_id, blocks = allowance().reserve_allowance(

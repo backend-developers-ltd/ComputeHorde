@@ -52,7 +52,7 @@ class AdminJobRequestForm(forms.ModelForm):
         ]
 
     def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+        super(__class__, self).__init__(*args, **kwargs)
         if self.fields:
             # exclude blacklisted miners from valid results
             self.fields["miner"].queryset = Miner.objects.exclude(minerblacklist__isnull=False)

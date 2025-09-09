@@ -205,28 +205,6 @@ class Receipts(ReceiptsBase):
         return payload, validator_signature
 
     @deprecated("Use database queries instead")
-    async def get_valid_job_started_receipts_for_miner(
-        self, miner_hotkey: str, at_time: datetime.datetime
-    ) -> list[JobStartedReceipt]:
-        return [
-            receipt
-            async for receipt in JobStartedReceipt.objects.valid_at(at_time).filter(
-                miner_hotkey=miner_hotkey
-            )
-        ]
-
-    @deprecated("Use database queries instead")
-    async def get_job_finished_receipts_for_miner(
-        self, miner_hotkey: str, job_uuids: list[str]
-    ) -> list[JobFinishedReceipt]:
-        return [
-            receipt
-            async for receipt in JobFinishedReceipt.objects.filter(
-                miner_hotkey=miner_hotkey, job_uuid__in=job_uuids
-            )
-        ]
-
-    @deprecated("Use database queries instead")
     async def get_job_started_receipt_by_uuid(self, job_uuid: str) -> JobStartedReceipt:
         return await JobStartedReceipt.objects.aget(job_uuid=job_uuid)
 
