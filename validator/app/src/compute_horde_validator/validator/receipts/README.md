@@ -54,19 +54,6 @@ finished = receipts().create_job_finished_receipt(
 - Query receipts:
 
 ```python
-# All valid JobStarted for a miner at a timestamp
-receipts: list[JobStartedReceipt] = await receipts().get_valid_job_started_receipts_for_miner(
-    miner_hotkey: str,
-    at_time: datetime.datetime,
-)
-
-# JobFinished for a miner and a set of job UUIDs
-receipts: list[JobFinishedReceipt] = await receipts().get_job_finished_receipts_for_miner(
-    miner_hotkey: str,
-    job_uuids: list[str],
-)
-# Raises: No specific exceptions, returns empty list on errors
-
 # JobStarted by job UUID
 receipt: JobStartedReceipt = await receipts().get_job_started_receipt_by_uuid(job_uuid: str)
 # Raises: JobStartedReceipt.DoesNotExist if receipt not found

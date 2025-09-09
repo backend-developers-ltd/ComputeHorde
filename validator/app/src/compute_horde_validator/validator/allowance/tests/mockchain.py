@@ -252,11 +252,14 @@ def get_block_timestamp(block_number):
 
 
 @contextmanager
-def set_block_number(block_number_):
+def set_block_number(block_number_, oldest_reachable_block: float | int = float("-inf")):
     class MockSuperTensor(supertensor.BaseSuperTensor):
         def __init__(self, *args, **kwargs):
             super().__init__(*args, **kwargs)
             self.block_number = block_number_
+
+        def inc_block_number(self):
+            self.block_number += 1
 
         def get_current_block(self):
             return self.block_number
@@ -275,6 +278,9 @@ def set_block_number(block_number_):
 
         def wallet(self):
             return get_test_validator_wallet()
+
+        def oldest_reachable_block(self) -> float | int:
+            return oldest_reachable_block
 
     with patch.object(supertensor, "_supertensor_instance", MockSuperTensor()):
         yield
