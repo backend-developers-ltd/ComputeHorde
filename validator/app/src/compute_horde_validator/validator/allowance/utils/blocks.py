@@ -96,10 +96,11 @@ def wait_for_block(target_block: int, timeout_seconds: float):
         time.sleep(0.1)
 
 
-def get_stake_share(validator_list: list[turbobt.Neuron], validator: turbobt.Neuron):
+def get_stake_share(validator_list: list[turbobt.Neuron], validator: turbobt.Neuron, subnet_state: dict | None = None):
     try:
-        return validator.stake / sum(validator.stake for validator in validator_list)
-    except ZeroDivisionError:
+        total_stake_sum = sum(subnet_state["total_stake"][v.uid] for v in validator_list)
+        return subnet_state["total_stake"][validator.uid] / total_stake_sum
+    except (ZeroDivisionError, KeyError, IndexError):
         return 0.0
 
 
@@ -190,8 +191,13 @@ def process_block_allowance(
                     finalized_block.end_timestamp - finalized_block.creation_timestamp
                 ).total_seconds()
 
+                subnet_state = supertensor_.get_subnet_state(finalized_block.block_number)
+                stake_shares = {
+                    v.hotkey: get_stake_share(validators, v, subnet_state)
+                    for v in validators
+                }
                 result[finalized_block.block_number] = (
-                    {v.hotkey: get_stake_share(validators, v) for v in validators},
+                    stake_shares,
                     manifests,
                     block_duration,
                 )
@@ -205,12 +211,13 @@ def process_block_allowance(
                 for neuron in neurons:
                     for validator in validators:
                         for executor_class in ExecutorClass:
+                            validator_stake_share = stake_shares.get(validator.hotkey, 0.0)
                             new_block_allowances.append(
                                 BlockAllowance(
                                     block=finalized_block,
                                     allowance=(
                                         manifests.get((neuron.hotkey, executor_class), 0.0)
-                                        * get_stake_share(validators, validator)
+                                        * validator_stake_share
                                         * block_duration
                                     ),
                                     miner_ss58=neuron.hotkey,

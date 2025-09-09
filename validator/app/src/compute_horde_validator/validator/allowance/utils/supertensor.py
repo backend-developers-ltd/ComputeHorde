@@ -200,10 +200,15 @@ class SuperTensor(BaseSuperTensor):
             result: list[turbobt.Neuron] = await subnet.list_neurons()
             return result
 
-    def list_validators(self, block_number: int) -> list[turbobt.Neuron]:
-        return [n for n in self.list_neurons(block_number) if n.stake >= 1000]
-        # TODO: yes this is reimplementing `subnet.list_validators()` but since turbobt doesn't support caching yet
-        # (or i don't know how to use it) it's just too time consuming to be doing it properly
+    @RETRY_ON_TIMEOUT
+    @archive_fallback
+    @make_sync
+    async def list_validators(self, block_number: int) -> list[turbobt.Neuron]:
+        bittensor = bittensor_context.get()
+        subnet = subnet_context.get()
+        async with bittensor.block(block_number):
+            result: list[turbobt.Neuron] = await subnet.list_validators()
+            return result
 
     @archive_fallback
     @make_sync
@@ -217,6 +222,18 @@ class SuperTensor(BaseSuperTensor):
     @RETRY_ON_TIMEOUT
     def get_block_timestamp(self, block_number: int) -> datetime.datetime:
         return self._get_block_timestamp(block_number)
+
+    @archive_fallback
+    @make_sync
+    async def _get_subnet_state(self, block_number: int) -> turbobt.subnet.SubnetState:
+        bittensor = bittensor_context.get()
+        subnet = subnet_context.get()
+        async with bittensor.block(block_number):
+            return await subnet.get_state()
+
+    @RETRY_ON_TIMEOUT
+    def get_subnet_state(self, block_number: int) -> turbobt.subnet.SubnetState:
+        return self._get_subnet_state(block_number)
 
     @RETRY_ON_TIMEOUT
     @make_sync
