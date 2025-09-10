@@ -30,6 +30,11 @@ JOB_REQUEST = V2JobRequest(
 )
 
 
+def clone_job(**updates) -> V2JobRequest:
+    """Helper to create modified copies of JOB_REQUEST (pydantic v2)."""
+    return JOB_REQUEST.model_copy(update=updates)
+
+
 @pytest_asyncio.fixture(autouse=True)
 async def mock_block_number():
     with await sync_to_async(set_block_number)(1005):
@@ -68,7 +73,7 @@ async def test_pick_miner_for_job__picks_a_miner_and_undo_allowance(add_allowanc
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_pick_miner_for_job__trusted_miner(add_allowance):
-    job_request = JOB_REQUEST.__replace__(on_trusted_miner=True)
+    job_request = clone_job(on_trusted_miner=True)
     job_route = await routing().pick_miner_for_job_request(job_request)
     assert job_route.miner.hotkey_ss58 == TRUSTED_MINER_FAKE_KEY
     assert job_route.allowance_blocks is None
@@ -79,9 +84,7 @@ async def test_pick_miner_for_job__trusted_miner(add_allowance):
 @pytest.mark.asyncio
 async def test_pick_miner_for_job__no_matching_executor_class(add_allowance):
     with pytest.raises(NotEnoughAllowanceException):
-        await routing().pick_miner_for_job_request(
-            JOB_REQUEST.__replace__(executor_class="non.existent.class")
-        )
+        await routing().pick_miner_for_job_request(clone_job(executor_class="non.existent.class"))
 
 
 @pytest.mark.django_db(transaction=True)
@@ -95,7 +98,7 @@ async def test_pick_miner_for_job__no_allowance():
 @pytest.mark.asyncio
 async def test_pick_miner_for_job__no_miner_with_enough_allowance(add_allowance):
     with pytest.raises(NotEnoughAllowanceException):
-        job_request = JOB_REQUEST.__replace__(execution_time_limit=101)
+        job_request = clone_job(execution_time_limit=101)
         await routing().pick_miner_for_job_request(job_request)
 
 
@@ -115,13 +118,13 @@ async def test_pick_miner_for_two_jobs(add_allowance):
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_pick_miner_for_two_long_jobs(add_allowance):
-    job_request1 = JOB_REQUEST.__replace__(uuid=str(uuid.uuid4()), execution_time_limit=19)
+    job_request1 = clone_job(uuid=str(uuid.uuid4()), execution_time_limit=19)
     job_route1 = await routing().pick_miner_for_job_request(job_request1)
     assert job_route1.allowance_blocks == [1001, 1002]
     assert job_route1.allowance_reservation_id is not None
     await sync_to_async(allowance().spend_allowance)(job_route1.allowance_reservation_id)
 
-    job_request2 = JOB_REQUEST.__replace__(uuid=str(uuid.uuid4()), execution_time_limit=19)
+    job_request2 = clone_job(uuid=str(uuid.uuid4()), execution_time_limit=19)
     job_route2 = await routing().pick_miner_for_job_request(job_request2)
     assert job_route2.allowance_blocks == [1001, 1002]
     assert job_route2.allowance_reservation_id is not None
@@ -163,7 +166,7 @@ async def test_pick_miner_for_job__skips_busy_miner_based_on_receipts(add_allowa
     assert busy_miner_hotkey is not None, "No miner with executors found for the requested class"
 
     # Simulate ongoing jobs saturating the busy miner via receipts.get_busy_executor_count
-    async def _fake_get_busy_executor_count(executor_class, at_time):
+    async def _fake_get_busy_executor_count(_executor_class, _at_time):
         return {busy_miner_hotkey: busy_executor_count}
 
     monkeypatch.setattr(receipts(), "get_busy_executor_count", _fake_get_busy_executor_count)
@@ -210,7 +213,7 @@ async def test_pick_miner_for_job__miner_becomes_eligible_after_one_finished_rec
     assert target_miner_hotkey is not None, "No miner with executors found for the requested class"
 
     # Simulate that one slot is free (executor_count - 1 ongoing jobs)
-    async def _fake_get_busy_executor_count(executor_class, at_time):
+    async def _fake_get_busy_executor_count(_executor_class, _at_time):
         return {target_miner_hotkey: max(0, executor_count - 1)}
 
     monkeypatch.setattr(receipts(), "get_busy_executor_count", _fake_get_busy_executor_count)
@@ -254,7 +257,7 @@ async def test_pick_miner_for_job__miner_fully_free_picked(add_allowance, monkey
     assert target_miner_hotkey is not None, "No miner with executors found for the requested class"
 
     # Mock receipts.get_busy_executor_count to return no ongoing jobs for any miner.
-    async def _fake_get_busy_executor_count(executor_class, at_time):
+    async def _fake_get_busy_executor_count(_executor_class, _at_time):
         return {}
 
     monkeypatch.setattr(receipts(), "get_busy_executor_count", _fake_get_busy_executor_count)
@@ -300,7 +303,7 @@ async def test_pick_miner_for_job__miner_fully_busy_not_picked(add_allowance, mo
     target_miner_hotkey, executor_count = miners_with_capacity[0]
 
     # Simulate the target miner is saturated; finishes on other miner must not free it
-    async def _fake_get_busy_executor_count(executor_class, at_time):
+    async def _fake_get_busy_executor_count(_executor_class, _at_time):
         return {target_miner_hotkey: executor_count}
 
     monkeypatch.setattr(receipts(), "get_busy_executor_count", _fake_get_busy_executor_count)
@@ -341,20 +344,15 @@ async def test_pick_miner_for_job__all_miners_fully_busy_raises(add_allowance, m
 
     assert len(miners_with_capacity) == 2, "Could not find two miners with executors"
 
-    limited_miners = miners_with_capacity.copy()
+    # Simulate each suitable miner (not just the first two) fully saturated (busy executors == executor_count)
+    # so that routing cannot find any free executors and raises AllMinersBusy.
+    busy_map = {}
+    for miner_hotkey, _allowance_available in initial_suitable:
+        count = manifests_map.get(miner_hotkey, {}).get(DEFAULT_EXECUTOR_CLASS, 0)
+        if count > 0:
+            busy_map[miner_hotkey] = count
 
-    # Patch finder to return only our limited set
-    def _limited_find_miners_with_allowance(*, allowance_seconds, executor_class, job_start_block):
-        return [(hk, allowance_seconds) for hk, _ in limited_miners]
-
-    monkeypatch.setattr(
-        allowance(), "find_miners_with_allowance", _limited_find_miners_with_allowance
-    )
-
-    # Simulate both miners are saturated via receipts.get_busy_executor_count
-    busy_map = {hk: cnt for hk, cnt in limited_miners}
-
-    async def _fake_get_busy_executor_count(executor_class, at_time):
+    async def _fake_get_busy_executor_count(_executor_class, _at_time):
         return busy_map
 
     monkeypatch.setattr(receipts(), "get_busy_executor_count", _fake_get_busy_executor_count)

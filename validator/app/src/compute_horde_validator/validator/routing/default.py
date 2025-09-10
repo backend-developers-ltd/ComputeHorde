@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import assert_never
 
 from asgiref.sync import async_to_sync, sync_to_async
@@ -10,6 +10,7 @@ from compute_horde.fv_protocol.facilitator_requests import (
 )
 from compute_horde_core.executor_class import ExecutorClass
 from django.conf import settings
+from django.db.models import Count
 from django.utils import timezone
 
 from compute_horde_validator.validator.allowance.default import allowance
@@ -20,12 +21,14 @@ from compute_horde_validator.validator.allowance.types import (
 from compute_horde_validator.validator.allowance.types import (
     Miner as AllowanceMiner,
 )
-from compute_horde_validator.validator.models import Miner
+from compute_horde_validator.validator.models import Miner, MinerIncident
 from compute_horde_validator.validator.receipts.default import receipts
 from compute_horde_validator.validator.routing.base import RoutingBase
+from compute_horde_validator.validator.routing.settings import MINER_RELIABILITY_WINDOW
 from compute_horde_validator.validator.routing.types import (
     AllMinersBusy,
     JobRoute,
+    MinerIncidentType,
 )
 from compute_horde_validator.validator.utils import TRUSTED_MINER_FAKE_KEY
 
@@ -42,6 +45,20 @@ class Routing(RoutingBase):
                 return await sync_to_async(_pick_miner_for_job_v2)(request)
 
         assert_never(request)
+
+    async def report_miner_incident(
+        self,
+        type: MinerIncidentType,
+        hotkey_ss58address: str,
+        job_uuid: str,
+        executor_class: ExecutorClass,
+    ) -> None:
+        await MinerIncident.objects.acreate(
+            type=type,
+            hotkey_ss58address=hotkey_ss58address,
+            job_uuid=job_uuid,
+            executor_class=executor_class.value,
+        )
 
 
 _routing_instance: Routing | None = None
@@ -105,6 +122,18 @@ def _pick_miner_for_job_v2(request: V2JobRequest) -> JobRoute:
     miners = {miner.hotkey_ss58: miner for miner in allowance().miners()}
     manifests = allowance().get_manifests()
 
+    per_executor_scores = _get_miners_reliability_score(
+        MINER_RELIABILITY_WINDOW, executor_class, manifests
+    )
+
+    def miner_sort_key(miner_tuple: tuple[str, float]) -> float:
+        # for same reliability, keep original available_allowance order (stable sort)
+        miner_hotkey, _available_allowance = miner_tuple
+        return per_executor_scores.get(miner_hotkey, 0)
+
+    # Sort suitable miners by per-executor reliability (higher is better)
+    suitable_miners.sort(key=miner_sort_key, reverse=True)
+
     # Get receipts instance once to avoid bound method issues with async_to_sync
     receipts_instance = receipts()
 
@@ -165,3 +194,34 @@ def _pick_miner_for_job_v2(request: V2JobRequest) -> JobRoute:
     # If the loop completes without returning, all suitable miners failed to be reserved
     logger.warning(f"All suitable miners were busy or failed to reserve for job {request.uuid}.")
     raise AllMinersBusy("Could not reserve any of the suitable miners.")
+
+
+def _get_miners_reliability_score(
+    reliability_window: timedelta,
+    executor_class: ExecutorClass,
+    manifests: dict[str, dict[ExecutorClass, int]],
+) -> dict[str, float]:
+    """Return per-executor reliability score for miners.
+
+    Raw reliability is negative incident count (0 for no incidents). This is divided by executor count
+    (from manifests) to yield a per-executor reliability value. Higher (closer to 0) is better.
+    If executor count is missing or zero, it's treated as 1 to avoid division by zero.
+    Miners with no incidents are given score 0.
+    """
+    reliability_window_start = timezone.now() - reliability_window
+
+    incidents = (
+        MinerIncident.objects.filter(
+            timestamp__gte=reliability_window_start, executor_class=executor_class.value
+        )
+        .values("hotkey_ss58address")
+        .annotate(cnt=Count("id"))
+    )
+    raw_scores: dict[str, int] = {row["hotkey_ss58address"]: -row["cnt"] for row in incidents}
+
+    per_executor: dict[str, float] = {}
+    for miner_hotkey, execs in manifests.items():
+        executor_count = execs.get(executor_class, 1) or 1
+        raw = raw_scores.get(miner_hotkey, 0)
+        per_executor[miner_hotkey] = raw / executor_count
+    return per_executor
