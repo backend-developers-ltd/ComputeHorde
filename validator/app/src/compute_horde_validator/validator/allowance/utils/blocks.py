@@ -215,8 +215,8 @@ def process_block_allowance(
                                         manifests.get((neuron.hotkey, executor_class), 0.0)
                                         * get_stake_share(validators, validator)
                                         * block_duration
-                                        * os.environ.get(
-                                            "DEBUG_BLOCK_ALLOWANCE_MULTIPLIER", 1.0
+                                        * float(
+                                            os.environ.get("DEBUG_BLOCK_ALLOWANCE_MULTIPLIER", 1.0)
                                         )  # TODO: remove me
                                     ),
                                     miner_ss58=neuron.hotkey,
