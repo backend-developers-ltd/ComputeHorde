@@ -28,7 +28,7 @@ This project has several subprojects:
 5. compute_horde_sdk
 6. compute_horde lib
 
-This project uses Astral uv. Use `uv run` to run Python code or Python tools.
+This project uses Astral uv. Use `uv run` to run Python code or Python tools. Do not try to create or activate a venv manually.
 
 to run type checking in validator: `cd validator; uv run nox -s type_check`
 
