@@ -96,7 +96,11 @@ def wait_for_block(target_block: int, timeout_seconds: float):
         time.sleep(0.1)
 
 
-def get_stake_share(validator_list: list[turbobt.Neuron], validator: turbobt.Neuron, subnet_state: dict | None = None):
+def get_stake_share(
+    validator_list: list[turbobt.Neuron],
+    validator: turbobt.Neuron,
+    subnet_state: dict | None = None,
+):
     try:
         total_stake_sum = sum(subnet_state["total_stake"][v.uid] for v in validator_list)
         return subnet_state["total_stake"][validator.uid] / total_stake_sum
@@ -177,7 +181,10 @@ def process_block_allowance(
 
             neurons = supertensor_.list_neurons(finalized_block.block_number)
 
-            validators = supertensor_.list_validators(finalized_block.block_number)
+            subnet_state = supertensor_.get_subnet_state(finalized_block.block_number)
+            validators = supertensor_.list_validators(
+                finalized_block.block_number, subnet_state=subnet_state
+            )
 
             hotkeys_from_metagraph = [neuron.hotkey for neuron in neurons]
 
@@ -191,11 +198,10 @@ def process_block_allowance(
                     finalized_block.end_timestamp - finalized_block.creation_timestamp
                 ).total_seconds()
 
-                subnet_state = supertensor_.get_subnet_state(finalized_block.block_number)
                 stake_shares = {
-                    v.hotkey: get_stake_share(validators, v, subnet_state)
-                    for v in validators
+                    v.hotkey: get_stake_share(validators, v, subnet_state) for v in validators
                 }
+
                 result[finalized_block.block_number] = (
                     stake_shares,
                     manifests,

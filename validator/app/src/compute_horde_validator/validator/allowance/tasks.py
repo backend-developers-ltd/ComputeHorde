@@ -46,6 +46,7 @@ def scan_blocks_and_calculate_allowance(
         logger.warning("No miner manifests found, skipping allowance calculation")
         return
     current_block = supertensor().get_current_block()
+    logger.info(f"Scanning blocks and calculating allowance for {current_block=}")
     with transaction.atomic(using=settings.DEFAULT_DB_ALIAS):
         try:
             with Lock(LockType.ALLOWANCE_FETCHING, LOCK_WAIT_TIMEOUT, settings.DEFAULT_DB_ALIAS):

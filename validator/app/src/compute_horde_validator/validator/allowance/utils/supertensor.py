@@ -103,7 +103,9 @@ class BaseSuperTensor(abc.ABC):
     def list_neurons(self, block_number: int) -> list[turbobt.Neuron]: ...
 
     @abc.abstractmethod
-    def list_validators(self, block_number: int) -> list[turbobt.Neuron]: ...
+    def list_validators(
+        self, block_number: int, subnet_state: turbobt.subnet.SubnetState | None = None
+    ) -> list[turbobt.Neuron]: ...
 
     @abc.abstractmethod
     def get_block_timestamp(self, block_number: int) -> datetime.datetime: ...
@@ -203,12 +205,29 @@ class SuperTensor(BaseSuperTensor):
     @RETRY_ON_TIMEOUT
     @archive_fallback
     @make_sync
-    async def list_validators(self, block_number: int) -> list[turbobt.Neuron]:
+    async def list_validators(
+        self, block_number: int, subnet_state: turbobt.subnet.SubnetState | None = None
+    ) -> list[turbobt.Neuron]:
         bittensor = bittensor_context.get()
         subnet = subnet_context.get()
         async with bittensor.block(block_number):
-            result: list[turbobt.Neuron] = await subnet.list_validators()
-            return result
+            try:
+                all_neurons: list[turbobt.Neuron] = await subnet.list_neurons()
+                if subnet_state is None:
+                    subnet_state = await subnet.get_state()
+                result = []
+                for neuron in all_neurons:
+                    if (
+                        neuron.uid < len(subnet_state["total_stake"])
+                        and subnet_state["total_stake"][neuron.uid] is not None
+                        and subnet_state["total_stake"][neuron.uid] >= 1000
+                    ):
+                        result.append(neuron)
+
+                return result
+            except Exception as e:
+                logger.error(f"Error listing validators: {e}")
+                return []
 
     @archive_fallback
     @make_sync
