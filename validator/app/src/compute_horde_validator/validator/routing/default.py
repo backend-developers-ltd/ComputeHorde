@@ -163,5 +163,5 @@ def _pick_miner_for_job_v2(request: V2JobRequest) -> JobRoute:
             continue  # Try the next miner in the list
 
     # If the loop completes without returning, all suitable miners failed to be reserved
-    logger.error(f"All suitable miners were busy or failed to reserve for job {request.uuid}.")
+    logger.warning(f"All suitable miners were busy or failed to reserve for job {request.uuid}.")
     raise AllMinersBusy("Could not reserve any of the suitable miners.")
