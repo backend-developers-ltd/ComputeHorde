@@ -50,6 +50,9 @@ from ..helpers import (
 
 DYNAMIC_ORGANIC_JOB_MAX_RETRIES_OVERRIDE = 3
 
+# Ensure collateral threshold defaults to 0 for these tests unless explicitly overridden
+pytestmark = pytest.mark.override_config(DYNAMIC_MINIMUM_COLLATERAL_AMOUNT_WEI=0)
+
 
 @asynccontextmanager
 async def async_patch_all():

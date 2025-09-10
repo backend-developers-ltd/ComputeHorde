@@ -9,6 +9,7 @@ from compute_horde.fv_protocol.facilitator_requests import (
     V2JobRequest,
 )
 from compute_horde_core.executor_class import ExecutorClass
+from constance import config
 from django.conf import settings
 from django.db.models import Count
 from django.utils import timezone
@@ -21,6 +22,7 @@ from compute_horde_validator.validator.allowance.types import (
 from compute_horde_validator.validator.allowance.types import (
     Miner as AllowanceMiner,
 )
+from compute_horde_validator.validator.collateral.default import collateral
 from compute_horde_validator.validator.models import Miner, MinerIncident
 from compute_horde_validator.validator.receipts.default import receipts
 from compute_horde_validator.validator.routing.base import RoutingBase
@@ -29,6 +31,7 @@ from compute_horde_validator.validator.routing.types import (
     AllMinersBusy,
     JobRoute,
     MinerIncidentType,
+    NotEnoughCollateralException,
 )
 from compute_horde_validator.validator.utils import TRUSTED_MINER_FAKE_KEY
 
@@ -105,7 +108,7 @@ def _pick_miner_for_job_v2(request: V2JobRequest) -> JobRoute:
 
     current_block = allowance().get_current_block()
 
-    # 1. Find miners with enough allowance
+    # Find miners with enough allowance
     try:
         suitable_miners = allowance().find_miners_with_allowance(
             allowance_seconds=executor_seconds,
@@ -118,6 +121,34 @@ def _pick_miner_for_job_v2(request: V2JobRequest) -> JobRoute:
             f"Could not find any miners with enough allowance for job {request.uuid}: {e}"
         )
         raise
+
+    # Collateral filtering: build a set of miners with sufficient collateral if threshold > 0
+    collateral_threshold = config.DYNAMIC_MINIMUM_COLLATERAL_AMOUNT_WEI
+    if collateral_threshold > 0:
+        try:
+            eligible_collateral_hotkeys = {
+                mc.hotkey
+                for mc in collateral().list_miners_with_sufficient_collateral(collateral_threshold)
+            }
+        except Exception as e:
+            logger.error(
+                "Collateral listing failed, proceeding without collateral filtering: %s", e
+            )
+        else:
+            before_count = len(suitable_miners)
+            suitable_miners = [
+                (hk, allowance_seconds)
+                for hk, allowance_seconds in suitable_miners
+                if hk in eligible_collateral_hotkeys
+            ]
+            if not suitable_miners:
+                logger.warning(
+                    "All %d miners with allowance filtered out due to insufficient collateral (< %d Wei) for job %s",
+                    before_count,
+                    collateral_threshold,
+                    request.uuid,
+                )
+                raise NotEnoughCollateralException
 
     miners = {miner.hotkey_ss58: miner for miner in allowance().miners()}
     manifests = allowance().get_manifests()
@@ -143,7 +174,7 @@ def _pick_miner_for_job_v2(request: V2JobRequest) -> JobRoute:
 
     busy_executors = async_to_sync(get_busy_executor_count)(executor_class, timezone.now())
 
-    # 2. Iterate and try to reserve a miner
+    # Iterate and try to reserve a miner
     for miner_hotkey, _ in suitable_miners:
         ongoing_jobs = busy_executors.get(miner_hotkey, 0)
 
@@ -163,7 +194,7 @@ def _pick_miner_for_job_v2(request: V2JobRequest) -> JobRoute:
         )
 
         try:
-            # 3. Reserve allowance for this miner
+            # Reserve allowance for this miner
             reservation_id, blocks = allowance().reserve_allowance(
                 miner=miner_hotkey,
                 executor_class=executor_class,

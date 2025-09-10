@@ -8,12 +8,17 @@ from compute_horde.fv_protocol.facilitator_requests import V2JobRequest
 
 from compute_horde_validator.validator.allowance.default import allowance
 from compute_horde_validator.validator.allowance.tests.mockchain import set_block_number
+from compute_horde_validator.validator.allowance.types import Miner as AllowanceMiner
 from compute_horde_validator.validator.allowance.types import NotEnoughAllowanceException
 from compute_horde_validator.validator.allowance.utils import blocks, manifests
 from compute_horde_validator.validator.allowance.utils.supertensor import supertensor
+from compute_horde_validator.validator.collateral.default import collateral
 from compute_horde_validator.validator.receipts import receipts
 from compute_horde_validator.validator.routing.default import routing
-from compute_horde_validator.validator.routing.types import AllMinersBusy
+from compute_horde_validator.validator.routing.types import (
+    AllMinersBusy,
+    NotEnoughCollateralException,
+)
 from compute_horde_validator.validator.utils import TRUSTED_MINER_FAKE_KEY
 
 JOB_REQUEST = V2JobRequest(
@@ -28,6 +33,10 @@ JOB_REQUEST = V2JobRequest(
     streaming_start_time_limit=1,
     upload_time_limit=1,
 )
+
+
+# Ensure collateral threshold defaults to 0 for these tests unless explicitly overridden
+pytestmark = pytest.mark.override_config(DYNAMIC_MINIMUM_COLLATERAL_AMOUNT_WEI=0)
 
 
 def clone_job(**updates) -> V2JobRequest:
@@ -359,3 +368,107 @@ async def test_pick_miner_for_job__all_miners_fully_busy_raises(add_allowance, m
 
     with pytest.raises(AllMinersBusy):
         await routing().pick_miner_for_job_request(JOB_REQUEST)
+
+
+@pytest.mark.override_config(DYNAMIC_MINIMUM_COLLATERAL_AMOUNT_WEI=1000)
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_pick_miner_for_job__collateral_filter_excludes_all(monkeypatch):
+    # Fake allowance returning 2 miners
+    miners_list = [("miner_low_a", 50.0), ("miner_low_b", 60.0)]
+
+    def fake_find_miners_with_allowance(*, allowance_seconds, executor_class, job_start_block):
+        return miners_list
+
+    def fake_miners():
+        return [
+            AllowanceMiner(address="127.0.0.1", port=8001, ip_version=4, hotkey_ss58="miner_low_a"),
+            AllowanceMiner(address="127.0.0.1", port=8002, ip_version=4, hotkey_ss58="miner_low_b"),
+        ]
+
+    def fake_get_manifests():
+        return {
+            "miner_low_a": {JOB_REQUEST.executor_class: 1},
+            "miner_low_b": {JOB_REQUEST.executor_class: 1},
+        }
+
+    def fake_get_current_block():
+        return 12345
+
+    # Collateral module returns empty (none meet threshold)
+    def fake_list_miners_with_sufficient_collateral(_min_amount_wei: int):
+        return []
+
+    monkeypatch.setattr(allowance(), "find_miners_with_allowance", fake_find_miners_with_allowance)
+    monkeypatch.setattr(allowance(), "miners", fake_miners)
+    monkeypatch.setattr(allowance(), "get_manifests", fake_get_manifests)
+    monkeypatch.setattr(allowance(), "get_current_block", fake_get_current_block)
+    monkeypatch.setattr(
+        collateral(),
+        "list_miners_with_sufficient_collateral",
+        fake_list_miners_with_sufficient_collateral,
+    )
+
+    with pytest.raises(NotEnoughCollateralException):
+        await routing().pick_miner_for_job_request(JOB_REQUEST)
+
+
+@pytest.mark.override_config(DYNAMIC_MINIMUM_COLLATERAL_AMOUNT_WEI=10)
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_pick_miner_for_job__collateral_filter_keeps_subset(monkeypatch):
+    # Fake allowance returning 2 miners
+    miners_list = [("miner_col_ok", 50.0), ("miner_col_low", 60.0)]
+
+    def fake_find_miners_with_allowance(*, allowance_seconds, executor_class, job_start_block):
+        return miners_list
+
+    def fake_miners():
+        return [
+            AllowanceMiner(
+                address="127.0.0.1", port=8011, ip_version=4, hotkey_ss58="miner_col_ok"
+            ),
+            AllowanceMiner(
+                address="127.0.0.1", port=8012, ip_version=4, hotkey_ss58="miner_col_low"
+            ),
+        ]
+
+    def fake_get_manifests():
+        return {
+            "miner_col_ok": {JOB_REQUEST.executor_class: 1},
+            "miner_col_low": {JOB_REQUEST.executor_class: 1},
+        }
+
+    def fake_get_current_block():
+        return 22222
+
+    def fake_reserve_allowance(*, miner, executor_class, allowance_seconds, job_start_block):
+        return 1, [22221]
+
+    class FakeMC:
+        def __init__(self, hotkey):
+            self.hotkey = hotkey
+
+    # Only miner_col_ok meets collateral threshold
+    def fake_list_miners_with_sufficient_collateral(_min_amount_wei: int):
+        return [FakeMC("miner_col_ok")]
+
+    async def fake_get_busy_executor_count(_executor_class, _at_time):
+        return {}
+
+    monkeypatch.setattr(allowance(), "find_miners_with_allowance", fake_find_miners_with_allowance)
+    monkeypatch.setattr(allowance(), "miners", fake_miners)
+    monkeypatch.setattr(allowance(), "get_manifests", fake_get_manifests)
+    monkeypatch.setattr(allowance(), "get_current_block", fake_get_current_block)
+    monkeypatch.setattr(allowance(), "reserve_allowance", fake_reserve_allowance)
+    monkeypatch.setattr(
+        collateral(),
+        "list_miners_with_sufficient_collateral",
+        fake_list_miners_with_sufficient_collateral,
+    )
+    monkeypatch.setattr(receipts(), "get_busy_executor_count", fake_get_busy_executor_count)
+
+    job_route = await routing().pick_miner_for_job_request(JOB_REQUEST)
+    assert job_route.miner.hotkey_ss58 == "miner_col_ok"
+    assert job_route.allowance_blocks == [22221]
+    assert job_route.allowance_reservation_id == 1
