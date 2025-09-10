@@ -206,7 +206,7 @@ def bittensor(mocker, validators):
         return_value=mocked,
     )
     mocker.patch(
-        "compute_horde_validator.validator.tasks.ShieldedBittensor",
+        "compute_horde_validator.validator.clean_me_up.ShieldedBittensor",
         return_value=mocked,
     )
 
