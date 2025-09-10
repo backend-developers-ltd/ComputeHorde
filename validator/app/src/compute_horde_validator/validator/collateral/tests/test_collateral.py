@@ -9,7 +9,7 @@ from typing import Any
 import pytest
 from hexbytes import HexBytes
 
-from compute_horde_validator.validator import tasks as main_tasks_module
+from compute_horde_validator.validator import clean_me_up as clean_me_up_module
 from compute_horde_validator.validator.collateral import default as default_module
 from compute_horde_validator.validator.collateral import tasks as tasks_module
 from compute_horde_validator.validator.collateral.default import Collateral
@@ -455,7 +455,7 @@ class TestSyncCollaterals:
             ),
         )
 
-        monkeypatch.setattr(main_tasks_module, "ShieldedBittensor", MockShieldedBittensor)
+        monkeypatch.setattr(clean_me_up_module, "ShieldedBittensor", MockShieldedBittensor)
 
         monkeypatch.setattr(
             tasks_module,
@@ -501,7 +501,7 @@ class TestSyncCollaterals:
             mock_get_collateral_contract_address,
         )
 
-        monkeypatch.setattr(main_tasks_module, "ShieldedBittensor", MockShieldedBittensor)
+        monkeypatch.setattr(clean_me_up_module, "ShieldedBittensor", MockShieldedBittensor)
 
         (
             monkeypatch.setattr(

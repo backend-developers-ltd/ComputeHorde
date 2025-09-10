@@ -9,8 +9,11 @@ from web3 import Web3
 
 from compute_horde_validator.celery import app
 from compute_horde_validator.validator.models import Miner, SystemEvent
-from compute_horde_validator.validator.tasks import _get_metagraph_for_sync, bittensor_client
 
+from ..clean_me_up import (  # TODO: replace _get_metagraph_for_sync with a proper call to allowance()
+    _get_metagraph_for_sync,
+    bittensor_client,
+)
 from .default import collateral
 
 logger = logging.getLogger(__name__)

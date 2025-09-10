@@ -1,16 +1,14 @@
 import asyncio
 import contextlib
-import functools
 import json
 import random
 import time
 import traceback
 import uuid
-from collections.abc import Callable
 from datetime import timedelta
 from functools import cached_property
 from math import ceil, floor
-from typing import ParamSpec, TypeVar, Union
+from typing import Union
 
 import billiard.exceptions
 import bittensor
@@ -23,7 +21,6 @@ from asgiref.sync import async_to_sync, sync_to_async
 from bittensor.core.errors import SubstrateRequestException
 from bittensor.utils import u16_normalized_float
 from bittensor.utils.weight_utils import process_weights
-from bt_ddos_shield.turbobt import ShieldedBittensor
 from celery import shared_task
 from celery.result import AsyncResult, allow_join_result
 from celery.utils.log import get_task_logger
@@ -79,8 +76,9 @@ from compute_horde_validator.validator.synthetic_jobs.utils import (
 )
 
 from . import eviction
-from .allowance import tasks  # noqa
-from .clean_me_up import get_single_manifest
+from .allowance import tasks as allowance_tasks  # noqa
+from .clean_me_up import _get_metagraph_for_sync, bittensor_client, get_single_manifest
+from .collateral import tasks as collateral_tasks  # noqa
 from .dynamic_config import aget_config
 from .models import AdminJobRequest, MetagraphSnapshot, MinerManifest
 from .scoring import create_scoring_engine
@@ -102,9 +100,6 @@ WEIGHT_SETTING_FAILURE_BACKOFF = 5
 
 COMPUTE_TIME_OVERHEAD_SECONDS = 30  # TODO: approximate a realistic value
 
-P = ParamSpec("P")
-R = TypeVar("R")
-
 
 class WeightsRevealError(Exception):
     pass
@@ -112,24 +107,6 @@ class WeightsRevealError(Exception):
 
 class ScheduleError(Exception):
     pass
-
-
-def bittensor_client(func: Callable[P, R]) -> Callable[..., R]:
-    @async_to_sync
-    async def synced_bittensor(*args, bittensor=None, **kwargs):
-        async with ShieldedBittensor(
-            settings.BITTENSOR_NETWORK,
-            ddos_shield_netuid=settings.BITTENSOR_NETUID,
-            ddos_shield_options=settings.BITTENSOR_SHIELD_METAGRAPH_OPTIONS(),
-            wallet=settings.BITTENSOR_WALLET(),
-        ) as bittensor:
-            return await sync_to_async(func)(*args, bittensor=bittensor, **kwargs)
-
-    @functools.wraps(func)
-    def wrapper(*args, **kwargs):
-        return synced_bittensor(*args, **kwargs)
-
-    return wrapper
 
 
 async def when_to_run(
@@ -1299,36 +1276,6 @@ def send_events_to_facilitator():
             ).update(sent=True)
         else:
             logger.error(f"Failed to send system events to facilitator: {response}")
-
-
-async def _get_metagraph_for_sync(bittensor: turbobt.Bittensor, block_number=None):
-    try:
-        start_ts = time.time()
-        subnet = bittensor.subnet(settings.BITTENSOR_NETUID)
-
-        async with bittensor.block(block_number) as block:
-            neurons, subnet_state = await asyncio.gather(subnet.list_neurons(), subnet.get_state())
-
-        duration = time.time() - start_ts
-        msg = f"Metagraph fetched: {len(neurons)} neurons @ block {block.number} in {duration:.2f} seconds"
-        logger.info(msg)
-        await SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).acreate(
-            type=SystemEvent.EventType.METAGRAPH_SYNCING,
-            subtype=SystemEvent.EventSubType.SUCCESS,
-            long_description=msg,
-            data={"duration": duration},
-        )
-        return neurons, subnet_state, block
-    except Exception as e:
-        msg = f"Failed to fetch neurons: {e}"
-        logger.warning(msg)
-        await SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).acreate(
-            type=SystemEvent.EventType.METAGRAPH_SYNCING,
-            subtype=SystemEvent.EventSubType.SUBTENSOR_CONNECTIVITY_ERROR,
-            long_description=msg,
-            data={},
-        )
-    return None, None, None
 
 
 def save_metagraph_snapshot(
