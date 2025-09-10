@@ -19,6 +19,7 @@ pytestmark = [
     pytest.mark.override_config(
         DYNAMIC_EXECUTOR_RESERVATION_TIME_LIMIT=1,
         DYNAMIC_EXECUTOR_STARTUP_TIME_LIMIT=1,
+        DYNAMIC_MINIMUM_COLLATERAL_AMOUNT_WEI=0,
     ),
 ]
 
