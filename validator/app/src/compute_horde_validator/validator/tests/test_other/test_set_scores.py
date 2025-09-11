@@ -25,7 +25,7 @@ from compute_horde_validator.validator.tasks import (
     set_scores,
 )
 
-from .helpers import (
+from ..helpers import (
     NUM_NEURONS,
     Celery,
     MockHyperparameters,

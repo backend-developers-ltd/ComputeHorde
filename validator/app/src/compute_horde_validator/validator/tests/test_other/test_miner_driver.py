@@ -22,7 +22,7 @@ from compute_horde_validator.validator.models import Miner
 from compute_horde_validator.validator.organic_jobs.facilitator_client import OrganicJob
 from compute_horde_validator.validator.organic_jobs.miner_driver import drive_organic_job
 
-from .helpers import (
+from ..helpers import (
     MockMinerClient,
     get_dummy_job_request_v2,
     get_miner_client,
