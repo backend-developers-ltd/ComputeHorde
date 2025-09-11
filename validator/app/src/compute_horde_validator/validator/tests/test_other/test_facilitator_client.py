@@ -40,7 +40,7 @@ from compute_horde_validator.validator.organic_jobs.facilitator_client import (
 )
 from compute_horde_validator.validator.utils import MACHINE_SPEC_CHANNEL, TRUSTED_MINER_FAKE_KEY
 
-from .helpers import (
+from ..helpers import (
     MockFaillingMinerClient,
     MockSuccessfulMinerClient,
     get_dummy_job_cheated_request_v0,
