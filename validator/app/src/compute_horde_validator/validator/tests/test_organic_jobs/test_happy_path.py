@@ -8,7 +8,10 @@ from compute_horde.protocol_messages import (
     V0VolumesReadyRequest,
 )
 
-from compute_horde_validator.validator.models import OrganicJob
+from compute_horde_validator.validator.allowance.tests.mockchain import set_block_number
+from compute_horde_validator.validator.allowance.utils import blocks, manifests
+from compute_horde_validator.validator.allowance.utils.supertensor import supertensor
+from compute_horde_validator.validator.models import MetagraphSnapshot, OrganicJob
 
 pytestmark = [
     pytest.mark.asyncio,
@@ -18,6 +21,34 @@ pytestmark = [
         DYNAMIC_EXECUTOR_STARTUP_TIME_LIMIT=1,
     ),
 ]
+
+
+@pytest.fixture(autouse=True)
+def add_allowance():
+    with set_block_number(1000):
+        manifests.sync_manifests()
+    for block_number in range(1001, 1004):
+        with set_block_number(block_number):
+            blocks.process_block_allowance_with_reporting(block_number, supertensor_=supertensor())
+
+    with set_block_number(1005):
+        yield
+
+
+# NOTE: Currently this is here to make sure job routing can read current block.
+#       Other fields are not used now.
+@pytest.fixture(autouse=True)
+def metagraph_snapshot(cycle):
+    return MetagraphSnapshot.objects.create(
+        id=MetagraphSnapshot.SnapshotType.LATEST,
+        block=cycle.start,
+        alpha_stake=[],
+        tao_stake=[],
+        stake=[],
+        uids=[],
+        hotkeys=[],
+        serving_hotkeys=[],
+    )
 
 
 @pytest.mark.django_db(transaction=True)

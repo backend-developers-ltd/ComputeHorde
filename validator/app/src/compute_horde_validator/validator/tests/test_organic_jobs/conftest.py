@@ -12,30 +12,14 @@ from compute_horde.miner_client.organic import OrganicMinerClient
 from compute_horde.transport import AbstractTransport
 from compute_horde_core.executor_class import ExecutorClass
 
-from compute_horde_validator.validator.allowance.tests.mockchain import set_block_number
-from compute_horde_validator.validator.allowance.utils import blocks, manifests
-from compute_horde_validator.validator.allowance.utils.supertensor import supertensor
 from compute_horde_validator.validator.models import (
     Cycle,
-    MetagraphSnapshot,
     Miner,
     MinerManifest,
     SyntheticJobBatch,
 )
 from compute_horde_validator.validator.organic_jobs.facilitator_client import FacilitatorClient
 from compute_horde_validator.validator.tests.transport import SimulationTransport
-
-
-@pytest.fixture(autouse=True)
-def add_allowance():
-    with set_block_number(1000):
-        manifests.sync_manifests()
-    for block_number in range(1001, 1004):
-        with set_block_number(block_number):
-            blocks.process_block_allowance_with_reporting(block_number, supertensor_=supertensor())
-
-    with set_block_number(1005):
-        yield
 
 
 @pytest.fixture
@@ -62,22 +46,6 @@ def manifest(miner, cycle):
         executor_class=ExecutorClass.always_on__gpu_24gb,
         executor_count=5,
         online_executor_count=5,
-    )
-
-
-# NOTE: Currently this is here to make sure job routing can read current block.
-#       Other fields are not used now.
-@pytest.fixture(autouse=True)
-def metagraph_snapshot(cycle):
-    return MetagraphSnapshot.objects.create(
-        id=MetagraphSnapshot.SnapshotType.LATEST,
-        block=cycle.start,
-        alpha_stake=[],
-        tao_stake=[],
-        stake=[],
-        uids=[],
-        hotkeys=[],
-        serving_hotkeys=[],
     )
 
 
