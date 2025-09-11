@@ -8,7 +8,9 @@ from asgiref.sync import sync_to_async
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.fv_protocol.facilitator_requests import V2JobRequest
 from compute_horde.miner_client.organic import OrganicMinerClient
+from compute_horde.protocol_consts import JobRejectionReason
 from compute_horde.protocol_messages import V0DeclineJobRequest
+from compute_horde_core.executor_class import ExecutorClass
 from compute_horde_core.executor_class import ExecutorClass as CoreExecutorClass
 from django.conf import settings
 from django.db.models import Sum as DjangoSum
@@ -295,3 +297,94 @@ async def test_reliability_sorting(
     )
     assert job_route.miner.hotkey_ss58 == expected_winner, reason
     assert job_route.allowance_blocks == res_blocks
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_excused_job_no_incident(monkeypatch):
+    """If a miner rejects a job as BUSY but provides a valid excuse (sufficient receipts),
+    the job is marked EXCUSED and no MinerIncident is recorded.
+    """
+
+    # Create miner
+    miner = await Miner.objects.acreate(
+        hotkey="excused_miner_hotkey",
+        address="127.0.0.1",
+        port=4321,
+        ip_version=4,
+    )
+
+    job_uuid = str(uuid.uuid4())
+    job = await OrganicJob.objects.acreate(
+        job_uuid=job_uuid,
+        miner=miner,
+        miner_address=miner.address or "127.0.0.1",
+        miner_address_ip_version=miner.ip_version or 4,
+        miner_port=miner.port or 4321,
+        executor_class=ExecutorClass.always_on__gpu_24gb.value,
+        job_description="test job",
+        block=100,
+    )
+
+    # Monkeypatch excuse helpers to simulate a valid excuse: 1 expected executor, 1 valid receipt
+    async def fake_filter_valid_excuse_receipts(**_kwargs):
+        return [object()]
+
+    async def fake_get_expected_miner_executor_count(**_kwargs):
+        return 1
+
+    monkeypatch.setattr(
+        "compute_horde_validator.validator.organic_jobs.miner_driver.job_excuses.filter_valid_excuse_receipts",
+        fake_filter_valid_excuse_receipts,
+    )
+    monkeypatch.setattr(
+        "compute_horde_validator.validator.organic_jobs.miner_driver.job_excuses.get_expected_miner_executor_count",
+        fake_get_expected_miner_executor_count,
+    )
+
+    # Configure SimulationTransport to have miner decline with BUSY (with no receipts list); excuse logic will rely on patched helpers
+    transport = SimulationTransport("excused_decline_sim")
+    await transport.add_message(
+        V0DeclineJobRequest(
+            job_uuid=job_uuid,
+            reason=JobRejectionReason.BUSY,
+            message="busy",
+            receipts=[],
+            context=None,
+        ),
+        send_before=1,
+    )
+
+    # Build minimal V2JobRequest (Admin-like) expected by drive_organic_job
+    # Re-use existing JOB_REQUEST time limits for brevity
+    request = V2JobRequest(
+        uuid=job_uuid,
+        executor_class=ExecutorClass.always_on__gpu_24gb,
+        docker_image="ubuntu:latest",
+        args=[],
+        env={},
+        use_gpu=False,
+        download_time_limit=1,
+        execution_time_limit=1,
+        streaming_start_time_limit=1,
+        upload_time_limit=1,
+    )
+
+    miner_client = OrganicMinerClient(
+        miner_hotkey=miner.hotkey,
+        miner_address=miner.address or "127.0.0.1",
+        miner_port=miner.port or 4321,
+        job_uuid=job_uuid,
+        my_keypair=settings.BITTENSOR_WALLET().hotkey,
+        transport=transport,
+    )
+
+    await drive_organic_job(
+        miner_client=miner_client,
+        job=job,
+        job_request=request,
+    )
+
+    await job.arefresh_from_db()
+    assert job.status == OrganicJob.Status.EXCUSED
+    assert await MinerIncident.objects.acount() == 0
