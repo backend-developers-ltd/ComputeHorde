@@ -302,6 +302,20 @@ def set_block_number(block_number_, oldest_reachable_block: float | int = float(
         def get_block_timestamp(self, block_number):
             return get_block_timestamp(block_number)
 
+        def get_subnet_state(self, block_number):
+            validators = list_validators(block_number, filter_=True)
+            total_stake = [0.0] * (max((v.uid for v in validators), default=0) + 1)
+            for validator in validators:
+                total_stake[validator.uid] = validator.stake
+
+            return {
+                "hotkeys": [v.hotkey for v in validators],
+                "coldkeys": [v.coldkey for v in validators],
+                "total_stake": total_stake,
+                "alpha_stake": [0.0] * len(total_stake),
+                "tao_stake": [0.0] * len(total_stake),
+            }
+
         def wallet(self):
             return get_test_validator_wallet()
 

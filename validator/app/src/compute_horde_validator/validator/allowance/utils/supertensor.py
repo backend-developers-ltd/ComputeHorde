@@ -216,6 +216,18 @@ class SuperTensor(BaseSuperTensor):
     def get_block_timestamp(self, block_number: int) -> datetime.datetime:
         return self._get_block_timestamp(block_number)
 
+    @archive_fallback
+    @make_sync
+    async def _get_subnet_state(self, block_number: int) -> turbobt.subnet.SubnetState:
+        bittensor = bittensor_context.get()
+        subnet = subnet_context.get()
+        async with bittensor.block(block_number):
+            return await subnet.get_state()
+
+    @RETRY_ON_TIMEOUT
+    def get_subnet_state(self, block_number: int) -> turbobt.subnet.SubnetState:
+        return self._get_subnet_state(block_number)
+
     @RETRY_ON_TIMEOUT
     @make_sync
     async def get_shielded_neurons(self) -> list[turbobt.Neuron]:
@@ -410,12 +422,18 @@ class PrecachingSuperTensor(SuperTensor):
         self.set_starting_block(block_number)
         neurons = self.cache.get_neurons(block_number)
         if neurons is not None:
+            for neuron in neurons:
+                if neuron.hotkey == "5HBVrFGy6oYhhh71m9fFGYD7zbKyAeHnWN8i8s9fJTBMCtEE":
+                    logger.info(f"SN12 validator: {neuron}")
             return neurons
         elif self.throw_on_cache_miss:
             raise PrecachingSuperTensorCacheMiss(f"Cache miss for block {block_number}")
         else:
             logger.debug(f"Cache miss for block {block_number}")
             neurons = super()._list_neurons(block_number)
+            for neuron in neurons:
+                if neuron.hotkey == "5HBVrFGy6oYhhh71m9fFGYD7zbKyAeHnWN8i8s9fJTBMCtEE":
+                    logger.info(f"SN12 validator: {neuron}")
             self.cache.put_neurons(block_number, neurons)
             return neurons
 
