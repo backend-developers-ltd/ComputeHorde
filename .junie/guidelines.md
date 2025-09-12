@@ -19,6 +19,8 @@ To call an async function from a sync context, you must use `asgiref.async_to_sy
 In tests, avoid comparing items/attributes one-by-one. instead compare whole objects/lists/dicts to have the diff
 contain as much context as possible.
 
+Prefer `super()` over `super(__class__, self)`
+
 This project has several subprojects:
 
 1. validator

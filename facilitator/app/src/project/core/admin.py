@@ -155,7 +155,7 @@ class JobAdminForm(forms.ModelForm):
         ]
 
     def __init__(self, *args, **kwargs):
-        super(__class__, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
         if self.fields:
             self.fields["executor_class"].choices = [(name, name) for name in EXECUTOR_CLASS]
 
