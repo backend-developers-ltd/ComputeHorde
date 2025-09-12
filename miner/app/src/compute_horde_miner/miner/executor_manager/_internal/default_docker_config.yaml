@@ -1,0 +1,3 @@
+self:
+  executor_class: DEFAULT_EXECUTOR_CLASS
+  mode: local

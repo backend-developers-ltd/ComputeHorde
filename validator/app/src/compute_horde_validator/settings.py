@@ -568,7 +568,7 @@ CELERY_BEAT_SCHEDULE = {
         },
     },
     "sync_collaterals": {
-        "task": "compute_horde_validator.validator.tasks.sync_collaterals",
+        "task": "compute_horde_validator.validator.collateral.tasks.sync_collaterals",
         "schedule": timedelta(minutes=5),
         "options": {
             "expires": timedelta(minutes=5).total_seconds(),
@@ -782,6 +782,8 @@ LOGGING = {
 
 BITTENSOR_NETUID = env.int("BITTENSOR_NETUID")
 BITTENSOR_NETWORK = env.str("BITTENSOR_NETWORK")
+# This can be explicitly set to None, which will cause some backfilling operations to never succeed. Useful when running
+# on a private staging net etc.
 BITTENSOR_ARCHIVE_NETWORK = env.str("BITTENSOR_ARCHIVE_NETWORK", "archive")
 
 BITTENSOR_WALLET_DIRECTORY = env.path(

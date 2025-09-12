@@ -1,5 +1,5 @@
 version = 1
-revision = 2
+revision = 3
 requires-python = "==3.11.*"
 resolution-markers = [
     "sys_platform == 'linux'",
@@ -2540,8 +2540,8 @@ wheels = [
 
 [[package]]
 name = "turbobt"
-version = "0.2.2"
-source = { registry = "https://pypi.org/simple" }
+version = "0.2.3"
+source = { git = "https://github.com/bactensor/turbobt.git?rev=close_websocket_transport#0a60240b65e7f7b4d2680a6486824e3ba7fd9e67" }
 dependencies = [
     { name = "bittensor-drand", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "bittensor-wallet", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
@@ -2549,10 +2549,6 @@ dependencies = [
     { name = "scalecodec", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "websockets", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "xxhash", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/e9/a0/f73965b4da36b8941c48d6f1e0ae9035903e08ffcff29ce8ee68918d8ddb/turbobt-0.2.2.tar.gz", hash = "sha256:eb7333892d670dd747aeae8fb8d187ae6b5980624faabf00817329d5c13e639e", size = 144631, upload-time = "2025-08-13T06:28:39.857Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/7d/4f/ef1656ec5e3f82f8df6757a7640147194f9a04ff42cfd23355c2f183a401/turbobt-0.2.2-py3-none-any.whl", hash = "sha256:13c388d5f7327c164adbceb492e752c2e48c49fc2e01c1cafcd9c2b12827fad8", size = 59700, upload-time = "2025-08-13T06:28:35.387Z" },
 ]
 
 [[package]]
@@ -2796,7 +2792,7 @@ requires-dist = [
     { name = "requests", specifier = ">=2.32.3" },
     { name = "sentry-sdk", specifier = "==1.29.2" },
     { name = "tenacity", specifier = ">=8.2.3" },
-    { name = "turbobt", specifier = "~=0.2.2" },
+    { name = "turbobt", git = "https://github.com/bactensor/turbobt.git?rev=close_websocket_transport" },
     { name = "uvloop", specifier = ">=0.19.0" },
     { name = "web3", specifier = ">=7.11.0" },
     { name = "websockets", specifier = ">=14.0,<15.0" },

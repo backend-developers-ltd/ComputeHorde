@@ -154,7 +154,15 @@ def sync_manifests():
     block = supertensor().get_current_block()
     neurons = supertensor().get_shielded_neurons()
     max_executors_per_class = get_miner_max_executors_per_class_sync()
-    miners = [(n.hotkey, n.axon_info.ip, n.axon_info.port) for n in neurons if n.axon_info.port]
+    miners = [
+        (
+            n.hotkey,
+            getattr(n.axon_info, "shield_address", str(n.axon_info.ip)),
+            n.axon_info.port,
+        )
+        for n in neurons
+        if n.axon_info.port
+    ]
     new_manifests = event_loop().run_until_complete(fetch_manifests_from_miners(miners))
     with transaction.atomic():
         with Lock(LockType.ALLOWANCE_BLOCK_INJECTION, 10.0):

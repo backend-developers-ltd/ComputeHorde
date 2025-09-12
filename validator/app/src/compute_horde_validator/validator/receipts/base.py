@@ -89,40 +89,6 @@ class ReceiptsBase(ABC):
 
     @deprecated("Use database queries instead")
     @abstractmethod
-    async def get_valid_job_started_receipts_for_miner(
-        self, miner_hotkey: str, at_time: datetime.datetime
-    ) -> list[JobStartedReceipt]:
-        """
-        Get valid job started receipts for a miner at a specific time.
-
-        Args:
-            miner_hotkey: Hotkey of the miner
-            at_time: Time to check validity at
-
-        Returns:
-            List of valid JobStartedReceipt objects
-        """
-        pass
-
-    @deprecated("Use database queries instead")
-    @abstractmethod
-    async def get_job_finished_receipts_for_miner(
-        self, miner_hotkey: str, job_uuids: list[str]
-    ) -> list[JobFinishedReceipt]:
-        """
-        Get job finished receipts for a miner and specific job UUIDs.
-
-        Args:
-            miner_hotkey: Hotkey of the miner
-            job_uuids: List of job UUIDs to get receipts for
-
-        Returns:
-            List of JobFinishedReceipt objects
-        """
-        pass
-
-    @deprecated("Use database queries instead")
-    @abstractmethod
     async def get_job_started_receipt_by_uuid(self, job_uuid: str) -> JobStartedReceipt | None:
         """
         Get a job started receipt by UUID.
