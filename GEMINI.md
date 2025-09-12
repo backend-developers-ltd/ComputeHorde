@@ -1,1 +1,1 @@
-.junie/guidelines.md
+AGENTS.md
