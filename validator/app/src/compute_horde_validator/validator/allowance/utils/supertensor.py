@@ -20,6 +20,8 @@ from bt_ddos_shield.shield_metagraph import ShieldMetagraphOptions
 from bt_ddos_shield.turbobt import ShieldedBittensor
 from compute_horde.blockchain.block_cache import get_current_block
 
+from .. import settings
+
 DEFAULT_TIMEOUT = 30.0
 
 # Context variables for bittensor and subnet
@@ -111,6 +113,9 @@ class BaseSuperTensor(abc.ABC):
 
     @abc.abstractmethod
     def get_current_block(self) -> int: ...
+
+    @abc.abstractmethod
+    def get_latest_finalized_block(self) -> int: ...
 
     @abc.abstractmethod
     def wallet(self) -> bittensor_wallet.Wallet: ...
@@ -237,12 +242,15 @@ class SuperTensor(BaseSuperTensor):
             current_block = get_current_block()
         except websockets.exceptions.ConcurrencyError as ex:
             raise CannotGetCurrentBlock("Cannot get current block from blockchain") from ex
-        return current_block - 5
+        return current_block
 
     def close(self):
         self.loop.run_until_complete(self.bittensor.close())
         if self.archive_bittensor is not None:
             self.loop.run_until_complete(self.archive_bittensor.close())
+
+    def get_latest_finalized_block(self) -> int:
+        return self.get_current_block() - settings.BLOCK_FINALIZATION_OFFSET
 
 
 N_THREADS = 10

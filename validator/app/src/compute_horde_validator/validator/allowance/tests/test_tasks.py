@@ -8,7 +8,9 @@ import pytest
 from freezegun import freeze_time
 
 from compute_horde_validator.validator.allowance import tasks as allowance_tasks
-from compute_horde_validator.validator.allowance.tests.mockchain import set_block_number
+from compute_horde_validator.validator.allowance.tests.mockchain import (
+    set_block_number,
+)
 from compute_horde_validator.validator.allowance.utils import blocks, manifests
 from compute_horde_validator.validator.allowance.utils.supertensor import supertensor
 
