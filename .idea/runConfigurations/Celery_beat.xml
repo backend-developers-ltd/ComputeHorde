@@ -1,0 +1,22 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="Celery beat" type="UvRunConfigurationType" factoryName="UvRunConfigurationType" folderName="Validator">
+    <option name="args">
+      <list>
+        <option value="-A" />
+        <option value="compute_horde_validator" />
+        <option value="beat" />
+      </list>
+    </option>
+    <option name="checkSync" value="false" />
+    <option name="env">
+      <map />
+    </option>
+    <option name="runType" value="MODULE" />
+    <option name="scriptOrModule" value="celery" />
+    <option name="uvArgs">
+      <list />
+    </option>
+    <option name="uvSdkKey" value="Validator" />
+    <method v="2" />
+  </configuration>
+</component>
