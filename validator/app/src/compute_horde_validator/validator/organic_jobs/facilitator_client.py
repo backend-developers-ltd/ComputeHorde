@@ -172,34 +172,24 @@ class FacilitatorClient:
     def my_hotkey(self) -> str:
         return str(self.keypair.ss58_address)
 
+    @tenacity.retry(
+        stop=tenacity.stop_after_delay(60),
+        wait=tenacity.wait_incrementing(start=2, increment=2, max=10),
+        retry=tenacity.retry_if_exception_type(Exception),  # excludes BaseException
+        reraise=True,  # Otherwise we will get a generic RetryError in the trace
+    )
     async def run_forever(self) -> None:
         """connect (and re-connect) to facilitator and keep reading messages ... forever"""
-
-        reconnects = 0
         try:
-            async for ws in self.connect():
-                try:
-                    logger.info("connected to facilitator")
-                    await self.handle_connection(ws)
-                except websockets.ConnectionClosed as exc:
-                    self.ws = None
-                    logger.warning("Facilitator connection closed: %s, reconnecting...", exc)
-                except asyncio.exceptions.CancelledError:
-                    self.ws = None
-                    logger.warning("Facilitator client received cancel, stopping")
-                except Exception as exc:
-                    self.ws = None
-                    logger.error(str(exc), exc_info=exc)
-                reconnects += 1
-                if reconnects > 5:
-                    # stop facilitator connector after 5 reconnects
-                    # allow restart policy to run it again, maybe fixing some broken async tasks
-                    # this allow facilitator to cause restart by disconnecting 5 times
-                    break
-
-        except asyncio.exceptions.CancelledError:
+            logger.info("Connecting to facilitator...")
+            async with self.connect() as ws:
+                logger.info("Connected to facilitator")
+                await self.handle_connection(ws)
+        except Exception as exc:
+            logger.warning("Facilitator connection broken: %s: %s", type(exc).__name__, exc)
+            raise
+        finally:
             self.ws = None
-            logger.error("Facilitator client received cancel, stopping")
 
     async def handle_connection(self, ws: websockets.ClientConnection) -> None:
         """handle a single websocket connection"""
@@ -310,9 +300,11 @@ class FacilitatorClient:
             logger.debug(f"Finished listening for job status updates for job {job_uuid}")
 
     @tenacity.retry(
-        stop=tenacity.stop_after_attempt(7),
-        wait=tenacity.wait_exponential(multiplier=1, exp_base=2, min=1, max=10),
+        # let the run_forever() retry fail first if there is a connection error
+        stop=tenacity.stop_after_delay(300),
+        wait=tenacity.wait_incrementing(start=1, increment=1, max=5),
         retry=tenacity.retry_if_exception_type(websockets.ConnectionClosed),
+        reraise=True,  # Otherwise we will get a generic RetryError in the trace
     )
     async def send_model(self, msg: BaseModel) -> None:
         if self.ws is None:
