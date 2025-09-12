@@ -1,0 +1,21 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="Facilitator" type="UvRunConfigurationType" factoryName="UvRunConfigurationType" folderName="Facilitator">
+    <option name="args">
+      <list>
+        <option value="runserver" />
+        <option value="localhost:9000" />
+      </list>
+    </option>
+    <option name="checkSync" value="false" />
+    <option name="env">
+      <map />
+    </option>
+    <option name="runType" value="SCRIPT" />
+    <option name="scriptOrModule" value="$PROJECT_DIR$/facilitator/app/src/manage.py" />
+    <option name="uvArgs">
+      <list />
+    </option>
+    <option name="uvSdkKey" value="Facilitator" />
+    <method v="2" />
+  </configuration>
+</component>

@@ -1,0 +1,30 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="Celery / organic_jobs" type="UvRunConfigurationType" factoryName="UvRunConfigurationType" folderName="Validator">
+    <option name="args">
+      <list>
+        <option value="-A" />
+        <option value="compute_horde_validator" />
+        <option value="worker" />
+        <option value="-Q" />
+        <option value="organic_jobs" />
+        <option value="-l" />
+        <option value="DEBUG" />
+        <option value="--concurrency" />
+        <option value="5" />
+        <option value="--max-tasks-per-child" />
+        <option value="3" />
+      </list>
+    </option>
+    <option name="checkSync" value="false" />
+    <option name="env">
+      <map />
+    </option>
+    <option name="runType" value="MODULE" />
+    <option name="scriptOrModule" value="celery" />
+    <option name="uvArgs">
+      <list />
+    </option>
+    <option name="uvSdkKey" value="Validator" />
+    <method v="2" />
+  </configuration>
+</component>
