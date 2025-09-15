@@ -9,6 +9,7 @@ The key functionalities are:
 2. Reserving the allowance for the selected miner to ensure it's not used by another concurrent job.
 3. Providing a structured `JobRoute` object containing the selected miner's details and the allowance reservation identifier.
 4. Supporting debug/override modes for local development and trusted miners.
+5. Filtering miners by on-chain collateral before attempting reservation. This is optional, controlled through a dynamic config.
 
 This module works in close conjunction with the `allowance` module, which is responsible for all allowance-related calculations and state management.
 
@@ -19,10 +20,11 @@ When a new job request arrives, the following sequence of operations should be p
 1. Call `routing().pick_miner_for_job_request(job_request)` to get a `JobRoute`.
 2. This function will internally:
     1. Query the `allowance` module to get a list of miners with enough allowance for the job's required executor-seconds.
-    2. Sort the suitable miners and iterate through them, attempting to reserve the allowance for one of them.
+    2. Apply a collateral threshold filter if the dynamic config value `DYNAMIC_MINIMUM_COLLATERAL_AMOUNT_WEI` is > 0. Only miners whose recorded collateral is at least that many Wei are kept. If all miners are filtered out a `NotEnoughCollateralException` is raised (a warning is logged indicating how many miners were filtered).
+    3. Sort the remaining suitable miners and iterate through them, attempting to reserve the allowance for one of them.
         - Sorting logic: miners are ranked primarily by a per-executor reliability score (derived from recent recorded incidents for the miner and normalized by the executor count for the requested class). Higher scores are preferred. For miners with the same reliability score, the original order returned by the allowance module is kept.
         - Availability check: before trying to reserve allowance the router checks current ongoing jobs (via the `receipts` subsystem) and skips miners whose ongoing jobs are equal to or exceed their known executor count for the requested class.
-    3. The first successful reservation will result in a `JobRoute` being returned.
+    4. The first successful reservation will result in a `JobRoute` being returned.
 3. If a `JobRoute` is successfully obtained, it can be used to execute the job on the specified miner. The `allowance_reservation_id` from the route must be stored and used later to either spend or release the reservation based on the job's outcome. `allowance_blocks` from the route needs to be used for the block ids in the generated receipts.
 4. If `pick_miner_for_job_request` raises an exception (`NotEnoughAllowanceException` or `AllMinersBusy`), the job cannot be processed at this time and should be rejected.
 

@@ -1,19 +1,27 @@
+import asyncio
+import contextlib
 import datetime as dt
 import uuid
 from collections.abc import Iterable
 from dataclasses import dataclass
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from asgiref.sync import sync_to_async
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.fv_protocol.facilitator_requests import V2JobRequest
+from compute_horde.miner_client.organic import OrganicMinerClient
+from compute_horde.protocol_messages import V0DeclineJobRequest
+from compute_horde.transport import AbstractTransport
 from compute_horde_core.executor_class import ExecutorClass as CoreExecutorClass
+from django.conf import settings
 from django.db.models import Sum as DjangoSum
 
 from compute_horde_validator.validator.allowance.default import allowance
+from compute_horde_validator.validator.allowance.types import Miner as AllowanceMiner
 from compute_horde_validator.validator.allowance.utils import blocks, manifests
 from compute_horde_validator.validator.allowance.utils import supertensor as st_mod
-from compute_horde_validator.validator.models import MinerIncident
+from compute_horde_validator.validator.models import Miner, MinerIncident, OrganicJob
 from compute_horde_validator.validator.models.allowance.internal import (
     AllowanceMinerManifest as _DbgAllowanceMinerManifest,
 )
@@ -23,8 +31,11 @@ from compute_horde_validator.validator.models.allowance.internal import (
 from compute_horde_validator.validator.models.allowance.internal import (
     BlockAllowance as _DbgBlockAllowance,
 )
+from compute_horde_validator.validator.organic_jobs.facilitator_client import FacilitatorClient
+from compute_horde_validator.validator.organic_jobs.miner_driver import drive_organic_job
 from compute_horde_validator.validator.routing.default import routing
-from compute_horde_validator.validator.routing.types import MinerIncidentType
+from compute_horde_validator.validator.routing.types import JobRoute
+from compute_horde_validator.validator.tests.transport import SimulationTransport
 
 
 @dataclass
@@ -49,6 +60,10 @@ JOB_REQUEST = V2JobRequest(
 )
 
 
+# Ensure collateral threshold defaults to 0 for these tests unless explicitly overridden
+pytestmark = pytest.mark.override_config(DYNAMIC_MINIMUM_COLLATERAL_AMOUNT_WEI=0)
+
+
 async def reliability_env(
     *,
     monkeypatch,
@@ -60,8 +75,6 @@ async def reliability_env(
 
     Previously this returned a factory; now it's a direct async helper invoked by tests.
     """
-
-    # fetch_manifests_from_miners imported indirectly via manifests module at test top
 
     class _FakeAxonInfo:
         def __init__(self, ip: str, port: int):
@@ -79,13 +92,75 @@ async def reliability_env(
     def _mk_neuron(uid: int, hotkey: str, stake: float, port: int):
         return _FakeNeuron(uid, hotkey, stake, port)
 
-    async def _report_incidents(miner: str, incidents: int, executor_class):
-        for _ in range(incidents):
-            await routing().report_miner_incident(
-                type=MinerIncidentType.MINER_JOB_REJECTED,
-                hotkey_ss58address=miner,
-                job_uuid=str(uuid.uuid4()),
-                executor_class=executor_class,
+    # Map miner hotkey -> port (must match what routing/_pick_miner_for_job_v2 will use)
+    # routing builds miners from manifests/supertensor neuron list, where we set port=8000+idx
+    port_by_hotkey = {m.hotkey: 8000 + idx for idx, m in enumerate(miners, start=1)}
+
+    async def _report_incidents(miner_hotkey: str, incidents: int, executor_class):
+        """Simulate miner incidents by running organic job flows that are declined.
+
+        Uses SimulationTransport to feed a V0DeclineJobRequest during the reservation stage
+        which triggers the incident reporting path in miner_driver (MinerRejectedJob).
+        """
+        # Ensure Miner model exists (minimal fields for OrganicJob FK)
+        expected_port = port_by_hotkey[miner_hotkey]
+        miner_model, created = await Miner.objects.aget_or_create(
+            hotkey=miner_hotkey,
+            defaults={"address": "127.0.0.1", "port": expected_port, "ip_version": 4},
+        )
+        # If it already existed (shouldn't normally) but with a mismatching port, align it
+        if not created and miner_model.port != expected_port:
+            miner_model.port = expected_port
+            await miner_model.asave(update_fields=["port"])
+        for i in range(incidents):
+            job_uuid = str(uuid.uuid4())
+            job = await OrganicJob.objects.acreate(
+                job_uuid=job_uuid,
+                miner=miner_model,
+                miner_address=miner_model.address or "127.0.0.1",
+                miner_address_ip_version=miner_model.ip_version or 4,
+                miner_port=miner_model.port or 9000,
+                executor_class=executor_class.value,
+                job_description="decline simulation",
+                block=base_block,
+            )
+
+            transport = SimulationTransport(f"decline_sim_{miner_hotkey}_{i}")
+            # Miner will decline right after the initial job request is sent by the validator
+            await transport.add_message(
+                V0DeclineJobRequest(job_uuid=job_uuid),
+                send_before=1,
+            )
+
+            # Build a V2JobRequest mirroring JOB_REQUEST but with unique uuid
+            simulated_request = V2JobRequest(
+                uuid=job_uuid,
+                executor_class=JOB_REQUEST.executor_class,
+                docker_image=JOB_REQUEST.docker_image,
+                args=list(JOB_REQUEST.args),
+                env=dict(JOB_REQUEST.env),
+                use_gpu=JOB_REQUEST.use_gpu,
+                download_time_limit=JOB_REQUEST.download_time_limit,
+                execution_time_limit=JOB_REQUEST.execution_time_limit,
+                streaming_start_time_limit=JOB_REQUEST.streaming_start_time_limit,
+                upload_time_limit=JOB_REQUEST.upload_time_limit,
+            )
+
+            miner_client = OrganicMinerClient(
+                miner_hotkey=miner_hotkey,
+                miner_address=miner_model.address or "127.0.0.1",
+                miner_port=miner_model.port or 9000,
+                job_uuid=job_uuid,
+                my_keypair=settings.BITTENSOR_WALLET().hotkey,
+                transport=transport,
+            )
+
+            # Run the job driver; this will catch MinerRejectedJob and record an incident
+            # Use default internal async dummy notify callback (omit custom one)
+            await drive_organic_job(
+                miner_client=miner_client,
+                job=job,
+                job_request=simulated_request,
             )
 
     target_executor_class = CoreExecutorClass(JOB_REQUEST.executor_class)
@@ -224,3 +299,149 @@ async def test_reliability_sorting(
     )
     assert job_route.miner.hotkey_ss58 == expected_winner, reason
     assert job_route.allowance_blocks == res_blocks
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_excused_job_no_incident(monkeypatch):
+    """If a miner rejects a job as BUSY but provides a valid excuse (sufficient receipts),
+    the job is marked EXCUSED and no MinerIncident is recorded.
+
+    This version simulates the full facilitator -> validator -> miner flow by pushing a
+    job request through a facilitator SimulationTransport (using add_message) instead of
+    pre-creating the OrganicJob directly.
+    """
+
+    job_uuid = str(uuid.uuid4())
+
+    # Monkeypatch excuse helpers to simulate a valid excuse: 1 expected executor, 1 valid receipt
+    async def fake_filter_valid_excuse_receipts(**_kwargs):
+        return [object()]
+
+    async def fake_get_expected_miner_executor_count(**_kwargs):
+        return 1
+
+    monkeypatch.setattr(
+        "compute_horde_validator.validator.organic_jobs.miner_driver.job_excuses.filter_valid_excuse_receipts",
+        fake_filter_valid_excuse_receipts,
+    )
+    monkeypatch.setattr(
+        "compute_horde_validator.validator.organic_jobs.miner_driver.job_excuses.get_expected_miner_executor_count",
+        fake_get_expected_miner_executor_count,
+    )
+
+    # Facilitator transport (auth success + job request)
+    faci_transport = SimulationTransport("facilitator_excused_case")
+    await faci_transport.add_message('{"status":"success"}', send_before=1)  # auth response
+
+    request = V2JobRequest(
+        uuid=job_uuid,
+        executor_class=CoreExecutorClass.always_on__gpu_24gb,
+        docker_image="ubuntu:latest",
+        args=[],
+        env={},
+        use_gpu=False,
+        download_time_limit=1,
+        execution_time_limit=1,
+        streaming_start_time_limit=1,
+        upload_time_limit=1,
+    )
+    await faci_transport.add_message(request, send_before=0)
+
+    # Patch routing to return a deterministic miner; we bypass full allowance + miner driver.
+
+    async def fake_pick_miner(request):  # noqa: D401
+        # Ensure Miner ORM row so later code linking incidents / status updates works
+        orm_miner, _ = await Miner.objects.aget_or_create(
+            hotkey="excused_miner_hotkey",
+            defaults={"address": "127.0.0.1", "port": 4321, "ip_version": 4},
+        )
+        return JobRoute(
+            miner=AllowanceMiner(
+                address=orm_miner.address or "127.0.0.1",
+                ip_version=orm_miner.ip_version or 4,
+                port=orm_miner.port or 4321,
+                hotkey_ss58=orm_miner.hotkey,
+            ),
+            allowance_blocks=[],
+            allowance_reservation_id=1,
+        )
+
+    class _FakeRouting:
+        async def pick_miner_for_job_request(self, request):  # noqa: D401
+            return await fake_pick_miner(request)
+
+    monkeypatch.setattr(
+        "compute_horde_validator.validator.organic_jobs.facilitator_client.routing",  # where it's imported
+        lambda: _FakeRouting(),
+    )
+
+    class _SimulationTransportWsAdapter:
+        def __init__(self, transport: AbstractTransport):
+            self.transport = transport
+
+        async def send(self, msg: str):  # noqa: D401
+            await self.transport.send(msg)
+
+        async def recv(self) -> str:  # noqa: D401
+            data = await self.transport.receive()
+            if isinstance(data, (bytes, bytearray, memoryview)):  # noqa: UP038
+                return bytes(data).decode()
+            return str(data)
+
+        def __aiter__(self):
+            return self.transport
+
+    # Patch job execution to directly create an EXCUSED OrganicJob without invoking miner driver / celery
+    async def fake_execute(job_request, job_route):  # noqa: D401
+        orm_miner = await Miner.objects.aget(hotkey="excused_miner_hotkey")
+        job = await OrganicJob.objects.acreate(
+            job_uuid=job_request.uuid,
+            miner=orm_miner,
+            miner_address=orm_miner.address or "127.0.0.1",
+            miner_address_ip_version=orm_miner.ip_version or 4,
+            miner_port=orm_miner.port or 4321,
+            executor_class=job_request.executor_class.value,
+            job_description="excused test job",
+            block=0,
+            status=OrganicJob.Status.EXCUSED,
+        )
+        return job
+
+    with (
+        patch.object(FacilitatorClient, "heartbeat", AsyncMock()),
+        patch.object(FacilitatorClient, "wait_for_specs", AsyncMock()),
+        patch(
+            "compute_horde_validator.validator.organic_jobs.facilitator_client.verify_request_or_fail",
+            AsyncMock(),
+        ),
+        patch(
+            "compute_horde_validator.validator.organic_jobs.facilitator_client.execute_organic_job_request_on_worker",
+            fake_execute,
+        ),
+    ):
+        faci_client = FacilitatorClient(settings.BITTENSOR_WALLET().hotkey, "")
+
+        async def run_until():
+            async with faci_client, asyncio.timeout(2):
+                task = asyncio.create_task(
+                    faci_client.handle_connection(_SimulationTransportWsAdapter(faci_transport))
+                )
+                # Wait until job recorded as EXCUSED
+                while True:
+                    try:
+                        job_obj = await OrganicJob.objects.aget(job_uuid=job_uuid)
+                        if job_obj.status == OrganicJob.Status.EXCUSED:
+                            break
+                    except OrganicJob.DoesNotExist:  # noqa: PERF203
+                        pass
+                    await asyncio.sleep(0.05)
+                task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await task
+
+        await run_until()
+
+    job = await OrganicJob.objects.aget(job_uuid=job_uuid)
+    assert job.status == OrganicJob.Status.EXCUSED
+    assert await MinerIncident.objects.acount() == 0

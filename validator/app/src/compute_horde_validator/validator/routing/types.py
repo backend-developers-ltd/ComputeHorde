@@ -12,6 +12,10 @@ class AllMinersBusy(JobRoutingException):
     pass
 
 
+class NotEnoughCollateralException(JobRoutingException):
+    pass
+
+
 class JobRoute(pydantic.BaseModel):
     miner: Miner
     allowance_blocks: block_ids | None
