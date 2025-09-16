@@ -20,6 +20,8 @@ from bt_ddos_shield.shield_metagraph import ShieldMetagraphOptions
 from bt_ddos_shield.turbobt import ShieldedBittensor
 from compute_horde.blockchain.block_cache import get_current_block
 
+from compute_horde_validator.validator.allowance.types import ValidatorModel
+
 DEFAULT_TIMEOUT = 30.0
 
 # Context variables for bittensor and subnet
@@ -198,10 +200,21 @@ class SuperTensor(BaseSuperTensor):
             result: list[turbobt.Neuron] = await subnet.list_neurons()
             return result
 
-    def list_validators(self, block_number: int) -> list[turbobt.Neuron]:
-        return [n for n in self.list_neurons(block_number) if n.stake >= 1000]
-        # TODO: yes this is reimplementing `subnet.list_validators()` but since turbobt doesn't support caching yet
-        # (or i don't know how to use it) it's just too time consuming to be doing it properly
+    def list_validators(self, block_number: int) -> list[ValidatorModel]:
+        neurons = self.list_neurons(block_number)
+        subnet_state = self.get_subnet_state(block_number)
+        validators = [n for n in neurons if n.stake >= 1000]
+        total_stake = subnet_state.get("total_stake", [])
+        return [
+            ValidatorModel(
+                uid=n.uid,
+                hotkey=n.hotkey,
+                effective_stake=total_stake[n.uid]
+                if n.uid < len(total_stake) and total_stake[n.uid] is not None
+                else 0.0,
+            )
+            for n in validators
+        ]
 
     @archive_fallback
     @make_sync
@@ -215,6 +228,18 @@ class SuperTensor(BaseSuperTensor):
     @RETRY_ON_TIMEOUT
     def get_block_timestamp(self, block_number: int) -> datetime.datetime:
         return self._get_block_timestamp(block_number)
+
+    @archive_fallback
+    @make_sync
+    async def _get_subnet_state(self, block_number: int) -> turbobt.subnet.SubnetState:
+        bittensor = bittensor_context.get()
+        subnet = subnet_context.get()
+        async with bittensor.block(block_number):
+            return await subnet.get_state()
+
+    @RETRY_ON_TIMEOUT
+    def get_subnet_state(self, block_number: int) -> turbobt.subnet.SubnetState:
+        return self._get_subnet_state(block_number)
 
     @RETRY_ON_TIMEOUT
     @make_sync
@@ -252,6 +277,8 @@ CACHE_AHEAD = 10
 class TaskType(enum.Enum):
     NEURONS = "NEURONS"
     BLOCK_TIMESTAMP = "BLOCK_TIMESTAMP"
+    SUBNET_STATE = "SUBNET_STATE"
+    VALIDATORS = "VALIDATORS"
     THE_END = "THE_END"
 
 
@@ -268,11 +295,25 @@ class BaseCache(abc.ABC):
     @abc.abstractmethod
     def get_block_timestamp(self, block_number: int) -> datetime.datetime | None: ...
 
+    @abc.abstractmethod
+    def put_subnet_state(self, block_number: int, state: turbobt.subnet.SubnetState): ...
+
+    @abc.abstractmethod
+    def get_subnet_state(self, block_number: int) -> turbobt.subnet.SubnetState | None: ...
+
+    @abc.abstractmethod
+    def put_validators(self, block_number: int, validators: list[ValidatorModel]): ...
+
+    @abc.abstractmethod
+    def get_validators(self, block_number: int) -> list[ValidatorModel] | None: ...
+
 
 class InMemoryCache(BaseCache):
     def __init__(self):
         self._neuron_cache: dict[int, list[turbobt.Neuron]] = {}
         self._block_timestamp_cache: dict[int, datetime.datetime] = {}
+        self._subnet_state_cache: dict[int, turbobt.subnet.SubnetState] = {}
+        self._validators_cache: dict[int, list[ValidatorModel]] = {}
 
     def put_neurons(self, block_number: int, neurons: list[turbobt.Neuron]):
         self._neuron_cache[block_number] = neurons
@@ -285,6 +326,18 @@ class InMemoryCache(BaseCache):
 
     def get_block_timestamp(self, block_number: int) -> datetime.datetime | None:
         return self._block_timestamp_cache.get(block_number)
+
+    def put_subnet_state(self, block_number: int, state: turbobt.subnet.SubnetState):
+        self._subnet_state_cache[block_number] = state
+
+    def get_subnet_state(self, block_number: int) -> turbobt.subnet.SubnetState | None:
+        return self._subnet_state_cache.get(block_number)
+
+    def put_validators(self, block_number: int, validators: list[ValidatorModel]):
+        self._validators_cache[block_number] = validators
+
+    def get_validators(self, block_number: int) -> list[ValidatorModel] | None:
+        return self._validators_cache.get(block_number)
 
 
 class PrecachingSuperTensorCacheMiss(SuperTensorError):
@@ -355,6 +408,24 @@ class PrecachingSuperTensor(SuperTensor):
                         self.cache.put_block_timestamp(
                             block_number, super_tensor.get_block_timestamp(block_number)
                         )
+                    elif task == TaskType.SUBNET_STATE:
+                        if self.cache.get_subnet_state(block_number) is not None:
+                            logger.debug(
+                                f"Worker {ind} skipping task {task} for block {block_number} (cached)"
+                            )
+                            continue
+                        self.cache.put_subnet_state(
+                            block_number, super_tensor.get_subnet_state(block_number)
+                        )
+                    elif task == TaskType.VALIDATORS:
+                        if self.cache.get_validators(block_number) is not None:
+                            logger.debug(
+                                f"Worker {ind} skipping task {task} for block {block_number} (cached)"
+                            )
+                            continue
+                        self.cache.put_validators(
+                            block_number, super_tensor.list_validators(block_number)
+                        )
                     else:
                         assert_never(task)
                     logger.debug(f"Worker {ind} finished task {task} for block {block_number}")
@@ -390,6 +461,8 @@ class PrecachingSuperTensor(SuperTensor):
                 logger.debug(f"Submitting tasks for block {block_to_submit}")
                 self.task_queue.put((TaskType.NEURONS, block_to_submit))
                 self.task_queue.put((TaskType.BLOCK_TIMESTAMP, block_to_submit))
+                self.task_queue.put((TaskType.SUBNET_STATE, block_to_submit))
+                self.task_queue.put((TaskType.VALIDATORS, block_to_submit))
                 self.highest_block_submitted = block_to_submit
             except CannotGetCurrentBlock:
                 time.sleep(1)
@@ -430,6 +503,35 @@ class PrecachingSuperTensor(SuperTensor):
         else:
             logger.debug(f"Cache miss for block {block_number}")
             return super()._get_block_timestamp(block_number)
+
+    @RETRY_ON_TIMEOUT
+    def get_subnet_state(self, block_number: int) -> turbobt.subnet.SubnetState:
+        self.set_starting_block(block_number)
+        state = self.cache.get_subnet_state(block_number)
+        if state is not None:
+            return state
+        elif self.throw_on_cache_miss:
+            raise PrecachingSuperTensorCacheMiss(
+                f"Cache miss for block {block_number} (subnet state)"
+            )
+        else:
+            logger.debug(f"Cache miss for block {block_number}")
+            state = super()._get_subnet_state(block_number)
+            self.cache.put_subnet_state(block_number, state)
+            return state
+
+    def list_validators(self, block_number: int) -> list[ValidatorModel]:
+        self.set_starting_block(block_number)
+        validators = self.cache.get_validators(block_number)
+        if validators is not None:
+            return validators
+        elif self.throw_on_cache_miss:
+            raise PrecachingSuperTensorCacheMiss(f"Cache miss for block {block_number}")
+        else:
+            logger.debug(f"Cache miss for block {block_number} (validators)")
+            validators = super().list_validators(block_number)
+            self.cache.put_validators(block_number, validators)
+            return validators
 
     def close(self):
         self.closing = True

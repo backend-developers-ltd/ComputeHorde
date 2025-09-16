@@ -10,6 +10,7 @@ from compute_horde.test_wallet import get_test_validator_wallet
 from compute_horde_core.executor_class import ExecutorClass
 from pydantic import BaseModel
 
+from compute_horde_validator.validator.allowance.types import ValidatorModel
 from compute_horde_validator.validator.allowance.utils import supertensor
 from compute_horde_validator.validator.tests.transport import SimulationTransport
 
@@ -297,10 +298,38 @@ def set_block_number(block_number_, oldest_reachable_block: float | int = float(
             return list_neurons(block_number, with_shield=False)
 
         def list_validators(self, block_number):
-            return list_validators(block_number, filter_=True)
+            validators = list_validators(block_number, filter_=True)
+            subnet_state = self.get_subnet_state(block_number)
+            total_stake = subnet_state.get("total_stake", [])
+            result = []
+            for v in validators:
+                effective_stake = 0.0
+                if v.uid < len(total_stake) and total_stake[v.uid] is not None:
+                    try:
+                        effective_stake = float(total_stake[v.uid])
+                    except Exception:
+                        effective_stake = 0.0
+                result.append(
+                    ValidatorModel(uid=v.uid, hotkey=v.hotkey, effective_stake=effective_stake)
+                )
+            return result
 
         def get_block_timestamp(self, block_number):
             return get_block_timestamp(block_number)
+
+        def get_subnet_state(self, block_number):
+            validators = list_validators(block_number, filter_=True)
+            total_stake = [0.0] * (max((v.uid for v in validators), default=0) + 1)
+            for validator in validators:
+                total_stake[validator.uid] = validator.stake
+
+            return {
+                "hotkeys": [v.hotkey for v in validators],
+                "coldkeys": [v.coldkey for v in validators],
+                "total_stake": total_stake,
+                "alpha_stake": [0.0] * len(total_stake),
+                "tao_stake": [0.0] * len(total_stake),
+            }
 
         def wallet(self):
             return get_test_validator_wallet()

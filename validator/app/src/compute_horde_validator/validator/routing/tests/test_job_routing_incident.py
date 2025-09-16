@@ -19,6 +19,7 @@ from django.db.models import Sum as DjangoSum
 
 from compute_horde_validator.validator.allowance.default import allowance
 from compute_horde_validator.validator.allowance.types import Miner as AllowanceMiner
+from compute_horde_validator.validator.allowance.types import ValidatorModel
 from compute_horde_validator.validator.allowance.utils import blocks, manifests
 from compute_horde_validator.validator.allowance.utils import supertensor as st_mod
 from compute_horde_validator.validator.models import Miner, MinerIncident, OrganicJob
@@ -207,8 +208,23 @@ async def reliability_env(
             ),
             raising=False,
         )
-        monkeypatch.setattr(_st, "list_validators", lambda bn: [neurons[0]], raising=False)
+        monkeypatch.setattr(
+            _st,
+            "list_validators",
+            lambda bn: [
+                ValidatorModel(
+                    uid=neurons[0].uid, hotkey=neurons[0].hotkey, effective_stake=10000.0
+                )
+            ],
+            raising=False,
+        )
         monkeypatch.setattr(_st, "get_current_block", lambda: base_block, raising=False)
+        monkeypatch.setattr(
+            _st,
+            "get_subnet_state",
+            lambda bn: {"total_stake": [10000.0] + [1000.0] * len(miners)},
+            raising=False,
+        )
 
     def _advance_current_block(_st, bn):
         monkeypatch.setattr(_st, "get_current_block", lambda _bn=bn: _bn, raising=False)

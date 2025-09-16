@@ -18,6 +18,12 @@ class Neuron(pydantic.BaseModel):
     coldkey: ss58_address
 
 
+class ValidatorModel(pydantic.BaseModel):
+    uid: int
+    hotkey: ss58_address
+    effective_stake: float
+
+
 class AllowanceException(Exception):
     pass
 
