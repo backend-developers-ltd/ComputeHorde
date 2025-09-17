@@ -22,7 +22,7 @@ from ..metrics import (
     VALIDATOR_MINER_MANIFEST_REPORT,
     VALIDATOR_STAKE_SHARE_REPORT,
 )
-from ..types import AllowanceException, NotEnoughAllowanceException, ss58_address
+from ..types import AllowanceException, NotEnoughAllowanceException, ValidatorModel, ss58_address
 from .manifests import get_manifest_drops, get_manifests
 from .supertensor import CannotGetCurrentBlock, SuperTensor, SuperTensorError, supertensor
 
@@ -99,11 +99,14 @@ def wait_for_block(target_block: int, timeout_seconds: float):
         time.sleep(0.1)
 
 
-def get_stake_share(validator_list: list[turbobt.Neuron], validator: turbobt.Neuron):
-    try:
-        return validator.stake / sum(validator.stake for validator in validator_list)
-    except ZeroDivisionError:
+def get_stake_share(
+    validator_list: list[ValidatorModel],
+    validator: ValidatorModel,
+) -> float:
+    total_stake_sum = sum(v.effective_stake for v in validator_list)
+    if total_stake_sum == 0:
         return 0.0
+    return validator.effective_stake / total_stake_sum
 
 
 def save_neurons(neurons: list[turbobt.Neuron], block: int):
@@ -193,8 +196,10 @@ def process_block_allowance(
                     finalized_block.end_timestamp - finalized_block.creation_timestamp
                 ).total_seconds()
 
+                stake_shares = {v.hotkey: get_stake_share(validators, v) for v in validators}
+
                 result[finalized_block.block_number] = (
-                    {v.hotkey: get_stake_share(validators, v) for v in validators},
+                    stake_shares,
                     manifests,
                     block_duration,
                 )
@@ -208,12 +213,13 @@ def process_block_allowance(
                 for neuron in neurons:
                     for validator in validators:
                         for executor_class in ExecutorClass:
+                            validator_stake_share = stake_shares.get(validator.hotkey, 0.0)
                             new_block_allowances.append(
                                 BlockAllowance(
                                     block=finalized_block,
                                     allowance=(
                                         manifests.get((neuron.hotkey, executor_class), 0.0)
-                                        * get_stake_share(validators, validator)
+                                        * validator_stake_share
                                         * block_duration
                                         * float(
                                             os.environ.get("DEBUG_BLOCK_ALLOWANCE_MULTIPLIER", 1.0)
