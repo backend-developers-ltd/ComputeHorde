@@ -10,6 +10,21 @@ from ...tests.helpers import patch_constance
 from . import mockchain
 
 
+@pytest.fixture
+def mp_sync():
+    """Factory returning synchronization primitives for 2-worker tests.
+
+    Returns a callable: mp_sync(ctx) -> (start_event, ready_events:list)
+    """
+
+    def _factory(ctx):
+        start = ctx.Event()
+        ready = [ctx.Event(), ctx.Event()]
+        return start, ready
+
+    return _factory
+
+
 @pytest.fixture(autouse=True)
 def basic_mocks():
     def throw(*a, **kwargs):
