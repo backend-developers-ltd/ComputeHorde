@@ -11,6 +11,7 @@ class LockType(enum.Enum):
     ALLOWANCE_BLOCK_INJECTION = 4
     ALLOWANCE_FETCHING = 5
     ALLOWANCE_EVICTING = 6
+    DYNAMIC_CONFIG_FETCH = 7
 
 
 class Locked(Exception):
