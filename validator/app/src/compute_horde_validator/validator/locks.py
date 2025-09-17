@@ -68,6 +68,8 @@ class Lock:
                 raise LockTimeout(self.type, self.timeout_seconds) from e
             # Re-raise other operational errors
             raise
+        else:
+            cursor.execute("RESET statement_timeout")
 
         return self
 
