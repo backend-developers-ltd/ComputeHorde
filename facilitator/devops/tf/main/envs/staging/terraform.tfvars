@@ -23,7 +23,7 @@ domain_name      = "staging.facilitator.computehorde.io"
 # default ssh key
 ec2_ssh_key      = ""
 
-instance_type     = "c6a.xlarge"
+instance_type     = "c6a.large"
 rds_instance_type = "db.t3.small"
 
 # defines if we use EC2-only healthcheck or ELB healthcheck
