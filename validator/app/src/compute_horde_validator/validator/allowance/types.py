@@ -1,3 +1,5 @@
+from dataclasses import dataclass
+
 import pydantic
 
 ss58_address = str
@@ -38,6 +40,49 @@ class ReservationNotFound(AllowanceException):
 
 class ReservationAlreadySpent(AllowanceException):
     pass
+
+
+class SpendingIssue:
+    pass
+
+
+@dataclass
+class BlocksOutsideRange(SpendingIssue):
+    allowed: range
+    rejected: block_ids
+
+
+@dataclass
+class DoubleSpentBlocks(SpendingIssue):
+    rejected: block_ids
+
+
+@dataclass
+class InvalidatedBlocks(SpendingIssue):
+    rejected: block_ids
+
+
+@dataclass
+class InsufficientAllowance(SpendingIssue):
+    spendable_amount: float
+    required_amount: float
+    blocks: block_ids
+
+    def __str__(self):
+        return f"Insufficient allowance (offered {self.spendable_amount}ð from {len(self.blocks)} valid blocks, required {self.required_amount}ð)"
+
+
+class CannotSpend(Exception):
+    def __init__(self, issues: list[SpendingIssue]):
+        self.issues = issues
+
+    def __str__(self):
+        return f"Spending caused issues: {[str(issue) for issue in self.issues]}"
+
+
+class ErrorWhileSpending(Exception):
+    def __init__(self, msg: str):
+        super().__init__(msg)
 
 
 class CannotReserveAllowanceException(AllowanceException):
