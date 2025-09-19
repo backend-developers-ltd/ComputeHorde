@@ -8,7 +8,10 @@ import pytest
 from freezegun import freeze_time
 
 from compute_horde_validator.validator.allowance import tasks as allowance_tasks
-from compute_horde_validator.validator.allowance.tests.mockchain import set_block_number
+from compute_horde_validator.validator.allowance.tests.mockchain import (
+    FINALIZATION_OFFSET,
+    set_block_number,
+)
 from compute_horde_validator.validator.allowance.utils import blocks, manifests
 from compute_horde_validator.validator.allowance.utils.supertensor import supertensor
 
@@ -25,7 +28,7 @@ def scan_blocks_prep(configure_logs):
     with set_block_number(1000, oldest_reachable_block=1005):
         manifests.sync_manifests()
 
-    with set_block_number(1013, oldest_reachable_block=1005):
+    with set_block_number(1013 + FINALIZATION_OFFSET, oldest_reachable_block=1005):
         backfilling_supertensor = supertensor()
 
     with (
@@ -36,7 +39,7 @@ def scan_blocks_prep(configure_logs):
             "sleep",
             side_effect=lambda *a, **kw: supertensor().inc_block_number(),  # type: ignore
         ),
-        set_block_number(1013, oldest_reachable_block=1005),
+        set_block_number(1013 + FINALIZATION_OFFSET, oldest_reachable_block=1005),
         mock.patch.object(
             blocks,
             "process_block_allowance_with_reporting",

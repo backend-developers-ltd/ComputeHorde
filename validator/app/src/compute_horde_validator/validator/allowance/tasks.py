@@ -45,7 +45,6 @@ def scan_blocks_and_calculate_allowance(
     if not AllowanceMinerManifest.objects.exists():
         logger.warning("No miner manifests found, skipping allowance calculation")
         return
-    current_block = supertensor().get_current_block()
     with transaction.atomic(using=settings.DEFAULT_DB_ALIAS):
         try:
             with Lock(LockType.ALLOWANCE_FETCHING, LOCK_WAIT_TIMEOUT, settings.DEFAULT_DB_ALIAS):
@@ -58,7 +57,6 @@ def scan_blocks_and_calculate_allowance(
                     cm = contextlib.nullcontext(backfilling_supertensor)
                 with cm as backfilling_supertensor:
                     blocks.backfill_blocks_if_necessary(
-                        current_block,
                         MAX_RUN_TIME,
                         report_allowance_checkpoint.delay,
                         backfilling_supertensor,
@@ -67,11 +65,7 @@ def scan_blocks_and_calculate_allowance(
                 if time_left < 0:
                     raise blocks.TimesUpError
 
-                blocks.livefill_blocks(
-                    current_block,
-                    time_left,
-                    report_allowance_checkpoint.delay,
-                )
+                blocks.livefill_blocks(time_left, report_allowance_checkpoint.delay)
         except Locked:
             logger.debug("Another thread already fetching blocks")
         except blocks.TimesUpError:

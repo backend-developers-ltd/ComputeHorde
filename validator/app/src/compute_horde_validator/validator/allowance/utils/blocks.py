@@ -78,7 +78,7 @@ class Timer:
         return self.max_run_time - (time.time() - self.start_time)
 
 
-def wait_for_block(target_block: int, timeout_seconds: float):
+def wait_for_block(target_block: int, timeout_seconds: float, wait_for_finalization: bool = False):
     timeout_seconds = max(timeout_seconds, MIN_BLOCK_WAIT_TIME)
     start = time.time()
 
@@ -89,7 +89,10 @@ def wait_for_block(target_block: int, timeout_seconds: float):
             )
             raise TimesUpError(f"Timeout waiting for block {target_block}")
         try:
-            current_block = supertensor().get_current_block()
+            if wait_for_finalization:
+                current_block = supertensor().get_latest_finalized_block()
+            else:
+                current_block = supertensor().get_current_block()
         except CannotGetCurrentBlock:
             time.sleep(0.1)
             continue
@@ -339,11 +342,11 @@ def report_checkpoint(block_number_lt: int, block_number_gte: int):
 
 
 def backfill_blocks_if_necessary(
-    current_block: int,
     max_run_time: float | int,
     report_callback: Callable[[int, int], Any] | None = None,
     backfilling_supertensor: SuperTensor | None = None,
 ):
+    current_block = supertensor().get_latest_finalized_block()
     if backfilling_supertensor is None:
         backfilling_supertensor = supertensor()
     timer = Timer(max_run_time)
@@ -366,14 +369,14 @@ def backfill_blocks_if_necessary(
 
 
 def livefill_blocks(
-    current_block: int,
     max_run_time: float | int,
     report_callback: Callable[[int, int], Any] | None = None,
 ):
+    current_block = supertensor().get_latest_finalized_block()
     timer = Timer(max_run_time)
     try:
         while True:
-            wait_for_block(current_block + 1, timer.time_left())
+            wait_for_block(current_block + 1, timer.time_left(), wait_for_finalization=True)
             current_block += 1
 
             process_block_allowance_with_reporting(current_block, supertensor(), live=True)
