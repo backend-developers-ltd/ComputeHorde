@@ -8,7 +8,7 @@ import bittensor_wallet
 # to ensure hardcoded wallet names like "test_validator" fail,
 # but don't do it when running locally to prevent creating lots
 # of wallets since we never delete them
-_UNIQUE_WALLET_TAG = f"_{secrets.token_hex(4)}" if os.getenv("GITHUB_ACTIONS") == "true" else ""
+_UNIQUE_WALLET_TAG = f"_{secrets.token_hex(4)}" if os.getenv("GITHUB_ACTIONS") == "DISABLED-true" else ""
 
 MISC_WALLET_NAME = f"test_misc{_UNIQUE_WALLET_TAG}"
 MISC_WALLET_HOTKEY = "default"
