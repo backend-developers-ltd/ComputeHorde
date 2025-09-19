@@ -160,8 +160,8 @@ def undo_allowance_reservation(reservation_id_: reservation_id) -> None:
             raise ReservationNotFound(f"Reservation with ID {reservation_id_} not found")
 
         # Spent reservations can't be undone
-        # if booking.is_spent:
-        #     raise ReservationAlreadySpent(f"Reservation with ID {reservation_id_} is already spent")
+        if booking.is_spent:
+            raise ReservationAlreadySpent(f"Reservation with ID {reservation_id_} is already spent")
 
         # Find all BlockAllowances associated with this booking
         associated_allowances = BlockAllowance.objects.select_for_update().filter(
