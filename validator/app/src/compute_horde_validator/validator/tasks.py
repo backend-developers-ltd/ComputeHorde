@@ -15,6 +15,7 @@ import bittensor
 import celery.exceptions
 import numpy as np
 import requests
+import tenacity
 import turbobt
 import turbobt.substrate.exceptions
 from asgiref.sync import async_to_sync, sync_to_async
@@ -1489,6 +1490,27 @@ async def get_manifests_from_miners(
 
 @app.task
 def fetch_dynamic_config() -> None:
+    with transaction.atomic():
+        try:
+            get_advisory_lock(LockType.DYNAMIC_CONFIG_FETCH)
+        except Locked:
+            logger.debug("fetch_dynamic_config: another instance is running; skipping")
+            return
+
+        _do_fetch()
+
+
+@tenacity.retry(
+    stop=tenacity.stop_after_attempt(5),
+    wait=tenacity.wait_chain(
+        tenacity.wait_fixed(5),
+        tenacity.wait_fixed(30),
+        tenacity.wait_fixed(60),
+        tenacity.wait_fixed(180),
+    ),
+    reraise=True,
+)
+def _do_fetch() -> None:
     if settings.USE_CONTRACT_CONFIG:
         dynamic_configs = get_dynamic_config_types_from_settings()
         fetch_dynamic_configs_from_contract(
@@ -1500,11 +1522,17 @@ def fetch_dynamic_config() -> None:
 
     # if same key exists in both places, common config wins
     sync_dynamic_config(
-        config_url=f"https://raw.githubusercontent.com/backend-developers-ltd/compute-horde-dynamic-config/master/validator-config-{settings.DYNAMIC_CONFIG_ENV}.json",
+        config_url=(
+            "https://raw.githubusercontent.com/backend-developers-ltd/compute-horde-dynamic-config/"
+            f"master/validator-config-{settings.DYNAMIC_CONFIG_ENV}.json"
+        ),
         namespace=config,
     )
     sync_dynamic_config(
-        config_url=f"https://raw.githubusercontent.com/backend-developers-ltd/compute-horde-dynamic-config/master/common-config-{settings.DYNAMIC_CONFIG_ENV}.json",
+        config_url=(
+            "https://raw.githubusercontent.com/backend-developers-ltd/compute-horde-dynamic-config/"
+            f"master/common-config-{settings.DYNAMIC_CONFIG_ENV}.json"
+        ),
         namespace=config,
     )
 

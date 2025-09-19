@@ -11,6 +11,7 @@ class LockType(enum.Enum):
     ALLOWANCE_BLOCK_INJECTION = 4
     ALLOWANCE_FETCHING = 5
     ALLOWANCE_EVICTING = 6
+    DYNAMIC_CONFIG_FETCH = 7
 
 
 class Locked(Exception):
@@ -68,6 +69,8 @@ class Lock:
                 raise LockTimeout(self.type, self.timeout_seconds) from e
             # Re-raise other operational errors
             raise
+        else:
+            cursor.execute("RESET statement_timeout")
 
         return self
 
