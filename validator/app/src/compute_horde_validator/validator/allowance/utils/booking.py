@@ -140,6 +140,18 @@ def reserve_allowance(
         if allowances_to_update:
             BlockAllowance.objects.bulk_update(allowances_to_update, ["allowance_booking"])
 
+        # Final safety check: ensure we actually reserved the requested amount.
+        # It's possible (under concurrent contention) that after the initial availability check
+        # some allowances became unavailable before we linked them (e.g., another reservation won
+        # the race for overlapping blocks). In that case reserved_amount will be < allowance_seconds
+        # and we must roll back by raising the same exception type.
+        if reserved_amount < allowance_seconds:
+            raise CannotReserveAllowanceException(
+                miner=miner,
+                required_allowance_seconds=allowance_seconds,
+                available_allowance_seconds=reserved_amount,
+            )
+
         return booking.id, reserved_block_ids
 
 
