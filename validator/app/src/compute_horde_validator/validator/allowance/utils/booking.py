@@ -2,7 +2,7 @@ from datetime import timedelta
 
 from compute_horde_core.executor_class import ExecutorClass
 from django.db import transaction
-from django.db.models import Q, Sum
+from django.db.models import Q
 from django.utils import timezone
 
 from ...models.allowance.internal import AllowanceBooking, BlockAllowance
@@ -81,38 +81,41 @@ def reserve_allowance(
         #
         # IMPORTANT: If future logic broadens the scope (e.g., reserve inspects unrelated bookings) we MUST revisit this.
 
-        # Get available allowances for the specific miner
-        available_block_allowances = (
+        # Single-pass selection & locking:
+        # Lock candidate allowances in block order and accumulate until the requested amount is
+        # satisfied. By eliminating a separate aggregate pre-check we avoid a predicate re-evaluation
+        # window and guarantee the sum we use is over the exact locked row versions we will link.
+        candidate_qs = (
             BlockAllowance.objects.select_for_update()
             .filter(
                 miner_ss58=miner,
                 validator_ss58=validator,
                 executor_class=executor_class.value,
                 block__block_number__gte=earliest_usable_block,
-                invalidated_at_block__isnull=True,  # Only non-invalidated allowances
+                invalidated_at_block__isnull=True,
             )
-            .filter(
-                # Available allowance: booking is null
-                Q(allowance_booking__isnull=True)
-            )
+            .filter(Q(allowance_booking__isnull=True))
             .select_related("block")
             .order_by("block__block_number")
-        )  # Order by block number for consistent selection
-
-        # Calculate total available allowance
-        total_available = (
-            available_block_allowances.aggregate(total=Sum("allowance"))["total"] or 0.0
         )
 
-        # Check if there's enough allowance
-        if total_available < allowance_seconds:
+        reserved_amount = 0.0
+        selected: list[BlockAllowance] = []
+        for block_allowance in candidate_qs:
+            selected.append(block_allowance)
+            reserved_amount += block_allowance.allowance
+            if reserved_amount >= allowance_seconds:
+                break
+
+        if reserved_amount < allowance_seconds:
+            # Not enough even after locking everything currently free.
             raise CannotReserveAllowanceException(
                 miner=miner,
                 required_allowance_seconds=allowance_seconds,
-                available_allowance_seconds=total_available,
+                available_allowance_seconds=reserved_amount,
             )
 
-        # Create the reservation booking
+        # Create booking only after confirming sufficiency (avoids creating then rolling back via exception)
         expiry_time = timezone.now() + timedelta(
             seconds=allowance_seconds + settings.RESERVATION_MARGIN_SECONDS
         )
@@ -120,38 +123,12 @@ def reserve_allowance(
             is_reserved=True, is_spent=False, reservation_expiry_time=expiry_time
         )
 
-        # Reserve allowances up to the required amount
-        reserved_amount = 0.0
-        reserved_block_ids = []
-        allowances_to_update = []
+        # Link the (minimal) set of allowances we selected.
+        for ba in selected:
+            ba.allowance_booking = booking
+        BlockAllowance.objects.bulk_update(selected, ["allowance_booking"])
 
-        for block_allowance in available_block_allowances:
-            if reserved_amount >= allowance_seconds:
-                break
-
-            # Link this allowance to the booking
-            block_allowance.allowance_booking = booking
-            allowances_to_update.append(block_allowance)
-
-            reserved_amount += block_allowance.allowance
-            reserved_block_ids.append(block_allowance.block.block_number)
-
-        # Bulk update all allowances at once
-        if allowances_to_update:
-            BlockAllowance.objects.bulk_update(allowances_to_update, ["allowance_booking"])
-
-        # Final safety check: ensure we actually reserved the requested amount.
-        # It's possible (under concurrent contention) that after the initial availability check
-        # some allowances became unavailable before we linked them (e.g., another reservation won
-        # the race for overlapping blocks). In that case reserved_amount will be < allowance_seconds
-        # and we must roll back by raising the same exception type.
-        if reserved_amount < allowance_seconds:
-            raise CannotReserveAllowanceException(
-                miner=miner,
-                required_allowance_seconds=allowance_seconds,
-                available_allowance_seconds=reserved_amount,
-            )
-
+        reserved_block_ids = [ba.block.block_number for ba in selected]
         return booking.id, reserved_block_ids
 
 
