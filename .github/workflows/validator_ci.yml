@@ -110,6 +110,8 @@ jobs:
         run: ./setup-dev.sh
       - name: Run dockerized services
         run: docker compose up -d --wait
+      - name: Run migrations
+        run: cd app/src && uv run python manage.py wait_for_database --timeout 120 && uv run python manage.py migrate
       - name: Run unit tests (${{ matrix.target }})
         run: nox -vs test -- compute_horde_validator/validator/${{ matrix.target }}
       - name: Publish Test Results
