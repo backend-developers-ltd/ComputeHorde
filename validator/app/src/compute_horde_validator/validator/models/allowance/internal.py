@@ -78,6 +78,9 @@ class AllowanceMinerManifest(  # type: ignore
         help_text="The total number of available executors of this class as reported by the miner",
     )
 
+    def __str__(self):
+        return f"Allowance miner manifest {self.id} (...{self.miner_ss58address[-5:]}, {self.executor_class})"
+
     class Meta:
         constraints = [
             UniqueConstraint(
@@ -97,6 +100,9 @@ class AllowanceBooking(BulkExportModelOperationsMixin("AllowanceBooking"), model
     is_spent = models.BooleanField()
     reservation_expiry_time = models.DateTimeField(null=True, blank=True)
 
+    def __str__(self):
+        return f"Allowance booking {self.id}"
+
 
 class Block(BulkExportModelOperationsMixin("Block"), models.Model):  # type: ignore
     block_number = models.BigIntegerField(primary_key=True)
@@ -107,6 +113,9 @@ class Block(BulkExportModelOperationsMixin("Block"), models.Model):  # type: ign
         help_text="The timestamp of the block's end (next blocks creation timestamp). Blocks with field set are "
         "considered to have all the allowance calculated",
     )
+
+    def __str__(self):
+        return f"Block {self.block_number}"
 
 
 class BlockAllowance(BulkExportModelOperationsMixin("BlockAllowance"), models.Model):  # type: ignore
@@ -121,6 +130,9 @@ class BlockAllowance(BulkExportModelOperationsMixin("BlockAllowance"), models.Mo
     allowance_booking = models.ForeignKey(
         AllowanceBooking, on_delete=models.CASCADE, null=True, blank=True
     )
+
+    def __str__(self):
+        return f"Block allowance for (...{self.miner_ss58[-5:]}, ...{self.validator_ss58[-5:]}, {self.executor_class}) at {self.block_id}"
 
     class Meta:
         constraints = [
