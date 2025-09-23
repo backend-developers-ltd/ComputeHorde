@@ -1,525 +1,252 @@
 from __future__ import annotations
 
 import hashlib
-from dataclasses import dataclass
-from decimal import Decimal
-from types import SimpleNamespace
-from typing import Any
+from typing import cast
+from unittest.mock import Mock
 
 import pytest
-from hexbytes import HexBytes
+from django.conf import settings
+from web3 import Web3
 
-from compute_horde_validator.validator import clean_me_up as clean_me_up_module
-from compute_horde_validator.validator.collateral import default as default_module
-from compute_horde_validator.validator.collateral import tasks as tasks_module
 from compute_horde_validator.validator.collateral.default import Collateral
+from compute_horde_validator.validator.collateral.tasks import get_miner_collateral
 from compute_horde_validator.validator.collateral.types import SlashCollateralError
 from compute_horde_validator.validator.models import Miner
 
+from .helpers.contexts import (
+    CollateralTaskHarness,
+)
+from .helpers.env import CollateralTestEnvironment
+from .helpers.setup_helpers import (
+    async_setup_collateral,
+    setup_collateral,
+)
 
-class DummyFn:
-    def __init__(self, *args: Any):
-        self.args = args
-
-    def build_transaction(self, *_args, **_kwargs):
-        raise AssertionError("build_transaction should not be called in this test")
-
-
-class DummyContractFunctions:
-    def slashCollateral(self, *args: Any) -> DummyFn:
-        return DummyFn(*args)
-
-
-class DummyEth:
-    def __init__(self):
-        self.chain_id = 1
-        self.gas_price = 123
-
-    def contract(self, address: str, abi: Any):
-        return SimpleNamespace(functions=DummyContractFunctions())
-
-    def get_transaction_count(self, _address: str) -> int:
-        return 1
-
-    def send_raw_transaction(self, _raw: bytes) -> HexBytes:
-        return HexBytes("0x01")
-
-    def wait_for_transaction_receipt(
-        self, _tx_hash: HexBytes, _timeout: int, _poll: int
-    ) -> dict[str, Any]:
-        return {"status": 1, "transactionHash": HexBytes("0x01")}
+SLASH_URL = "https://example.com/proof"
+pytestmark = pytest.mark.django_db(transaction=True)
 
 
-class DummyW3:
-    def __init__(self):
-        self.eth = DummyEth()
+class TestListMinersWithCollateral:
+    def test_list_miners_with_sufficient_collateral_when_threshold_met_returns_expected_miners(
+        self,
+    ) -> None:
+        m1 = Miner.objects.create(hotkey="hk1")
+        m2 = Miner.objects.create(hotkey="hk2")
+        m3 = Miner.objects.create(hotkey="hk3")
+        m4 = Miner.objects.create(hotkey="hk4")
 
-    def to_checksum_address(self, addr: str) -> str:
-        return addr
+        with setup_collateral(
+            miners=[m1, m2, m3, m4],
+            collaterals_wei={"hk1": 500, "hk2": 999, "hk3": 1_000, "hk4": 2_000},
+        ):
+            with CollateralTestEnvironment():
+                result = Collateral().list_miners_with_sufficient_collateral(min_amount_wei=1_000)
 
-
-@dataclass
-class DummyBlock:
-    number: int
-    hash: str
-
-
-class MockShieldedBittensor:
-    def __init__(self, *args, **kwargs):
-        self.subtensor = SimpleNamespace()
-
-    async def __aenter__(self):
-        return self
-
-    async def __aexit__(self, *args):
-        pass
-
-
-@pytest.fixture(autouse=True)
-def _reset_caches(monkeypatch):
-    default_module._get_private_key.cache_clear()
-    default_module._get_collateral_abi.cache_clear()
-    monkeypatch.setattr(default_module, "_cached_contract_address", None, raising=False)
-
-
-@pytest.fixture
-def set_config(monkeypatch):
-    monkeypatch.setattr(
-        default_module,
-        "config",
-        SimpleNamespace(DYNAMIC_COLLATERAL_SLASH_AMOUNT_WEI=1000),
-        raising=False,
-    )
-
-
-@pytest.fixture  # type: ignore[misc]
-def w3(monkeypatch: pytest.MonkeyPatch) -> DummyW3:
-    w3 = DummyW3()
-    monkeypatch.setattr(default_module, "get_web3_connection", lambda network: w3, raising=True)
-    return w3
-
-
-@pytest.fixture
-def account_patch(monkeypatch):
-    fake_acct = SimpleNamespace(address="0xacc", key=b"" * 32)
-    monkeypatch.setattr(default_module, "Account", SimpleNamespace(from_key=lambda _k: fake_acct))
-    return fake_acct
-
-
-@pytest.fixture
-def private_key_patch(monkeypatch):
-    monkeypatch.setattr(Collateral, "_get_private_key", lambda self: "0xprivkey")
-
-
-@pytest.fixture
-def abi_patch(monkeypatch):
-    monkeypatch.setattr(
-        Collateral, "_get_collateral_abi", lambda self: [{"name": "slashCollateral"}]
-    )
-
-
-@pytest.fixture
-def contract_address_patch(monkeypatch):
-    async def _addr(self):
-        return "0xcontract"
-
-    monkeypatch.setattr(Collateral, "get_collateral_contract_address", _addr)
-
-
-@pytest.fixture
-def http_ok(monkeypatch):
-    def _set(content: bytes) -> bytes:
-        class _Resp:
-            def __init__(self, c: bytes):
-                self.content = c
-
-            def raise_for_status(self):
-                return None
-
-        monkeypatch.setattr(
-            default_module, "requests", SimpleNamespace(get=lambda url, timeout: _Resp(content))
-        )
-        return hashlib.md5(content).digest()
-
-    return _set
-
-
-@pytest.fixture
-def capture_send(monkeypatch):
-    captured: dict[str, Any] = {}
-
-    def _install():
-        def _send(_self, _w3, function, _account, **_):
-            captured["args"] = function.args
-            return HexBytes("0xabc")
-
-        monkeypatch.setattr(Collateral, "_build_and_send_transaction", _send)
-        return captured
-
-    return _install
-
-
-class TestListMinersWithSufficientCollateral:
-    @pytest.mark.django_db(transaction=True)
-    def test_filters_on_threshold_and_returns_plain_values(self):
-        # Below threshold
-        Miner.objects.create(hotkey="hk1", uid=1, evm_address="0x1", collateral_wei=Decimal("500"))
-        Miner.objects.create(hotkey="hk2", uid=2, evm_address="0x2", collateral_wei=Decimal("999"))
-        # At or above threshold
-        Miner.objects.create(hotkey="hk3", uid=3, evm_address="0x3", collateral_wei=Decimal("1000"))
-        Miner.objects.create(hotkey="hk4", uid=4, evm_address="0x4", collateral_wei=Decimal("2000"))
-
-        out = Collateral().list_miners_with_sufficient_collateral(min_amount_wei=1000)
-
-        hotkeys = {m.hotkey for m in out}
+        hotkeys = {miner.hotkey for miner in result}
         assert hotkeys == {"hk3", "hk4"}
-
-        assert all(isinstance(m.collateral_wei, int) and m.collateral_wei >= 1000 for m in out)
+        assert all(miner.collateral_wei >= 1_000 for miner in result)
 
 
 class TestSlashCollateral:
-    @pytest.mark.asyncio
-    @pytest.mark.django_db(transaction=True)
-    async def test_slash_success_http_url_checksums_and_sends(
-        self,
-        set_config,
-        w3,
-        account_patch,
-        private_key_patch,
-        abi_patch,
-        contract_address_patch,
-        http_ok,
-        capture_send,
-        monkeypatch,
-    ):
-        miner = await Miner.objects.acreate(
-            hotkey="hk-evm",
-            uid=1,
-            evm_address="0x1234567890123456789012345678901234567890",
-        )
+    pytestmark = pytest.mark.asyncio
 
-        md5 = http_ok(b"evidence-bytes")
+    async def test_slash_collateral_when_request_succeeds_emits_transaction(self) -> None:
+        miner_obj = await Miner.objects.acreate(hotkey="hk-evm")
 
-        captured = capture_send()
-
-        monkeypatch.setattr(
-            w3.eth,
-            "wait_for_transaction_receipt",
-            lambda *_: {"status": 1, "transactionHash": HexBytes("0xabc")},
-        )
-
-        await Collateral().slash_collateral(
-            miner_hotkey=miner.hotkey, url="https://example.com/proof"
-        )
-
-        miner_addr, amount, url, md5_passed = captured["args"]
-        assert miner_addr == miner.evm_address
-        assert amount == 1000
-        assert url == "https://example.com/proof"
-        assert md5_passed == md5
-
-    @pytest.mark.asyncio
-    @pytest.mark.django_db(transaction=True)
-    async def test_slash_errors_when_amount_not_positive(
-        self,
-        w3,
-        account_patch,
-        private_key_patch,
-        abi_patch,
-        contract_address_patch,
-        monkeypatch,
-    ):
-        miner = await Miner.objects.acreate(hotkey="hk", uid=1, evm_address="0xabc")
-        monkeypatch.setattr(
-            default_module, "config", SimpleNamespace(DYNAMIC_COLLATERAL_SLASH_AMOUNT_WEI=0)
-        )
-
-        with pytest.raises(SlashCollateralError, match="Slash amount must be greater than 0"):
-            await Collateral().slash_collateral(miner_hotkey=miner.hotkey, url="https://u")
-
-    @pytest.mark.asyncio
-    @pytest.mark.django_db(transaction=True)
-    async def test_slash_errors_when_no_contract_address(
-        self,
-        set_config,
-        w3,
-        account_patch,
-        private_key_patch,
-        abi_patch,
-        monkeypatch,
-    ):
-        miner = await Miner.objects.acreate(hotkey="hk", uid=1, evm_address="0xabc")
-
-        async def _addr_none(self):
-            return None
-
-        monkeypatch.setattr(Collateral, "get_collateral_contract_address", _addr_none)
-
-        with pytest.raises(
-            SlashCollateralError, match="Collateral contract address not configured"
+        async with async_setup_collateral(
+            miners=[miner_obj],
+            uids={"hk-evm": 1},
+            evm_addresses={"hk-evm": "0x1234567890123456789012345678901234567890"},
         ):
-            await Collateral().slash_collateral(miner_hotkey=miner.hotkey, url="https://u")
+            async with CollateralTestEnvironment() as env:
+                miner = miner_obj
+                evidence = b"evidence-bytes"
 
-    @pytest.mark.asyncio
-    @pytest.mark.django_db(transaction=True)
-    async def test_slash_fails_when_receipt_status_zero(
-        self,
-        set_config,
-        w3,
-        account_patch,
-        private_key_patch,
-        abi_patch,
-        contract_address_patch,
-        http_ok,
-        monkeypatch,
-    ):
-        miner = await Miner.objects.acreate(hotkey="hk", uid=1, evm_address="0xabc")
+                env.set_http_response(evidence)
+                await env.collateral.slash_collateral(miner_hotkey=miner.hotkey, url=SLASH_URL)
 
-        http_ok(b"content")
-        monkeypatch.setattr(
-            Collateral, "_build_and_send_transaction", lambda *a, **k: HexBytes("0x01")
+        assert env.requested_urls == [SLASH_URL]
+        expected_addr = "0x1234567890123456789012345678901234567890"
+        expected_args = (
+            expected_addr.upper(),
+            1_000,
+            SLASH_URL,
+            hashlib.md5(evidence).digest(),
         )
-        monkeypatch.setattr(w3.eth, "wait_for_transaction_receipt", lambda *_: {"status": 0})
+        assert env.transaction_call == (expected_args, {"gas_limit": 200_000, "value": 0})
 
-        with pytest.raises(SlashCollateralError, match="transaction failed"):
-            await Collateral().slash_collateral(miner_hotkey=miner.hotkey, url="https://u")
+    async def test_slash_collateral_when_amount_not_positive_raises(self) -> None:
+        miner_obj = await Miner.objects.acreate(hotkey="hk")
 
-    @pytest.mark.asyncio
-    @pytest.mark.django_db(transaction=True)
-    async def test_slash_errors_when_miner_missing(
-        self, set_config, w3, account_patch, private_key_patch, abi_patch
-    ):
-        with pytest.raises(SlashCollateralError, match="not found"):
-            await Collateral().slash_collateral(miner_hotkey="does-not-exist", url="https://u")
+        async with async_setup_collateral(
+            miners=[miner_obj],
+            uids={"hk": 1},
+            evm_addresses={"hk": "0xabc"},
+        ):
+            async with CollateralTestEnvironment() as env:
+                env.set_slash_amount(0)
 
-    @pytest.mark.asyncio
-    @pytest.mark.django_db(transaction=True)
-    async def test_slash_errors_when_miner_has_no_evm(
-        self, set_config, w3, account_patch, private_key_patch, abi_patch
-    ):
-        await Miner.objects.acreate(hotkey="hk", uid=1, evm_address=None)
-        with pytest.raises(SlashCollateralError, match="has no associated EVM address"):
-            await Collateral().slash_collateral(miner_hotkey="hk", url="https://u")
+                with pytest.raises(
+                    SlashCollateralError, match="Slash amount must be greater than 0"
+                ):
+                    await env.collateral.slash_collateral(miner_hotkey="hk", url=SLASH_URL)
 
-    @pytest.mark.asyncio
-    @pytest.mark.django_db(transaction=True)
-    async def test_slash_asserts_when_private_key_missing(
-        self, set_config, w3, abi_patch, monkeypatch
-    ):
-        await Miner.objects.acreate(hotkey="hk", uid=1, evm_address="0xabc")
-        monkeypatch.setattr(Collateral, "_get_private_key", lambda self: None)
-        with pytest.raises(AssertionError, match="EVM private key not found"):
-            await Collateral().slash_collateral(miner_hotkey="hk", url="https://u")
+    async def test_slash_collateral_when_contract_address_missing_raises(self) -> None:
+        miner_obj = await Miner.objects.acreate(hotkey="hk")
+
+        async with async_setup_collateral(
+            miners=[miner_obj],
+            uids={"hk": 1},
+            evm_addresses={"hk": "0xabc"},
+        ):
+            async with CollateralTestEnvironment(contract_address=None) as env:
+                with pytest.raises(
+                    SlashCollateralError,
+                    match="Collateral contract address not configured",
+                ):
+                    await env.collateral.slash_collateral(miner_hotkey="hk", url=SLASH_URL)
+
+    async def test_slash_collateral_when_receipt_status_zero_raises(self) -> None:
+        miner_obj = await Miner.objects.acreate(hotkey="hk")
+
+        async with async_setup_collateral(
+            miners=[miner_obj],
+            uids={"hk": 1},
+            evm_addresses={"hk": "0xabc"},
+        ):
+            async with CollateralTestEnvironment(receipt={"status": 0}) as env:
+                with pytest.raises(
+                    SlashCollateralError,
+                    match="collateral slashing transaction failed",
+                ):
+                    await env.collateral.slash_collateral(miner_hotkey="hk", url=SLASH_URL)
+
+    async def test_slash_collateral_when_miner_missing_raises(self) -> None:
+        with CollateralTestEnvironment() as env:
+            with pytest.raises(SlashCollateralError, match="not found"):
+                await env.collateral.slash_collateral(miner_hotkey="missing", url=SLASH_URL)
+
+    async def test_slash_collateral_when_miner_has_no_evm_address_raises(self) -> None:
+        miner_obj = await Miner.objects.acreate(hotkey="hk")
+
+        async with async_setup_collateral(
+            miners=[miner_obj],
+            uids={"hk": 1},
+            evm_addresses={"hk": None},
+        ):
+            async with CollateralTestEnvironment() as env:
+                with pytest.raises(
+                    SlashCollateralError,
+                    match="has no associated EVM address",
+                ):
+                    await env.collateral.slash_collateral(miner_hotkey="hk", url=SLASH_URL)
+
+    async def test_slash_collateral_when_private_key_missing_raises(self) -> None:
+        miner_obj = await Miner.objects.acreate(hotkey="hk")
+
+        async with async_setup_collateral(
+            miners=[miner_obj],
+            uids={"hk": 1},
+            evm_addresses={"hk": "0xabc"},
+        ):
+            async with CollateralTestEnvironment(private_key=None) as env:
+                with pytest.raises(AssertionError, match="EVM private key not found"):
+                    await env.collateral.slash_collateral(miner_hotkey="hk", url=SLASH_URL)
 
 
 class TestGetCollateralContractAddress:
-    @pytest.mark.asyncio
-    async def test_returns_cached_value_when_available(self, monkeypatch):
-        monkeypatch.setattr(default_module, "_cached_contract_address", "0xCACHED", raising=False)
-        out = await Collateral().get_collateral_contract_address()
-        assert out == "0xCACHED"
+    pytestmark = pytest.mark.asyncio
 
-    @pytest.mark.asyncio
-    async def test_reads_from_commitment_and_caches(self, monkeypatch):
-        class _HK:
-            ss58_address = "addr-ss58"
+    async def test_get_collateral_contract_address_when_configured_returns_value(self) -> None:
+        with CollateralTestEnvironment() as env:
+            result = await env.collateral.get_collateral_contract_address()
 
-        class _Wallet:
-            hotkey = _HK()
+        assert result == "0xcontract"
 
-        monkeypatch.setattr(
-            default_module,
-            "settings",
-            SimpleNamespace(
-                BITTENSOR_WALLET=lambda: _Wallet(), BITTENSOR_NETWORK="testnet", BITTENSOR_NETUID=42
-            ),
-        )
+    async def test_get_collateral_contract_address_when_missing_returns_none(self) -> None:
+        with CollateralTestEnvironment(contract_address=None) as env:
+            result = await env.collateral.get_collateral_contract_address()
 
-        class _Commitments:
-            async def get(self, _hotkey):
-                return '{"contract": {"address": "0xfrom-chain"}}'
-
-        class _Subnet:
-            commitments = _Commitments()
-
-        class _BT:
-            def __init__(self, _):
-                pass
-
-            async def __aenter__(self):
-                return self
-
-            async def __aexit__(self, *_):
-                return None
-
-            def subnet(self, _netuid):
-                return _Subnet()
-
-        monkeypatch.setattr(default_module, "turbobt", SimpleNamespace(Bittensor=_BT))
-
-        out1 = await Collateral().get_collateral_contract_address()
-        assert out1 == "0xfrom-chain"
-        monkeypatch.setattr(
-            default_module,
-            "turbobt",
-            SimpleNamespace(
-                Bittensor=lambda *_: (_ for _ in ()).throw(AssertionError("should not hit network"))
-            ),
-        )
-        out2 = await Collateral().get_collateral_contract_address()
-        assert out2 == "0xfrom-chain"
+        assert result is None
 
 
-class TestTaskHelpers:
-    def test_get_miner_collateral_happy_path(self, monkeypatch):
-        calls: dict[str, list[str]] = {"checksum": []}
+class TestGetMinerCollateral:
+    def test_get_miner_collateral_when_call_succeeds_returns_value(self) -> None:
+        abi = Collateral()._get_collateral_abi()
+        with CollateralTestEnvironment(collateral_values={"0xminer": 123}) as env:
+            value = get_miner_collateral(
+                cast(Web3, env.web3),
+                contract_address="0xcontract",
+                miner_address="0xminer",
+                block_identifier=321,
+            )
 
-        class _ContractFns:
-            def collaterals(self, who):
-                assert who == "0xMINER"
-                return SimpleNamespace(call=lambda **kw: 5000)
-
-        class _Eth:
-            def contract(self, address, abi):
-                assert address == "0xCONTRACT"
-                assert isinstance(abi, list)
-                return SimpleNamespace(functions=_ContractFns())
-
-        class _W3:
-            def __init__(self):
-                self.eth = _Eth()
-
-            def to_checksum_address(self, a: str) -> str:
-                calls["checksum"].append(a)
-                return {"0xcontract": "0xCONTRACT", "0xminer": "0xMINER"}[a.lower()]
-
-        monkeypatch.setattr(
-            default_module.Collateral,
-            "_get_collateral_abi",
-            lambda self: [{"name": "collaterals", "type": "function"}],
-        )
-
-        out = tasks_module.get_miner_collateral(
-            _W3(),  # type: ignore[arg-type]
-            "0xcontract",
-            "0xminer",
-            block_identifier=123,
-        )
-        assert out == 5000
-        assert calls["checksum"] == ["0xcontract", "0xminer"]
+        assert value == 123
+        assert env.contract_log == [("0XCONTRACT", abi)]
+        assert [c.miner_address for c in env.web3_calls] == ["0XMINER"]
+        assert [c.block_identifier for c in env.web3_calls] == [321]
 
 
 class TestSyncCollaterals:
-    @pytest.mark.django_db(transaction=True)
-    def test_updates_evm_and_collateral_for_known_uids(self, monkeypatch):
-        m1 = Miner.objects.create(hotkey="hk1", uid=1, evm_address=None, collateral_wei=Decimal(0))
-        m2 = Miner.objects.create(hotkey="hk2", uid=2, evm_address=None, collateral_wei=Decimal(0))
-        Miner.objects.create(
-            hotkey="not-in-metagraph", uid=99, evm_address=None, collateral_wei=Decimal(0)
-        )
+    def test_sync_collaterals_when_associations_available_updates_miners(self) -> None:
+        m1 = Miner.objects.create(hotkey="hk1")
+        m2 = Miner.objects.create(hotkey="hk2")
+        m3 = Miner.objects.create(hotkey="not-in-metagraph")
 
-        @dataclass
-        class _Neuron:
-            hotkey: str
+        with setup_collateral(
+            miners=[m1, m2, m3],
+            uids={"hk1": 1, "hk2": 2, "not-in-metagraph": 99},
+            evm_addresses={"hk1": "0xORIG1", "hk2": "0xORIG2", "not-in-metagraph": "0xORIG3"},
+            collaterals_wei={"hk1": 0, "hk2": 0, "not-in-metagraph": 0},
+        ):
+            with CollateralTestEnvironment(collateral_values={"0xA": 5_000, "0xB": 6_000}) as env:
+                harness = CollateralTaskHarness(
+                    env=env,
+                    neurons=[Mock(hotkey="hk1"), Mock(hotkey="hk2")],
+                    block_number=12345,
+                    block_hash="0xBLOCK",
+                    associations={1: "0xA", 2: "0xB"},
+                )
 
-        neurons = [_Neuron("hk1"), _Neuron("hk2")]
-        block = DummyBlock(number=12345, hash="0xBLOCK")
+                harness.run()
 
-        async def mock_get_metagraph_for_sync(bt):
-            return (neurons, SimpleNamespace(), block)
+                miner1 = Miner.objects.get(hotkey="hk1")
+                miner2 = Miner.objects.get(hotkey="hk2")
+                other = Miner.objects.get(hotkey="not-in-metagraph")
 
-        monkeypatch.setattr(tasks_module, "_get_metagraph_for_sync", mock_get_metagraph_for_sync)
+                assert (miner1.evm_address, int(miner1.collateral_wei)) == ("0xA", 5_000)
+                assert (miner2.evm_address, int(miner2.collateral_wei)) == ("0xB", 6_000)
+                assert other.evm_address == "0xORIG3"
+                assert env.fetch_log == [
+                    {"netuid": settings.BITTENSOR_NETUID, "block_hash": "0xBLOCK"}
+                ]
+                assert [call.miner_address for call in env.web3_calls] == ["0XA", "0XB"]
 
-        associations = {1: "0xA", 2: "0xB"}
+    def test_sync_collaterals_when_collateral_call_fails_records_event(self) -> None:
+        m1 = Miner.objects.create(hotkey="hk1")
 
-        async def mock_get_evm_key_associations(**kwargs):
-            return associations
+        with setup_collateral(
+            miners=[m1],
+            uids={"hk1": 1},
+            evm_addresses={"hk1": "0xORIG"},
+            collaterals_wei={"hk1": 0},
+        ):
+            with CollateralTestEnvironment(collateral_values={"0xA": RuntimeError("boom")}) as env:
+                harness = CollateralTaskHarness(
+                    env=env,
+                    neurons=[Mock(hotkey="hk1")],
+                    block_number=111,
+                    block_hash="0xHASH",
+                    associations={1: "0xA"},
+                )
 
-        monkeypatch.setattr(tasks_module, "get_evm_key_associations", mock_get_evm_key_associations)
+                harness.run()
 
-        monkeypatch.setattr(tasks_module, "get_web3_connection", lambda network: DummyW3())
-
-        async def mock_get_collateral_contract_address(self):
-            return "0xCONTRACT"
-
-        monkeypatch.setattr(
-            default_module.Collateral,
-            "get_collateral_contract_address",
-            mock_get_collateral_contract_address,
-        )
-        monkeypatch.setattr(
-            tasks_module,
-            "settings",
-            SimpleNamespace(
-                BITTENSOR_NETWORK="net", BITTENSOR_NETUID=1, DEFAULT_DB_ALIAS="default"
-            ),
-        )
-
-        monkeypatch.setattr(clean_me_up_module, "ShieldedBittensor", MockShieldedBittensor)
-
-        monkeypatch.setattr(
-            tasks_module,
-            "get_miner_collateral",
-            lambda w3, caddr, who, block_identifier: 5000,
-        )
-
-        tasks_module.sync_collaterals.run(bittensor=SimpleNamespace(subtensor=SimpleNamespace()))
-
-        m1.refresh_from_db()
-        m2.refresh_from_db()
-        assert (m1.evm_address, int(m1.collateral_wei)) == ("0xA", 5000)
-        assert (m2.evm_address, int(m2.collateral_wei)) == ("0xB", 5000)
-
-    @pytest.mark.django_db(transaction=True)
-    def test_handles_get_collateral_errors(self, monkeypatch):
-        m = Miner.objects.create(hotkey="hk1", uid=1, evm_address=None, collateral_wei=Decimal(0))
-
-        @dataclass
-        class _Neuron:
-            hotkey: str
-
-        neurons = [_Neuron("hk1")]
-        block = DummyBlock(number=111, hash="0xH")
-
-        async def mock_get_metagraph_for_sync(bt):
-            return (neurons, SimpleNamespace(), block)
-
-        monkeypatch.setattr(tasks_module, "_get_metagraph_for_sync", mock_get_metagraph_for_sync)
-
-        async def mock_get_evm_key_associations(**kwargs):
-            return {1: "0xA"}
-
-        monkeypatch.setattr(tasks_module, "get_evm_key_associations", mock_get_evm_key_associations)
-        monkeypatch.setattr(tasks_module, "get_web3_connection", lambda network: DummyW3())
-
-        async def mock_get_collateral_contract_address(self):
-            return "0xCONTRACT"
-
-        monkeypatch.setattr(
-            default_module.Collateral,
-            "get_collateral_contract_address",
-            mock_get_collateral_contract_address,
-        )
-
-        monkeypatch.setattr(clean_me_up_module, "ShieldedBittensor", MockShieldedBittensor)
-
-        (
-            monkeypatch.setattr(
-                tasks_module,
-                "get_miner_collateral",
-                lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom")),
-            ),
-        )
-        monkeypatch.setattr(
-            tasks_module,
-            "settings",
-            SimpleNamespace(
-                BITTENSOR_NETWORK="net", BITTENSOR_NETUID=1, DEFAULT_DB_ALIAS="default"
-            ),
-        )
-
-        tasks_module.sync_collaterals.run(bittensor=SimpleNamespace(subtensor=SimpleNamespace()))
-
-        m.refresh_from_db()
-        assert m.evm_address == "0xA"
-        assert int(m.collateral_wei) == 0
+                miner = Miner.objects.get(hotkey="hk1")
+                assert (miner.evm_address, int(miner.collateral_wei)) == ("0xA", 0)
+                assert env.fetch_log == [
+                    {"netuid": settings.BITTENSOR_NETUID, "block_hash": "0xHASH"}
+                ]
+                assert [call.miner_address for call in env.web3_calls] == ["0XA"]
+                failure_events = [event for event in env.system_events.records if event.get("data")]
+                assert failure_events and failure_events[-1]["data"]["miner_hotkey"] == "hk1"
