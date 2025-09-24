@@ -12,7 +12,7 @@ services:
       - ${REDIS_PORT}:6379
 
   db:
-    image: postgres:14.0-alpine
+    image: postgres:17.0-alpine
     healthcheck:
       test: pg_isready -U ${POSTGRES_USER} || exit 1
     environment:
