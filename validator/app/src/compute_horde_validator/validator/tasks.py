@@ -1847,6 +1847,15 @@ def evict_old_data():
 async def execute_organic_job_request_on_worker(
     job_request: OrganicJobRequest, job_route: JobRoute
 ) -> OrganicJob:
+    """
+    Sends the job request to be executed on a celery worker and waits for the result.
+    Returns the OrganicJob created for the request (success or not).
+    Hint: the task also sends job status updates to a django channel:
+        ```
+        while True:
+            msg = await get_channel_layer().receive(f"job_status_updates__{job_uuid}")
+        ```
+    """
     timeout = await aget_config("ORGANIC_JOB_CELERY_WAIT_TIMEOUT")
     future_result: AsyncResult[None] = _execute_organic_job_on_worker.apply_async(
         args=(job_request.model_dump(), job_route.model_dump()),

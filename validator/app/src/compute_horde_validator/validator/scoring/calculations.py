@@ -3,11 +3,82 @@ from collections import defaultdict
 from collections.abc import Callable, Sequence
 
 import numpy as np
+from compute_horde_core.executor_class import ExecutorClass
 from constance import config
 
+from compute_horde_validator.validator.allowance.default import allowance
+from compute_horde_validator.validator.allowance.types import CannotSpend, ErrorWhileSpending
+from compute_horde_validator.validator.allowance.utils.spending import Triplet
 from compute_horde_validator.validator.models import Miner, OrganicJob, SyntheticJob
+from compute_horde_validator.validator.receipts import receipts
 
 logger = logging.getLogger(__name__)
+
+
+def calculate_allowance_paid_job_scores(
+    start_block: int, end_block: int
+) -> dict[str, dict[str, float]]:
+    """
+    Give scores based on executor seconds of finished jobs that were properly paid for with allowance.
+    End block is exclusive.
+    """
+    scores: defaultdict[ExecutorClass, defaultdict[str, float]] = defaultdict(
+        lambda: defaultdict(float)
+    )
+
+    for executor_class in ExecutorClass:
+        # Find out what jobs finished within the time and get the associated spending info
+        job_spendings = receipts().get_finished_jobs_for_block_range(
+            start_block, end_block, executor_class
+        )
+
+        logger.info(
+            f"Found {len(job_spendings)} jobs "
+            f"for {executor_class} "
+            f"finished between blocks {start_block} and {end_block}"
+        )
+
+        if not job_spendings:
+            continue
+
+        # Ask allowance module for a bookkeeper, which will be used to validate the spendings in-memory
+        bookkeeper = allowance().get_temporary_bookkeeper(start_block, end_block)
+
+        # Try to execute the spendings, score successfully paid jobs, log invalid ones
+        for spending in job_spendings:
+            triplet = Triplet(
+                spending.validator_hotkey, spending.miner_hotkey, spending.executor_class
+            )
+            job_cost = spending.executor_seconds_cost
+            logger.debug(
+                "Validating spending job=%s validator=%s miner=%s value=%s blocks=%s",
+                spending.job_uuid,
+                spending.validator_hotkey,
+                spending.miner_hotkey,
+                job_cost,
+                spending.paid_with_blocks,
+            )
+            try:
+                bookkeeper.spend(triplet, spending.started_at, spending.paid_with_blocks, job_cost)
+                scores[triplet.executor_class][triplet.miner] += job_cost
+                logger.info(
+                    f"Registered valid spending for job {spending.job_uuid} with value {job_cost}"
+                )
+            except CannotSpend as e:
+                # TODO(new scoring): System event / metric
+                logger.warning(e)
+            except ErrorWhileSpending as e:
+                # TODO(new scoring): System event / metric
+                logger.warning(e)
+            finally:
+                # Just so that we return something for triplets that failed everything
+                scores[triplet.executor_class].setdefault(triplet.miner, 0)
+
+    # Convert back to regular dicts and return
+    return {
+        executor_class: {miner: score for miner, score in miner_scores.items()}
+        for executor_class, miner_scores in scores.items()
+    }
 
 
 def normalize(scores: dict[str, float], weight: float = 1) -> dict[str, float]:

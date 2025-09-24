@@ -1,3 +1,5 @@
+from dataclasses import dataclass
+
 import pydantic
 
 ss58_address = str
@@ -24,6 +26,21 @@ class ValidatorModel(pydantic.BaseModel):
     effective_stake: float
 
 
+@dataclass
+class SpendingDetails:
+    requested_amount: float
+    offered_blocks: block_ids
+    spendable_amount: float
+    spent_blocks: block_ids
+    outside_range_blocks: block_ids
+    double_spent_blocks: block_ids
+    invalidated_blocks: block_ids
+
+    @property
+    def rejected_blocks(self) -> block_ids:
+        return self.outside_range_blocks + self.double_spent_blocks + self.invalidated_blocks
+
+
 class AllowanceException(Exception):
     pass
 
@@ -38,6 +55,19 @@ class ReservationNotFound(AllowanceException):
 
 class ReservationAlreadySpent(AllowanceException):
     pass
+
+
+class CannotSpend(Exception):
+    def __init__(self, details: SpendingDetails):
+        self.details = details
+
+    def __str__(self):
+        return f"Cannot spend {self.details.requested_amount} ({len(self.details.rejected_blocks)} blocks rejected, spendable allowance {self.details.spendable_amount})"
+
+
+class ErrorWhileSpending(Exception):
+    def __init__(self, msg: str):
+        super().__init__(msg)
 
 
 class CannotReserveAllowanceException(AllowanceException):

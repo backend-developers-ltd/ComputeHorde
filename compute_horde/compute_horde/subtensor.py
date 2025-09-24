@@ -32,6 +32,7 @@ def get_cycle_containing_block(block: int, netuid: int, tempo: int = TEMPO) -> r
     """
     A cycle contains two epochs, starts on an even one. A cycle is the basic unit of passage of time in compute horde,
     and validators testing miners are synchronised to cycles.
+    The range is [inclusive, exclusive), e.g.: [1000, 2000), then [2000, 3000), etc.
     """
     very_first_epoch = get_epoch_containing_block(0, netuid, tempo=tempo)
     epoch_containing_block = get_epoch_containing_block(block, netuid, tempo=tempo)
