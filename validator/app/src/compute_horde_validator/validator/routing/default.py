@@ -88,7 +88,9 @@ def _pick_miner_for_job_v2(request: V2JobRequest) -> JobRoute:
             hotkey_ss58=miner_model.hotkey,
         )
         # FIXME: implement `allowance_blocks` reservation, it must not be None
-        return JobRoute(miner=miner, allowance_blocks=[], allowance_reservation_id=None)
+        return JobRoute(
+            miner=miner, allowance_blocks=[], allowance_reservation_id=None, allowance_job_value=0
+        )
 
     if request.on_trusted_miner:
         logger.debug(f"Using TRUSTED_MINER for job {request.uuid}")
@@ -99,7 +101,9 @@ def _pick_miner_for_job_v2(request: V2JobRequest) -> JobRoute:
             ip_version=miner_model.ip_version,
             hotkey_ss58=miner_model.hotkey,
         )
-        return JobRoute(miner=miner, allowance_blocks=None, allowance_reservation_id=None)
+        return JobRoute(
+            miner=miner, allowance_blocks=None, allowance_reservation_id=None, allowance_job_value=0
+        )
 
     # Calculate total executor-seconds required for the job
     executor_seconds = (
@@ -213,7 +217,10 @@ def _pick_miner_for_job_v2(request: V2JobRequest) -> JobRoute:
                 f"Successfully reserved miner {miner_hotkey} for job {request.uuid} with reservation ID {reservation_id}"
             )
             return JobRoute(
-                miner=miner, allowance_blocks=blocks, allowance_reservation_id=reservation_id
+                miner=miner,
+                allowance_blocks=blocks,
+                allowance_reservation_id=reservation_id,
+                allowance_job_value=executor_seconds,
             )
 
         except CannotReserveAllowanceException:
