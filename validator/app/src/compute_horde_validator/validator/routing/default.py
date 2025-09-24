@@ -89,7 +89,10 @@ def _pick_miner_for_job_v2(request: V2JobRequest) -> JobRoute:
         )
         # FIXME: implement `allowance_blocks` reservation, it must not be None
         return JobRoute(
-            miner=miner, allowance_blocks=[], allowance_reservation_id=None, allowance_job_value=0
+            miner=miner,
+            allowance_blocks=[],
+            allowance_reservation_id=None,
+            allowance_job_value=None,
         )
 
     if request.on_trusted_miner:
@@ -102,7 +105,10 @@ def _pick_miner_for_job_v2(request: V2JobRequest) -> JobRoute:
             hotkey_ss58=miner_model.hotkey,
         )
         return JobRoute(
-            miner=miner, allowance_blocks=None, allowance_reservation_id=None, allowance_job_value=0
+            miner=miner,
+            allowance_blocks=None,
+            allowance_reservation_id=None,
+            allowance_job_value=None,
         )
 
     # Calculate total executor-seconds required for the job

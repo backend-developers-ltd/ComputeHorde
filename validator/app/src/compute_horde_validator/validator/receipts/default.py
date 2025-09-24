@@ -17,7 +17,7 @@ from compute_horde.receipts.transfer import MinerInfo, ReceiptsTransfer, Transfe
 from compute_horde.utils import sign_blob
 from compute_horde_core.executor_class import ExecutorClass
 from django.conf import settings
-from django.db.models import Count, Exists, OuterRef
+from django.db.models import Count, Exists, OuterRef, Subquery
 from django.utils import timezone
 from prometheus_client import Counter, Gauge, Histogram
 from typing_extensions import deprecated
@@ -28,7 +28,7 @@ from compute_horde_validator.validator.models import MetagraphSnapshot, Miner
 from compute_horde_validator.validator.models.allowance.internal import Block
 
 from .base import ReceiptsBase
-from .types import FinishedJobInfo, TransferIsDisabled
+from .types import JobSpendingInfo, TransferIsDisabled
 
 logger = logging.getLogger(__name__)
 
@@ -208,9 +208,13 @@ class Receipts(ReceiptsBase):
     async def get_job_started_receipt_by_uuid(self, job_uuid: str) -> JobStartedReceipt:
         return await JobStartedReceipt.objects.aget(job_uuid=job_uuid)
 
-    async def get_finished_jobs_for_block_range(
+    def get_finished_jobs_for_block_range(
         self, start_block: int, end_block: int, executor_class: ExecutorClass
-    ) -> list[FinishedJobInfo]:
+    ) -> list[JobSpendingInfo]:
+        """
+        Returns the alleged job spendings as reported by miners via receipt transfer.
+        These spendings may be bogus and require validation.
+        """
         if start_block >= end_block:
             logger.warning(
                 "Invalid block range provided: start_block (%s) >= end_block (%s)",
@@ -219,51 +223,35 @@ class Receipts(ReceiptsBase):
             )
             return []
 
-        start_timestamp = await self._get_block_timestamp(start_block)
-        end_timestamp = await self._get_block_timestamp(end_block)
+        start_timestamp = self._get_block_timestamp(start_block)
+        end_timestamp = self._get_block_timestamp(end_block)
 
         finished_qs = JobFinishedReceipt.objects.filter(
             timestamp__gte=start_timestamp,
             timestamp__lt=end_timestamp,
         )
 
+        # Filter for executor class - which is present on the job started receipt
         starts = JobStartedReceipt.objects.filter(
             job_uuid=OuterRef("job_uuid"), executor_class=str(executor_class)
         )
         finished_qs = finished_qs.filter(Exists(starts))
 
-        receipts: list[JobFinishedReceipt] = [receipt async for receipt in finished_qs]
+        # TODO(new scoring): this could be inefficient
+        finished_qs = finished_qs.annotate(started_at=Subquery(starts.values("timestamp")[:1]))
 
-        earliest_block_numbers = {min(r.block_numbers) for r in receipts if r.block_numbers}
-        block_number_to_timestamp: dict[int, datetime.datetime] = {}
-        if earliest_block_numbers:
-            async for block in Block.objects.filter(block_number__in=earliest_block_numbers):
-                block_number_to_timestamp[block.block_number] = block.creation_timestamp
-
-            missing_blocks = earliest_block_numbers - set(block_number_to_timestamp.keys())
-            for block_number in missing_blocks:
-                block_number_to_timestamp[block_number] = await self._get_block_timestamp(
-                    block_number
-                )
-
-        result: list[FinishedJobInfo] = []
-        for r in receipts:
-            block_start_time: datetime.datetime | None = None
-            if r.block_numbers:
-                earliest = min(r.block_numbers)
-                block_start_time = block_number_to_timestamp.get(earliest)
-
-            result.append(
-                FinishedJobInfo(
-                    validator_hotkey=r.validator_hotkey,
-                    miner_hotkey=r.miner_hotkey,
-                    job_run_time_us=r.time_took_us,
-                    block_start_time=block_start_time,
-                    block_ids=r.block_numbers,
-                )
+        return [
+            JobSpendingInfo(
+                job_uuid=str(r.job_uuid),
+                validator_hotkey=r.validator_hotkey,
+                miner_hotkey=r.miner_hotkey,
+                executor_class=executor_class,
+                executor_seconds_cost=r.score(),
+                paid_with_blocks=r.block_numbers,
+                started_at=r.started_at,
             )
-
-        return result
+            for r in finished_qs
+        ]
 
     async def get_busy_executor_count(
         self, executor_class: ExecutorClass, at_time: datetime.datetime
@@ -440,9 +428,9 @@ class Receipts(ReceiptsBase):
             logger.warning("DYNAMIC_RECEIPT_TRANSFER_ENABLED dynamic config is not set up!")
         raise TransferIsDisabled
 
-    async def _get_block_timestamp(self, block_number: int) -> datetime.datetime:
+    def _get_block_timestamp(self, block_number: int) -> datetime.datetime:
         try:
-            block = await Block.objects.aget(block_number=block_number)
+            block = Block.objects.get(block_number=block_number)
             return block.creation_timestamp
         except Block.DoesNotExist:
             return supertensor().get_block_timestamp(block_number)

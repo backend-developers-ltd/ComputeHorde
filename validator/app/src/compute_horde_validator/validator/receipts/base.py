@@ -6,7 +6,7 @@ from compute_horde.receipts.schemas import JobStartedReceiptPayload
 from compute_horde_core.executor_class import ExecutorClass
 from typing_extensions import deprecated
 
-from .types import FinishedJobInfo
+from .types import JobSpendingInfo
 
 
 class ReceiptsBase(ABC):
@@ -102,9 +102,9 @@ class ReceiptsBase(ABC):
         pass
 
     @abstractmethod
-    async def get_finished_jobs_for_block_range(
+    def get_finished_jobs_for_block_range(
         self, start_block: int, end_block: int, executor_class: ExecutorClass
-    ) -> list[FinishedJobInfo]:
+    ) -> list[JobSpendingInfo]:
         """
         Returns tuples for jobs whose finish (receipt) timestamp falls within the
         given block range [start_block, end_block), filtered by executor class.
