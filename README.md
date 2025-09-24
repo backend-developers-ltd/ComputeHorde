@@ -77,52 +77,29 @@ The SDK allows you to:
 
 ## Scoring Mechanism
 
-The scoring mechanism in ComputeHorde is designed to **incentivize miners to perform organic jobs** while 
-maintaining accountability and fairness in the network. 
+The scoring mechanism in ComputeHorde is designed to **incentivize miners to perform organic jobs** while maintaining accountability and fairness in the network. 
 
-Miners are scored based on their **performance during peak cycles**,
-encouraging them to **scale up executors when demand is high** while **minimizing active resources during non-peak periods** to reduce costs.
+### Big Picture
+* **Receipts drive scoring.** Miners keep signed records of every finished job, all validators
+  see the same receipts, so credit follows the work for whomever it was done.
+* **Rolling stake-proportional block allowance.** Every block mints executor-seconds
+  proportional to active executors, and validators can spend a stake-weighted share.
+* **Runtime converts to points.** When scoring runs, the validator counts paid seconds per miner,
+  folds them by coldkey, and distributes across hotkeys following the [dancing rules](#dancing-bonus) below. Organic and synthetic jobs contribute equally once allowance checks out.
 
-The core mechanism ensures that miners can **reject synthetic jobs without penalty if they provide proof that they are actively engaged in an organic job**.
+### Allowance & Blocks
+* Executor counts and validator stakes can shift every block, so the **allowance pool is recalculated** continuously.
+* Validators **pay with block numbers** when starting a job; the receipt references those blocks.
+* During scoring the **validator verifies the blocks** were fresh, unspent, and cover the runtime. Missing allowance => no incentive.
 
-### Peak and Non-Peak Cycles
+### Dancing Bonus
+* Validators **split each coldkey’s score across its hotkeys**, with the declared main hotkey taking the largest share in that cycle.
+* **Changing the main hotkey** from the previous cycle triggers a **10 % boost** on the coldkey before splitting the score.
+* This encourages **variance**, which is essential for preventing [weight-copying](#discouraging-weight-copying).
 
-ComputeHorde operates in **10-cycle testing days** (each cycle is **2 Bittensor tempos**, i.e., **722 blocks**).
-Within each testing day, **one cycle is designated as the peak cycle**.
-
-- **Scoring is performed primarily during peak cycles.**
-  - Miners should **declare their full executor capacity** during peak cycles to maximize their score.
-
-- During **non-peak cycles**, miners should:
-  - **Maintain at least 10% of their peak executors** to avoid a **20% penalty on their score**.
-     - Miners who declare **more than 10% of their peak executors** will not receive additional synthetic jobs, meaning excess executors will remain idle, leading to unnecessary costs.
-  - **Remain available for organic jobs**, which provide points **regardless of peak or non-peak status**.
-
-### Formula (calculated per validator, in peak cycles)
-
-- **1 point** for each successfully completed **synthetic job**.
-- **1 point** for each successfully completed **organic job** (**awarded in all cycles**).
-- **1 point** for each **properly rejected synthetic job** (when a miner provides a receipt proving they are occupied with an organic job from another validator with at least μ30k stake).
-- A **successfully completed job** is one that finishes within a specified timeout.
-- **Penalties for incorrect organic job results**:
-  - If a validator detects that the result of an organic job is incorrect:
-    - The miner **does not receive points** for that job.
-    - The miner is **blacklisted for 4 hours**, meaning they are not assigned any tasks during that period and effectively lose all earning opportunities.
-
-### Dancing Bonus (validated in peak cycles only)
-
-Miners who implement **dancing**—moving their executors between registered UIDs—receive a **30% bonus** on their score.
-
-- **Dancing is verified only during peak cycles.**
-- If a miner **dances between two consecutive peak cycles (Peak-1 → Peak-2)**, they receive the **dancing bonus** in **Peak-2 and all non-peak cycles leading up to Peak-3**.
-- If a miner missed Peak-1 but performed dancing before Peak-2, the bonus is still awarded for Peak-2 and the following non-peak cycles.
-
-This encourages **variance**, which is essential for preventing [weight-copying](#discouraging-weight-copying).
-
-### Hardware Classes and Configurable Weights
-
-- Each **hardware class** in ComputeHorde has a **configurable weight**.  
-- These weights influence the miner’s final score, prioritizing certain hardware types based on network demand.
+### Hardware Classes
+* Each **hardware class** in ComputeHorde has a **configurable weight**.
+* These weights influence the miner’s final score, prioritizing certain hardware types based on network demand.
 
 ## Returning Miners — What’s New
 
