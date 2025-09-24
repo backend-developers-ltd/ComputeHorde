@@ -86,6 +86,7 @@ The scoring mechanism in ComputeHorde is designed to **incentivize miners to per
   proportional to active executors, and validators can spend a stake-weighted share.
 * **Runtime converts to points.** When scoring runs, the validator counts paid seconds per miner,
   folds them by coldkey, and distributes across hotkeys following the [dancing rules](#dancing-bonus) below. Organic and synthetic jobs contribute equally once allowance checks out.
+* **Faster runs earn more.** Today those paid seconds equal the runtime, but we are transitioning to pay miners according to the allowance requested by the validator when the job starts, so completing work sooner—for example by smart image preloading —directly increases profit.
 
 ### Allowance & Blocks
 * Executor counts and validator stakes can shift every block, so the **allowance pool is recalculated** continuously.
@@ -396,4 +397,3 @@ To start all the core services locally and be able to schedule jobs that don't r
 etc.) go to run [screen](local_stack/run_in_screen.sh). Once all the tabs look like ready, execute
 [hello_world](local_stack/send_hello_world_job.py). This setup does not require (currently) a subtensor, is 
 self-contained and should run on anything that has a CPU, RAM and an operating system. And docker.
-
