@@ -178,7 +178,7 @@ class JobFinishedReceipt(AbstractReceipt):
         return timedelta(microseconds=self.time_took_us)
 
     def score(self):
-        return float(self.score_str)
+        return int(self.score_str)
 
     def to_receipt(self) -> Receipt:
         if self.miner_signature is None:
@@ -222,6 +222,7 @@ class JobFinishedReceipt(AbstractReceipt):
         return JobFinishedReceipt(
             job_uuid=payload.job_uuid,
             miner_hotkey=payload.miner_hotkey,
+            validator_hotkey=payload.validator_hotkey,
             validator_signature=validator_signature,
             miner_signature=miner_signature,
             timestamp=payload.timestamp,

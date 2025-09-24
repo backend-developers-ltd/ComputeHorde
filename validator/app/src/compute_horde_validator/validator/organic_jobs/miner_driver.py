@@ -214,6 +214,7 @@ async def execute_organic_job_request(
         else None,
         allowance_blocks=job_route.allowance_blocks,
         allowance_reservation_id=job_route.allowance_reservation_id,
+        allowance_job_value=job_route.allowance_job_value or 0,
     )
 
     miner_client = MinerClient(
@@ -312,6 +313,8 @@ async def drive_organic_job(
         if isinstance(job_request, V2JobRequest)
         else None,
         streaming_details=job.streaming_details,
+        allowance_blocks=job.allowance_blocks or [],
+        allowance_job_value=job.allowance_job_value,
     )
 
     try:
