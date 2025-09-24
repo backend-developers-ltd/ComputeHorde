@@ -5,6 +5,10 @@ from compute_horde_core.executor_class import ExecutorClass
 from .base import AllowanceBase
 from .types import Miner, Neuron, block_ids, reservation_id, ss58_address
 from .utils import blocks, booking, manifests, metagraph
+from .utils.spending import (
+    InMemorySpendingBookkeeper,
+    SpendingBookkeeperBase,
+)
 from .utils.supertensor import supertensor
 
 
@@ -57,6 +61,9 @@ class Allowance(AllowanceBase):
             job_start_block=job_start_block,
             validator_ss58=self.my_ss58_address,
         )
+
+    def get_temporary_bookkeeper(self, start_block: int, end_block: int) -> SpendingBookkeeperBase:
+        return InMemorySpendingBookkeeper.for_block_range(start_block, end_block)
 
 
 _allowance_instance: Allowance | None = None

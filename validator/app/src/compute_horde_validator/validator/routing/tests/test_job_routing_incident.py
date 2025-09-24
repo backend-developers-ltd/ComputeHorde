@@ -381,6 +381,7 @@ async def test_excused_job_no_incident(monkeypatch):
             ),
             allowance_blocks=[],
             allowance_reservation_id=1,
+            allowance_job_value=0,
         )
 
     class _FakeRouting:

@@ -222,35 +222,36 @@ async def test_get_job_started_receipt_by_uuid(settings):
         await receipts().get_job_started_receipt_by_uuid(job_uuid_missing)
 
 
-@pytest.mark.asyncio
 @pytest.mark.django_db(transaction=True)
-async def test_get_finished_jobs_for_block_range_returns_only_in_range(settings):
+def test_get_finished_jobs_for_block_range_returns_only_in_range(settings):
     # Setup block timestamps
     start_block = 100
     end_block = 105
     start_ts = datetime.datetime.now(datetime.UTC)
     end_ts = start_ts + datetime.timedelta(minutes=10)
 
-    await Block.objects.acreate(block_number=start_block, creation_timestamp=start_ts)
-    await Block.objects.acreate(block_number=end_block, creation_timestamp=end_ts)
+    Block.objects.create(block_number=start_block, creation_timestamp=start_ts)
+    Block.objects.create(block_number=end_block, creation_timestamp=end_ts)
 
     miner_hotkey = "miner_hotkey_blockrange"
     validator_hotkey = settings.BITTENSOR_WALLET().get_hotkey().ss58_address
 
     in_uuid = str(uuid.uuid4())
 
-    await JobStartedReceipt.objects.acreate(
+    # Should be included - job ends within range
+    in_range_start_ts = start_ts - datetime.timedelta(seconds=30)
+    JobStartedReceipt.objects.create(
         job_uuid=in_uuid,
         miner_hotkey=miner_hotkey,
         validator_hotkey=validator_hotkey,
         validator_signature="sig",
-        timestamp=start_ts - datetime.timedelta(seconds=30),
+        timestamp=in_range_start_ts,
         executor_class="always_on.gpu-24gb",
         is_organic=True,
         ttl=60,
     )
     in_block_numbers = [start_block, start_block + 1]
-    await JobFinishedReceipt.objects.acreate(
+    JobFinishedReceipt.objects.create(
         job_uuid=in_uuid,
         miner_hotkey=miner_hotkey,
         validator_hotkey=validator_hotkey,
@@ -263,8 +264,9 @@ async def test_get_finished_jobs_for_block_range_returns_only_in_range(settings)
         block_numbers=in_block_numbers,
     )
 
+    # Should not be included - job ends before the range
     uuid_out_of_range = str(uuid.uuid4())
-    await JobStartedReceipt.objects.acreate(
+    JobStartedReceipt.objects.create(
         job_uuid=uuid_out_of_range,
         miner_hotkey=miner_hotkey,
         validator_hotkey=validator_hotkey,
@@ -274,7 +276,7 @@ async def test_get_finished_jobs_for_block_range_returns_only_in_range(settings)
         is_organic=True,
         ttl=60,
     )
-    await JobFinishedReceipt.objects.acreate(
+    JobFinishedReceipt.objects.create(
         job_uuid=uuid_out_of_range,
         miner_hotkey=miner_hotkey,
         validator_hotkey=validator_hotkey,
@@ -286,8 +288,9 @@ async def test_get_finished_jobs_for_block_range_returns_only_in_range(settings)
         score_str="0.1",
     )
 
+    # Should be excluded - job ends exactly at the upper bound
     uuid_end_exclusive = str(uuid.uuid4())
-    await JobStartedReceipt.objects.acreate(
+    JobStartedReceipt.objects.create(
         job_uuid=uuid_end_exclusive,
         miner_hotkey=miner_hotkey,
         validator_hotkey=validator_hotkey,
@@ -297,7 +300,7 @@ async def test_get_finished_jobs_for_block_range_returns_only_in_range(settings)
         is_organic=True,
         ttl=60,
     )
-    await JobFinishedReceipt.objects.acreate(
+    JobFinishedReceipt.objects.create(
         job_uuid=uuid_end_exclusive,
         miner_hotkey=miner_hotkey,
         validator_hotkey=validator_hotkey,
@@ -309,7 +312,7 @@ async def test_get_finished_jobs_for_block_range_returns_only_in_range(settings)
         score_str="0.2",
     )
 
-    rows = await receipts().get_finished_jobs_for_block_range(
+    rows = receipts().get_finished_jobs_for_block_range(
         start_block, end_block, executor_class=ExecutorClass.always_on__gpu_24gb
     )
 
@@ -317,21 +320,20 @@ async def test_get_finished_jobs_for_block_range_returns_only_in_range(settings)
     item = rows[0]
     assert item.miner_hotkey == miner_hotkey
     assert item.validator_hotkey == validator_hotkey
-    assert item.job_run_time_us == 1
-    assert item.block_start_time == start_ts
-    assert item.block_ids == in_block_numbers
+    assert item.executor_seconds_cost == 1
+    assert item.started_at == in_range_start_ts
+    assert item.paid_with_blocks == in_block_numbers
 
 
-@pytest.mark.asyncio
 @pytest.mark.django_db(transaction=True)
-async def test_get_completed_job_receipts_for_block_range_filters_by_executor_class(settings):
+def test_get_completed_job_receipts_for_block_range_filters_by_executor_class(settings):
     start_block = 300
     end_block = 305
     start_ts = datetime.datetime.now(datetime.UTC)
     end_ts = start_ts + datetime.timedelta(minutes=10)
 
-    await Block.objects.acreate(block_number=start_block, creation_timestamp=start_ts)
-    await Block.objects.acreate(block_number=end_block, creation_timestamp=end_ts)
+    Block.objects.create(block_number=start_block, creation_timestamp=start_ts)
+    Block.objects.create(block_number=end_block, creation_timestamp=end_ts)
 
     miner_hotkey = "miner_hotkey_exec_filter"
     validator_hotkey = settings.BITTENSOR_WALLET().get_hotkey().ss58_address
@@ -340,18 +342,19 @@ async def test_get_completed_job_receipts_for_block_range_filters_by_executor_cl
     exec_llm = ExecutorClass.always_on__llm__a6000
 
     gpu_uuid = str(uuid.uuid4())
-    await JobStartedReceipt.objects.acreate(
+    gpu_start_ts = start_ts - datetime.timedelta(seconds=5)
+    JobStartedReceipt.objects.create(
         job_uuid=gpu_uuid,
         miner_hotkey=miner_hotkey,
         validator_hotkey=validator_hotkey,
         validator_signature="sig",
-        timestamp=start_ts - datetime.timedelta(seconds=5),
+        timestamp=gpu_start_ts,
         executor_class=str(exec_gpu),
         is_organic=True,
         ttl=60,
     )
     gpu_block_numbers = [start_block, start_block + 2]
-    await JobFinishedReceipt.objects.acreate(
+    JobFinishedReceipt.objects.create(
         job_uuid=gpu_uuid,
         miner_hotkey=miner_hotkey,
         validator_hotkey=validator_hotkey,
@@ -359,12 +362,12 @@ async def test_get_completed_job_receipts_for_block_range_filters_by_executor_cl
         timestamp=start_ts + datetime.timedelta(minutes=2),
         time_started=start_ts + datetime.timedelta(minutes=1, seconds=30),
         time_took_us=90_000_000,
-        score_str="0.9",
+        score_str="1337.000",
         block_numbers=gpu_block_numbers,
     )
 
     llm_uuid = str(uuid.uuid4())
-    await JobStartedReceipt.objects.acreate(
+    JobStartedReceipt.objects.create(
         job_uuid=llm_uuid,
         miner_hotkey=miner_hotkey,
         validator_hotkey=validator_hotkey,
@@ -374,7 +377,7 @@ async def test_get_completed_job_receipts_for_block_range_filters_by_executor_cl
         is_organic=False,
         ttl=60,
     )
-    await JobFinishedReceipt.objects.acreate(
+    JobFinishedReceipt.objects.create(
         job_uuid=llm_uuid,
         miner_hotkey=miner_hotkey,
         validator_hotkey=validator_hotkey,
@@ -386,7 +389,7 @@ async def test_get_completed_job_receipts_for_block_range_filters_by_executor_cl
     )
 
     no_job_started_uuid = str(uuid.uuid4())
-    await JobFinishedReceipt.objects.acreate(
+    JobFinishedReceipt.objects.create(
         job_uuid=no_job_started_uuid,
         miner_hotkey=miner_hotkey,
         validator_hotkey=validator_hotkey,
@@ -397,7 +400,7 @@ async def test_get_completed_job_receipts_for_block_range_filters_by_executor_cl
         score_str="0.7",
     )
 
-    rows = await receipts().get_finished_jobs_for_block_range(
+    rows = receipts().get_finished_jobs_for_block_range(
         start_block, end_block, executor_class=exec_gpu
     )
 
@@ -405,9 +408,9 @@ async def test_get_completed_job_receipts_for_block_range_filters_by_executor_cl
     item = rows[0]
     assert item.miner_hotkey == miner_hotkey
     assert item.validator_hotkey == validator_hotkey
-    assert item.job_run_time_us == 90_000_000
-    assert item.block_start_time == start_ts
-    assert item.block_ids == gpu_block_numbers
+    assert item.executor_seconds_cost == 1337
+    assert item.started_at == gpu_start_ts
+    assert item.paid_with_blocks == gpu_block_numbers
 
 
 @pytest.mark.asyncio
