@@ -89,7 +89,7 @@ The scoring mechanism in ComputeHorde is designed to **incentivize miners to per
 * **Faster runs earn more.** Today those paid seconds equal the runtime, but we are transitioning to pay miners according to the allowance requested by the validator when the job starts, so completing work sooner—for example by smart image preloading —directly increases profit.
 
 ### Allowance & Blocks
-* Executor counts and validator stakes can shift every block, so the **allowance pool is recalculated** continuously.
+* Executor counts and validator stakes can shift every block, so the **allowance pool is recalculated** every block.
 * Validators **pay with block numbers** when starting a job; the receipt references those blocks.
 * During scoring the **validator verifies the blocks** were fresh, unspent, and cover the runtime. Missing allowance => no incentive.
 
