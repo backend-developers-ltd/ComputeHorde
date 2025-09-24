@@ -20,6 +20,7 @@ class JobRoute(pydantic.BaseModel):
     miner: Miner
     allowance_blocks: block_ids | None
     allowance_reservation_id: reservation_id | None
+    allowance_job_value: int | None
 
 
 class MinerIncidentType(models.TextChoices):
