@@ -224,7 +224,7 @@ class Receipts(ReceiptsBase):
             return []
 
         start_timestamp = self._get_block_timestamp(start_block)
-        end_timestamp = self._get_block_timestamp(end_block + 1)
+        end_timestamp = self._get_block_timestamp(end_block)
 
         finished_qs = JobFinishedReceipt.objects.filter(
             timestamp__gte=start_timestamp,
