@@ -62,7 +62,7 @@ class CannotSpend(Exception):
         self.details = details
 
     def __str__(self):
-        return f"Cannot spend {self.details.requested_amount} ({len(self.details.rejected_blocks)} blocks rejected, spendable allowance {self.details.spendable_amount})"
+        return f"Cannot spend ({self.details})"
 
 
 class ErrorWhileSpending(Exception):
