@@ -13,3 +13,11 @@ MANIFEST_FETCHING_TIMEOUT = 30.0
 
 MAX_JOB_RUN_TIME = 60 * 60.0
 MAX_JOB_RUN_TIME_BLOCKS_APPROX = int(MAX_JOB_RUN_TIME * 1.1 // 12)
+
+SPENDING_VALIDATION_BLOCK_LEEWAY_LOWER = 7
+# Additional extension of the allowed block range when validating spendings (lower bound)
+# TODO: +5: block finalization offset makes the allowance reserve blocks older by 5
+# TODO: +2: we are still off by 2 in what the allowance module reserves, even accounting for finalization
+
+SPENDING_VALIDATION_BLOCK_LEEWAY_UPPER = 0
+# Additional extension of the allowed block range when validating spendings (upper bound)
