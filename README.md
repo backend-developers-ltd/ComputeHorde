@@ -77,21 +77,23 @@ The SDK allows you to:
 
 ## Scoring Mechanism
 
-The scoring mechanism in ComputeHorde is designed to **incentivize miners to perform organic jobs** while maintaining accountability and fairness in the network. 
+The scoring mechanism in ComputeHorde is designed to **incentivize miners to perform organic jobs** 
+while maintaining accountability and fairness in the network. 
 
 ### Big Picture
-* **Receipts drive scoring.** Miners keep signed records of every finished job, all validators
-  see the same receipts, so credit follows the work for whomever it was done.
-* **Rolling stake-proportional block allowance.** Every block mints executor-seconds
-  proportional to active executors, and validators can spend a stake-weighted share.
-* **Runtime converts to points.** When scoring runs, the validator counts paid seconds per miner,
-  folds them by coldkey, and distributes across hotkeys following the [dancing rules](#dancing-bonus) below. Organic and synthetic jobs contribute equally once allowance checks out.
-* **Faster runs earn more.** Today those paid seconds equal the runtime, but we are transitioning to pay miners according to the allowance requested by the validator when the job starts, so completing work sooner—for example by smart image preloading —directly increases profit.
+* **Validators earn compute allowance.** Each block mints executor-seconds per miner–validator pair (precisely, per miner–validator–executorClass). 
+  The total supply is proportional to the number of executors (GPUs) in the subnet, and each validator’s share scales with stake.  
+* * **Fair usage is enforced.** Because allowance is minted per pair, validators must spread jobs across miners proportionally to fully use their share.  
+* **Validators pay with blocks.** Starting a job consumes allowance blocks equal to its runtime.  
+* **Scoring is global.** All validators score all miners’ work, regardless of who paid, as long as jobs fit valid allowance blocks.  
+* **Runtime converts to points.** Paid seconds per miner are summed, folded by coldkey, then split across hotkeys 
+  following the [dancing rules](#dancing-bonus). Organic and synthetic jobs score equally if allowance is valid.  
 
 ### Allowance & Blocks
-* Executor counts and validator stakes can shift every block, so the **allowance pool is recalculated** every block.
-* Validators **pay with block numbers** when starting a job; the receipt references those blocks.
-* During scoring the **validator verifies the blocks** were fresh, unspent, and cover the runtime. Missing allowance => no incentive.
+* The **allowance pool is recalculated every block**, since both executor counts (GPUs) and validator stakes change continuously.  
+* When starting a job, the validator spends **specific allowance blocks** to cover the runtime.  
+* During scoring, validators ensure blocks were **fresh, unspent, and sufficient**; overspending or missing allowance voids incentives.  
+* If a miner lowers their executor count, any tied allowance blocks are **invalidated** and cannot be used.  
 
 ### Dancing Bonus
 * Validators **split each coldkey’s score across its hotkeys**, with the declared main hotkey taking the largest share in that cycle.
@@ -100,7 +102,7 @@ The scoring mechanism in ComputeHorde is designed to **incentivize miners to per
 
 ### Hardware Classes
 * Each **hardware class** in ComputeHorde has a **configurable weight**.
-* These weights influence the miner’s final score, prioritizing certain hardware types based on network demand.
+* These weights adjust final scores, prioritizing hardware types based on network demand.  
 
 ## Returning Miners — What’s New
 
