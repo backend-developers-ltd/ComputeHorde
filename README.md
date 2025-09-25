@@ -81,28 +81,28 @@ The scoring mechanism in ComputeHorde is designed to **incentivize miners to per
 while maintaining accountability and fairness in the network. 
 
 ### Big Picture
-* **Validators earn compute allowance.** Each block mints executor-seconds per miner–validator pair (precisely, per miner–validator–executorClass). 
+- **Validators earn compute allowance.** Each block mints executor-seconds per miner–validator pair (precisely, per miner–validator–executorClass). 
   The total supply is proportional to the number of executors (GPUs) in the subnet, and each validator’s share scales with stake.  
-* * **Fair usage is enforced.** Because allowance is minted per pair, validators must spread jobs across miners proportionally to fully use their share.  
-* **Validators pay with blocks.** Starting a job consumes allowance blocks equal to its runtime.  
-* **Scoring is global.** All validators score all miners’ work, regardless of who paid, as long as jobs fit valid allowance blocks.  
-* **Runtime converts to points.** Paid seconds per miner are summed, folded by coldkey, then split across hotkeys 
+- **Fair usage is enforced.** Because allowance is minted per pair, validators must spread jobs across miners proportionally to fully use their share.  
+- **Validators pay with blocks.** Starting a job consumes allowance blocks equal to its runtime.  
+- **Scoring is global.** All validators score all miners’ work, regardless of who paid, as long as jobs fit valid allowance blocks.  
+- **Runtime converts to points.** Paid seconds per miner are summed, folded by coldkey, then split across hotkeys 
   following the [dancing rules](#dancing-bonus). Organic and synthetic jobs score equally if allowance is valid.  
 
 ### Allowance & Blocks
-* The **allowance pool is recalculated every block**, since both executor counts (GPUs) and validator stakes change continuously.  
-* When starting a job, the validator spends **specific allowance blocks** to cover the runtime.  
-* During scoring, validators ensure blocks were **fresh, unspent, and sufficient**; overspending or missing allowance voids incentives.  
-* If a miner lowers their executor count, any tied allowance blocks are **invalidated** and cannot be used.  
+- The **allowance pool is recalculated every block**, since both executor counts (GPUs) and validator stakes change continuously.  
+- When starting a job, the validator spends **specific allowance blocks** to cover the runtime.  
+- During scoring, validators ensure blocks were **fresh, unspent, and sufficient**; overspending or missing allowance voids incentives.  
+- If a miner lowers their executor count, any tied allowance blocks are **invalidated** and cannot be used.  
 
 ### Dancing Bonus
-* Validators **split each coldkey’s score across its hotkeys**, with the declared main hotkey taking the largest share in that cycle.
-* **Changing the main hotkey** from the previous cycle triggers a **10 % boost** on the coldkey before splitting the score.
-* This encourages **variance**, which is essential for preventing [weight-copying](#discouraging-weight-copying).
+- Validators **split each coldkey’s score across its hotkeys**, with the declared main hotkey taking the largest share in that cycle.
+- **Changing the main hotkey** from the previous cycle triggers a **10 % boost** on the coldkey before splitting the score.
+- This encourages **variance**, which is essential for preventing [weight-copying](#discouraging-weight-copying).
 
 ### Hardware Classes
-* Each **hardware class** in ComputeHorde has a **configurable weight**.
-* These weights adjust final scores, prioritizing hardware types based on network demand.  
+- Each **hardware class** in ComputeHorde has a **configurable weight**.
+- These weights adjust final scores, prioritizing hardware types based on network demand.  
 
 ## Returning Miners — What’s New
 
