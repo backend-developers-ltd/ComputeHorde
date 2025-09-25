@@ -239,12 +239,13 @@ def test_get_finished_jobs_for_block_range_returns_only_in_range(settings):
     in_uuid = str(uuid.uuid4())
 
     # Should be included - job ends within range
+    in_range_start_ts = start_ts - datetime.timedelta(seconds=30)
     JobStartedReceipt.objects.create(
         job_uuid=in_uuid,
         miner_hotkey=miner_hotkey,
         validator_hotkey=validator_hotkey,
         validator_signature="sig",
-        timestamp=start_ts - datetime.timedelta(seconds=30),
+        timestamp=in_range_start_ts,
         executor_class="always_on.gpu-24gb",
         is_organic=True,
         ttl=60,
@@ -320,7 +321,7 @@ def test_get_finished_jobs_for_block_range_returns_only_in_range(settings):
     assert item.miner_hotkey == miner_hotkey
     assert item.validator_hotkey == validator_hotkey
     assert item.executor_seconds_cost == 1
-    assert item.started_at == start_ts
+    assert item.started_at == in_range_start_ts
     assert item.paid_with_blocks == in_block_numbers
 
 
@@ -341,12 +342,13 @@ def test_get_completed_job_receipts_for_block_range_filters_by_executor_class(se
     exec_llm = ExecutorClass.always_on__llm__a6000
 
     gpu_uuid = str(uuid.uuid4())
+    gpu_start_ts = start_ts - datetime.timedelta(seconds=5)
     JobStartedReceipt.objects.create(
         job_uuid=gpu_uuid,
         miner_hotkey=miner_hotkey,
         validator_hotkey=validator_hotkey,
         validator_signature="sig",
-        timestamp=start_ts - datetime.timedelta(seconds=5),
+        timestamp=gpu_start_ts,
         executor_class=str(exec_gpu),
         is_organic=True,
         ttl=60,
@@ -360,7 +362,7 @@ def test_get_completed_job_receipts_for_block_range_filters_by_executor_class(se
         timestamp=start_ts + datetime.timedelta(minutes=2),
         time_started=start_ts + datetime.timedelta(minutes=1, seconds=30),
         time_took_us=90_000_000,
-        score_str="0.9",
+        score_str="1337.000",
         block_numbers=gpu_block_numbers,
     )
 
@@ -406,8 +408,8 @@ def test_get_completed_job_receipts_for_block_range_filters_by_executor_class(se
     item = rows[0]
     assert item.miner_hotkey == miner_hotkey
     assert item.validator_hotkey == validator_hotkey
-    assert item.executor_seconds_cost == 90
-    assert item.started_at == start_ts
+    assert item.executor_seconds_cost == 1337
+    assert item.started_at == gpu_start_ts
     assert item.paid_with_blocks == gpu_block_numbers
 
 
