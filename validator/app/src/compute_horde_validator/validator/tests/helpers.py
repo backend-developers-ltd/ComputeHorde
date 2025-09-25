@@ -27,6 +27,7 @@ from compute_horde.protocol_messages import (
 from compute_horde.utils import ValidatorInfo
 from compute_horde_core.signature import Signature
 from django.conf import settings
+from django.utils import timezone
 from pydantic import TypeAdapter
 
 from compute_horde_validator.validator.models import SystemEvent
@@ -161,6 +162,9 @@ def get_dummy_job_cheated_request_v0(uuid: str) -> V0JobCheated:
     return V0JobCheated(
         type="job.cheated",
         job_uuid=uuid,
+        cheated_timestamp=timezone.now(),
+        cheated_message="unknown",
+        cheated_details={},
         signature=get_dummy_signature(),
     )
 

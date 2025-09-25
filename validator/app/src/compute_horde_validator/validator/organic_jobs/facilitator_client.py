@@ -368,6 +368,15 @@ class FacilitatorClient:
             return
 
         job.cheated = True
+        # Propagate extra cheat details
+        try:
+            job.cheated_timestamp = cheated_job_request.cheated_timestamp
+            job.cheated_message = cheated_job_request.cheated_message
+            # Type ignore: pydantic JsonValue maps naturally to JSONField
+            job.cheated_details = cheated_job_request.cheated_details
+        except Exception:
+            # Keep backward compatibility if fields are absent in older facilitator
+            pass
         await job.asave()
 
         blacklist_time = await aget_config("DYNAMIC_JOB_CHEATED_BLACKLIST_TIME_SECONDS")
@@ -377,10 +386,15 @@ class FacilitatorClient:
         await SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).acreate(
             type=SystemEvent.EventType.MINER_ORGANIC_JOB_FAILURE,
             subtype=SystemEvent.EventSubType.JOB_CHEATED,
-            long_description="Job was reported as cheated",
+            long_description=f"Job was reported as cheated: {getattr(job, 'cheated_message', 'unknown')}",
             data={
                 "job_uuid": str(job.job_uuid),
                 "miner_hotkey": job.miner.hotkey,
+                "cheated_timestamp": job.cheated_timestamp.isoformat()
+                if job.cheated_timestamp
+                else None,
+                "cheated_message": job.cheated_message,
+                "cheated_details": job.cheated_details,
             },
         )
 

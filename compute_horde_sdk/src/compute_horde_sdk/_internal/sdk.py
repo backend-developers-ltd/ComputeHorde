@@ -486,13 +486,30 @@ class ComputeHordeClient:
             "SubnetID": "12",
         }
 
-    async def report_cheated_job(self, job_uuid: str) -> str:
+    async def report_cheated_job(
+        self,
+        job_uuid: str,
+        *,
+        cheated_message: str | None = None,
+        cheated_details: dict[str, Any] | None = None,
+        cheated_timestamp: float | None = None,
+    ) -> str:
         """
         Reports to validator that a miner has cheated on a job.
 
         :param job_uuid: The UUID of the job that was cheated on.
         """
-        data = {"job_uuid": job_uuid}
+        data: dict[str, Any] = {"job_uuid": job_uuid}
+        if cheated_message is not None:
+            data["cheated_message"] = cheated_message
+        if cheated_details is not None:
+            data["cheated_details"] = cheated_details
+        if cheated_timestamp is not None:
+            # expect seconds since epoch; facilitator will parse as datetime
+            from datetime import datetime
+
+            dt = datetime.utcfromtimestamp(cheated_timestamp)
+            data["cheated_timestamp"] = dt.isoformat()
         signature_headers = self._get_cheated_job_headers(data)
         response = await self._make_request("POST", "/api/v1/cheated-job/", json=data, headers=signature_headers)
         logger.debug("Reported job %s", job_uuid)

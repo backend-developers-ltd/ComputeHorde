@@ -130,6 +130,9 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
     signature = models.JSONField()
     created_at = models.DateTimeField(default=now)
     cheated = models.BooleanField(default=False)
+    cheated_timestamp = models.DateTimeField(default=now)
+    cheated_message = models.TextField(default="unknown", blank=True)
+    cheated_details = models.JSONField(blank=True, default=dict)
     download_time_limit = models.IntegerField()
     execution_time_limit = models.IntegerField()
     streaming_start_time_limit = models.IntegerField()
@@ -208,7 +211,13 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
         """
         Notify validator of cheated job.
         """
-        payload = V0JobCheated(job_uuid=str(self.uuid), signature=signature).model_dump()
+        payload = V0JobCheated(
+            job_uuid=str(self.uuid),
+            cheated_timestamp=self.cheated_timestamp,
+            cheated_message=self.cheated_message,
+            cheated_details=self.cheated_details,
+            signature=signature,
+        ).model_dump()
         log.debug("sending cheated report", payload=payload)
         self.send_to_validator(payload)
 
