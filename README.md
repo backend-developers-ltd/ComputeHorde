@@ -77,52 +77,32 @@ The SDK allows you to:
 
 ## Scoring Mechanism
 
-The scoring mechanism in ComputeHorde is designed to **incentivize miners to perform organic jobs** while 
-maintaining accountability and fairness in the network. 
+The scoring mechanism in ComputeHorde is designed to **incentivize miners to perform organic jobs** 
+while maintaining accountability and fairness in the network. 
 
-Miners are scored based on their **performance during peak cycles**,
-encouraging them to **scale up executors when demand is high** while **minimizing active resources during non-peak periods** to reduce costs.
+### Big Picture
+- **Validators earn compute allowance.** Each block mints executor-seconds per miner–validator pair (precisely, per miner–validator–executorClass). 
+  The total supply is proportional to the number of executors (GPUs) in the subnet, and each validator’s share scales with stake.  
+- **Fair usage is enforced.** Because allowance is minted per pair, validators must spread jobs across miners proportionally to fully use their share.  
+- **Validators pay with blocks.** Starting a job consumes allowance blocks equal to its runtime.  
+- **Scoring is global.** All validators score all miners’ work, regardless of who paid, as long as jobs fit valid allowance blocks.  
+- **Runtime converts to points.** Paid seconds per miner are summed, folded by coldkey, then split across hotkeys 
+  following the [dancing rules](#dancing-bonus). Organic and synthetic jobs score equally if allowance is valid.  
 
-The core mechanism ensures that miners can **reject synthetic jobs without penalty if they provide proof that they are actively engaged in an organic job**.
+### Allowance & Blocks
+- The **allowance pool is recalculated every block**, since both executor counts (GPUs) and validator stakes change continuously.  
+- When starting a job, the validator spends **specific allowance blocks** to cover the runtime.  
+- During scoring, validators ensure blocks were **fresh, unspent, and sufficient**; overspending or missing allowance voids incentives.  
+- If a miner lowers their executor count, any tied allowance blocks are **invalidated** and cannot be used.  
 
-### Peak and Non-Peak Cycles
+### Dancing Bonus
+- Validators **split each coldkey’s score across its hotkeys**, with the declared main hotkey taking the largest share in that cycle.
+- **Changing the main hotkey** from the previous cycle triggers a **10 % boost** on the coldkey before splitting the score.
+- This encourages **variance**, which is essential for preventing [weight-copying](#discouraging-weight-copying).
 
-ComputeHorde operates in **10-cycle testing days** (each cycle is **2 Bittensor tempos**, i.e., **722 blocks**).
-Within each testing day, **one cycle is designated as the peak cycle**.
-
-- **Scoring is performed primarily during peak cycles.**
-  - Miners should **declare their full executor capacity** during peak cycles to maximize their score.
-
-- During **non-peak cycles**, miners should:
-  - **Maintain at least 10% of their peak executors** to avoid a **20% penalty on their score**.
-     - Miners who declare **more than 10% of their peak executors** will not receive additional synthetic jobs, meaning excess executors will remain idle, leading to unnecessary costs.
-  - **Remain available for organic jobs**, which provide points **regardless of peak or non-peak status**.
-
-### Formula (calculated per validator, in peak cycles)
-
-- **1 point** for each successfully completed **synthetic job**.
-- **1 point** for each successfully completed **organic job** (**awarded in all cycles**).
-- **1 point** for each **properly rejected synthetic job** (when a miner provides a receipt proving they are occupied with an organic job from another validator with at least μ30k stake).
-- A **successfully completed job** is one that finishes within a specified timeout.
-- **Penalties for incorrect organic job results**:
-  - If a validator detects that the result of an organic job is incorrect:
-    - The miner **does not receive points** for that job.
-    - The miner is **blacklisted for 4 hours**, meaning they are not assigned any tasks during that period and effectively lose all earning opportunities.
-
-### Dancing Bonus (validated in peak cycles only)
-
-Miners who implement **dancing**—moving their executors between registered UIDs—receive a **30% bonus** on their score.
-
-- **Dancing is verified only during peak cycles.**
-- If a miner **dances between two consecutive peak cycles (Peak-1 → Peak-2)**, they receive the **dancing bonus** in **Peak-2 and all non-peak cycles leading up to Peak-3**.
-- If a miner missed Peak-1 but performed dancing before Peak-2, the bonus is still awarded for Peak-2 and the following non-peak cycles.
-
-This encourages **variance**, which is essential for preventing [weight-copying](#discouraging-weight-copying).
-
-### Hardware Classes and Configurable Weights
-
-- Each **hardware class** in ComputeHorde has a **configurable weight**.  
-- These weights influence the miner’s final score, prioritizing certain hardware types based on network demand.
+### Hardware Classes
+- Each **hardware class** in ComputeHorde has a **configurable weight**.
+- These weights adjust final scores, prioritizing hardware types based on network demand.  
 
 ## Returning Miners — What’s New
 
@@ -419,4 +399,3 @@ To start all the core services locally and be able to schedule jobs that don't r
 etc.) go to run [screen](local_stack/run_in_screen.sh). Once all the tabs look like ready, execute
 [hello_world](local_stack/send_hello_world_job.py). This setup does not require (currently) a subtensor, is 
 self-contained and should run on anything that has a CPU, RAM and an operating system. And docker.
-
