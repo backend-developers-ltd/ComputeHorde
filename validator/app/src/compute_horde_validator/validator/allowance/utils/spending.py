@@ -60,7 +60,11 @@ class SpendingBookkeeperBase(ABC):
             raise ErrorWhileSpending(f"Cannot find block at job submission time: {spend_time}")
 
         allowed_block_range = range(
-            block_at_spend_time - settings.BLOCK_EXPIRY, block_at_spend_time + 1
+            block_at_spend_time
+            - settings.BLOCK_EXPIRY
+            - settings.SPENDING_VALIDATION_BLOCK_LEEWAY_LOWER,
+            # +1: range() is upper-exclusive, and we want to include block_at_spend_time
+            block_at_spend_time + settings.SPENDING_VALIDATION_BLOCK_LEEWAY_UPPER + 1,
         )
         blocks_in_range = {b for b in offered_blocks if b in allowed_block_range}
 
