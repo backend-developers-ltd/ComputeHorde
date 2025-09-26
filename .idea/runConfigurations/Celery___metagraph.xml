@@ -6,7 +6,7 @@
         <option value="compute_horde_validator" />
         <option value="worker" />
         <option value="-Q" />
-        <option value="organic_jobs" />
+        <option value="metagraph" />
         <option value="-l" />
         <option value="DEBUG" />
         <option value="--concurrency" />
