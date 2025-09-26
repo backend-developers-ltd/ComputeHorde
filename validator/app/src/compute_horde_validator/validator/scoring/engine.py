@@ -5,11 +5,9 @@ from compute_horde.subtensor import get_cycle_containing_block
 from django.conf import settings
 
 from compute_horde_validator.validator.dynamic_config import get_executor_class_weights
-from compute_horde_validator.validator.models import Miner, OrganicJob, SyntheticJob
+from compute_horde_validator.validator.models import Miner
 from compute_horde_validator.validator.scoring.calculations import (
-    calculate_organic_scores,
-    calculate_synthetic_scores,
-    combine_scores,
+    calculate_allowance_paid_job_scores,
 )
 from compute_horde_validator.validator.scoring.exceptions import (
     MainHotkeyError,
@@ -53,35 +51,17 @@ class DefaultScoringEngine(ScoringEngine):
             block=current_cycle_start, netuid=settings.BITTENSOR_NETUID
         )
 
-        current_organic_jobs: list[OrganicJob] = list(
-            OrganicJob.objects.filter(
-                block__gte=current_cycle_start,
-                block__lt=current_cycle_range.stop,
-                cheated=False,
-                status=OrganicJob.Status.COMPLETED,
-                on_trusted_miner=False,
-            ).select_related("miner")
+        scores_by_executor = calculate_allowance_paid_job_scores(
+            current_cycle_range.start, current_cycle_range.stop
         )
-
-        current_synthetic_jobs: list[SyntheticJob] = list(
-            SyntheticJob.objects.filter(
-                batch__cycle__start=current_cycle_start,
-                status=SyntheticJob.Status.COMPLETED,
-            ).select_related("miner")
-        )
-
-        organic_scores = calculate_organic_scores(current_organic_jobs)
-        synthetic_scores = calculate_synthetic_scores(current_synthetic_jobs)
-
-        combined_scores_by_executor = combine_scores(organic_scores, synthetic_scores)
-        logger.info(f"Base scores calculated for cycle {current_cycle_start}")
+        logger.info(f"Calculated allowance paid job scores for cycle {current_cycle_start}")
 
         executor_class_weights = get_executor_class_weights()
         logger.info(f"Executor class weights calculated for cycle {current_cycle_start}")
 
         normalized_scores: dict[str, float] = {}
 
-        for executor_class, executor_scores in combined_scores_by_executor.items():
+        for executor_class, executor_scores in scores_by_executor.items():
             weight = executor_class_weights.get(executor_class, 1.0)
 
             final_executor_scores = self._apply_dancing(
