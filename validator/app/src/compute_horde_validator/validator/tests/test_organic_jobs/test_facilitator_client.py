@@ -324,6 +324,9 @@ async def test_facilitator_client__cheated_job():
         await facilitator_client.process_miner_cheat_report(cheated_job_request)
         await job.arefresh_from_db()
         assert job.cheated is True
+        assert job.cheated_message == "unknown"
+        assert job.cheated_details == {}
+        assert job.cheated_timestamp is not None
         assert await MinerBlacklist.objects.acount() == 1
         assert (
             await MinerBlacklist.objects.aget(miner_id=miner.id)

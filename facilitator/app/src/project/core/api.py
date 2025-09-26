@@ -4,6 +4,7 @@ import django_filters
 from compute_horde_core.output_upload import SingleFileUpload
 from django.core.exceptions import ObjectDoesNotExist
 from django.db.models import QuerySet
+from django.utils.dateparse import parse_datetime
 from django_filters import fields
 from django_filters.rest_framework import DjangoFilterBackend
 from django_pydantic_field.rest_framework import SchemaField
@@ -65,6 +66,10 @@ class JobSerializer(serializers.HyperlinkedModelSerializer):
             "created_at",
             "last_update",
             "status",
+            "cheated",
+            "cheated_timestamp",
+            "cheated_message",
+            "cheated_details",
             "docker_image",
             "job_namespace",
             "args",
@@ -240,11 +245,25 @@ class DockerJobViewset(BaseCreateJobViewSet):
 # should fetch job and mark it as cheated
 class CheatedJobViewSet(mixins.CreateModelMixin, viewsets.GenericViewSet):
     def create(self, request, *args, **kwargs):
-        job_uuid = json.loads(request.body).get("job_uuid")
+        payload = request.data if isinstance(request.data, dict) else json.loads(request.body or "{}")
+        job_uuid = payload.get("job_uuid")
+        cheated_message = payload.get("cheated_message", "unknown")
+        cheated_details = payload.get("cheated_details") or {}
+        cheated_timestamp_raw = payload.get("cheated_timestamp")
+        cheated_timestamp = parse_datetime(cheated_timestamp_raw) if cheated_timestamp_raw else None
         try:
             job = Job.objects.get(uuid=job_uuid)
-            updated = Job.objects.filter(uuid=job_uuid, cheated=False).update(cheated=True)
+            update_fields = {
+                "cheated": True,
+                "cheated_message": cheated_message,
+                "cheated_details": cheated_details,
+            }
+            if cheated_timestamp is not None:
+                update_fields["cheated_timestamp"] = cheated_timestamp
+            updated = Job.objects.filter(uuid=job_uuid, cheated=False).update(**update_fields)
             if updated:
+                # Refresh instance fields used for reporting
+                job.refresh_from_db()
                 job.report_cheated(request.signature)
                 return Response(status=status.HTTP_200_OK, data={"message": "Job reported as cheated"})
             return Response(status=status.HTTP_200_OK, data={"message": "Job already marked as cheated"})
