@@ -100,6 +100,14 @@ class AllowanceBooking(BulkExportModelOperationsMixin("AllowanceBooking"), model
     is_spent = models.BooleanField()
     reservation_expiry_time = models.DateTimeField(null=True, blank=True)
 
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                check=~models.Q(is_reserved=False, is_spent=False),
+                name="ck_allowance_booking_reserved_or_spent",
+            ),
+        ]
+
     def __str__(self):
         return f"Allowance booking {self.id}"
 
