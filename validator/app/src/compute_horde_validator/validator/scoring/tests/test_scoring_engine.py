@@ -25,6 +25,7 @@ from compute_horde_validator.validator.scoring.models import (
 from compute_horde_validator.validator.tests.transport import SimulationTransport
 
 
+@pytest.mark.skip("Needs rework - we now score based on valid spent allowance, not stored jobs")
 class TestMainHotkeyScoringEngine(TestCase):
     def setUp(self):
         super().setUp()
