@@ -1,5 +1,5 @@
 import concurrent.futures
-import uuid
+from contextlib import contextmanager
 from unittest.mock import patch
 
 import pytest
@@ -13,8 +13,6 @@ from django.utils.timezone import now
 from compute_horde_validator.validator.models import (
     Cycle,
     Miner,
-    MinerManifest,
-    SyntheticJob,
     SyntheticJobBatch,
     SystemEvent,
     Weights,
@@ -50,38 +48,27 @@ def _default_commit_reveal_params():
         yield
 
 
-def setup_db(cycle_number=0, hotkey_to_score=None):
+@contextmanager
+def setup_db_and_scores(cycle_number=0, hotkey_to_score=None):
     if hotkey_to_score is None:
         hotkey_to_score = {f"hotkey_{i}": i for i in range(NUM_NEURONS)}
     for i in range(NUM_NEURONS):
         Miner.objects.update_or_create(hotkey=f"hotkey_{i}")
 
-    job_batch = SyntheticJobBatch.objects.create(
+    # Batch is still required for scoring but we don't require jobs in the batch
+    SyntheticJobBatch.objects.create(
         started_at=now(),
         accepting_results_until=now(),
         scored=False,
         block=722 * cycle_number + 1,
         cycle=Cycle.objects.create(start=722 * cycle_number, stop=722 * (cycle_number + 1)),
     )
-    for hotkey, score in hotkey_to_score.items():
-        SyntheticJob.objects.create(
-            batch=job_batch,
-            score=score,
-            job_uuid=uuid.uuid4(),
-            miner=Miner.objects.get(hotkey=hotkey),
-            miner_address="ignore",
-            miner_address_ip_version=4,
-            miner_port=9999,
-            executor_class=DEFAULT_EXECUTOR_CLASS,
-            status=SyntheticJob.Status.COMPLETED,
-        )
-        MinerManifest.objects.create(
-            miner=Miner.objects.get(hotkey=hotkey),
-            batch=job_batch,
-            executor_class=DEFAULT_EXECUTOR_CLASS,
-            executor_count=1,
-            online_executor_count=1,
-        )
+    # ... instead, the main source for scores is calculate_allowance_paid_job_scores:
+    with patch(
+        "compute_horde_validator.validator.scoring.engine.calculate_allowance_paid_job_scores",
+        return_value={DEFAULT_EXECUTOR_CLASS: hotkey_to_score},
+    ):
+        yield
 
 
 @pytest.mark.django_db
@@ -106,8 +93,8 @@ def test_set_scores__no_batches_found(settings, bittensor):
 def test_set_scores__too_early(settings, bittensor):
     bittensor.blocks.head.return_value.number = 359
 
-    setup_db()
-    set_scores()
+    with setup_db_and_scores():
+        set_scores()
     assert SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 0
 
 
@@ -263,8 +250,7 @@ def test_set_scores__set_weight_success(
 
     bittensor.blocks.head.return_value.number = 723 + cycle_number * 722
 
-    if True:
-        setup_db(cycle_number=cycle_number, hotkey_to_score=hotkey_to_score)
+    with setup_db_and_scores(cycle_number=cycle_number, hotkey_to_score=hotkey_to_score):
         with override_config(
             DYNAMIC_BURN_TARGET_SS58ADDRESSES=burn_targets,
             DYNAMIC_BURN_RATE=burn_rate,
@@ -303,8 +289,9 @@ def test_set_scores__set_weight_failure(settings, bittensor):
     bittensor.blocks.head.return_value.number = 723
     bittensor.subnet.return_value.weights.commit.side_effect = Exception
 
-    setup_db()
-    set_scores()
+    with setup_db_and_scores():
+        set_scores()
+
     assert SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 3
     check_system_events(
         SystemEvent.EventType.WEIGHT_SETTING_FAILURE,
@@ -329,8 +316,9 @@ def test_set_scores__set_weight_eventual_success(settings, bittensor):
         None,
     )
 
-    setup_db()
-    set_scores()
+    with setup_db_and_scores():
+        set_scores()
+
     assert SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 4
     check_system_events(
         SystemEvent.EventType.WEIGHT_SETTING_FAILURE,
@@ -352,8 +340,9 @@ def test_set_scores__set_weight__exception(settings, bittensor):
     bittensor.blocks.head.return_value.number = 723
     bittensor.subnet.return_value.weights.commit.side_effect = Exception
 
-    setup_db()
-    set_scores()
+    with setup_db_and_scores():
+        set_scores()
+
     assert SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 3
     check_system_events(
         SystemEvent.EventType.WEIGHT_SETTING_FAILURE,
@@ -382,8 +371,8 @@ def test_set_scores__set_weight__exception(settings, bittensor):
 def test_set_scores__set_weight__commit__exception(bittensor):
     bittensor.blocks.head.return_value.number = 1200
 
-    setup_db()
-    set_scores()
+    with setup_db_and_scores():
+        set_scores()
 
     check_system_events(
         SystemEvent.EventType.WEIGHT_SETTING_FAILURE,
@@ -402,8 +391,10 @@ def test_set_scores__set_weight_timeout(settings, bittensor):
     bittensor.blocks.head.return_value.number = 723
 
     settings.CELERY_TASK_ALWAYS_EAGER = False  # to make it timeout
-    setup_db()
-    set_scores()
+
+    with setup_db_and_scores():
+        set_scores()
+
     assert SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 3
     check_system_events(
         SystemEvent.EventType.WEIGHT_SETTING_FAILURE,
@@ -575,14 +566,20 @@ def test_set_scores__set_weight__commit(
     )
     bittensor.blocks.head.return_value.number = current_block
 
-    with patch("bittensor.subtensor", lambda *a, **kw: subtensor_):
-        setup_db(cycle_number=cycle_number, hotkey_to_score=hotkey_to_score)
-        with override_config(
+    with (
+        patch("bittensor.subtensor", lambda *a, **kw: subtensor_),
+        patch(
+            "compute_horde_validator.validator.scoring.engine.calculate_allowance_paid_job_scores",
+            return_value={DEFAULT_EXECUTOR_CLASS: hotkey_to_score},
+        ),
+        setup_db_and_scores(cycle_number=cycle_number, hotkey_to_score=hotkey_to_score),
+        override_config(
             DYNAMIC_BURN_TARGET_SS58ADDRESSES=burn_targets,
             DYNAMIC_BURN_RATE=burn_rate,
             DYNAMIC_BURN_PARTITION=burn_partition,
-        ):
-            set_scores()
+        ),
+    ):
+        set_scores()
 
         assert subtensor_.weights_committed == [expected_weights_committed]
 
@@ -615,8 +612,10 @@ def test_set_scores__set_weight__commit__too_early_or_too_late(bittensor, curren
         ),
     )
 
-    with patch("bittensor.subtensor", return_value=subtensor_):
-        setup_db()
+    with (
+        setup_db_and_scores(),
+        patch("bittensor.subtensor", return_value=subtensor_),
+    ):
         set_scores()
 
         assert not subtensor_.weights_committed
@@ -646,8 +645,10 @@ def test_set_scores__set_weight__reveal__in_time(bittensor, reveal_block: int):
     )
     bittensor.blocks.head.return_value.number = current_block
 
-    with patch("bittensor.subtensor", return_value=subtensor_):
-        setup_db()
+    with (
+        setup_db_and_scores(),
+        patch("bittensor.subtensor", return_value=subtensor_),
+    ):
         set_scores()
 
         last_weights = Weights.objects.order_by("-id").first()
@@ -696,8 +697,10 @@ def test_set_scores__set_weight__reveal__out_of_window(bittensor, reveal_block: 
     )
     bittensor.blocks.head.return_value.number = current_block
 
-    with patch("bittensor.subtensor", return_value=subtensor_):
-        setup_db()
+    with (
+        setup_db_and_scores(),
+        patch("bittensor.subtensor", return_value=subtensor_),
+    ):
         set_scores()
 
         last_weights = Weights.objects.get()
@@ -730,8 +733,10 @@ def test_set_scores__set_weight__reveal__timeout(bittensor, run_uuid):
     )
     bittensor.blocks.head.return_value.number = 1234
 
-    with patch("bittensor.subtensor", return_value=subtensor_):
-        setup_db()
+    with (
+        setup_db_and_scores(),
+        patch("bittensor.subtensor", return_value=subtensor_),
+    ):
         set_scores()
         last_weights = Weights.objects.order_by("-id").first()
         assert last_weights
@@ -791,9 +796,10 @@ def test_set_scores__multiple_starts(settings, bittensor):
     settings.CELERY_TASK_ALWAYS_EAGER = False
     threads = 5
 
-    setup_db()
-
-    with concurrent.futures.ThreadPoolExecutor(max_workers=threads) as pool:
+    with (
+        setup_db_and_scores(),
+        concurrent.futures.ThreadPoolExecutor(max_workers=threads) as pool,
+    ):
         for _ in range(threads):
             pool.submit(set_scores)
 
