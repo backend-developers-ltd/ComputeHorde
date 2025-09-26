@@ -1,16 +1,26 @@
 import logging
 from collections import defaultdict
 from collections.abc import Callable, Sequence
+from typing import Literal
 
 import numpy as np
 from compute_horde_core.executor_class import ExecutorClass
 from constance import config
 
 from compute_horde_validator.validator.allowance.default import allowance
-from compute_horde_validator.validator.allowance.types import CannotSpend, ErrorWhileSpending
+from compute_horde_validator.validator.allowance.types import (
+    CannotSpend,
+    ErrorWhileSpending,
+    SpendingDetails,
+)
 from compute_horde_validator.validator.allowance.utils.spending import Triplet
 from compute_horde_validator.validator.models import Miner, OrganicJob, SyntheticJob
 from compute_horde_validator.validator.receipts import receipts
+from compute_horde_validator.validator.scoring.metrics import (
+    VALIDATOR_ALLOWANCE_BLOCKS_PROCESSED,
+    VALIDATOR_ALLOWANCE_PAID_JOB_SCORES,
+    VALIDATOR_ALLOWANCE_SPENDING_ATTEMPTS,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +37,25 @@ def calculate_allowance_paid_job_scores(
     scores: defaultdict[ExecutorClass, defaultdict[str, float]] = defaultdict(
         lambda: defaultdict(float)
     )
+
+    blocks_per_triplet: defaultdict[tuple[Triplet, str], int] = defaultdict(
+        int
+    )  # Additional reason
+    spends_per_triplet: defaultdict[tuple[Triplet, str], int] = defaultdict(
+        int
+    )  # Additional result
+
+    def _aggregate_block_counts(
+        triplet: Triplet,
+        result: Literal["success", "rejected", "failed"],
+        details: SpendingDetails | None = None,
+    ):
+        spends_per_triplet[(triplet, result)] += 1
+        if details:
+            blocks_per_triplet[(triplet, "accepted")] += len(details.spent_blocks)
+            blocks_per_triplet[(triplet, "outside_range")] += len(details.outside_range_blocks)
+            blocks_per_triplet[(triplet, "double_spent")] += len(details.double_spent_blocks)
+            blocks_per_triplet[(triplet, "invalidated")] += len(details.invalidated_blocks)
 
     for executor_class in ExecutorClass:
         # Find out what jobs finished within the time and get the associated spending info
@@ -61,19 +90,26 @@ def calculate_allowance_paid_job_scores(
                 spending.paid_with_blocks,
             )
             try:
-                bookkeeper.spend(triplet, spending.started_at, spending.paid_with_blocks, job_cost)
+                spend_details = bookkeeper.spend(
+                    triplet, spending.started_at, spending.paid_with_blocks, job_cost
+                )
                 scores[triplet.executor_class][triplet.miner] += job_cost
                 logger.info(
                     f"Registered valid spending for job {spending.job_uuid} with value {job_cost}"
                 )
+                _aggregate_block_counts(triplet, "success", spend_details)
             except CannotSpend as e:
                 # TODO(new scoring): System event / metric
                 logger.warning(e)
+                _aggregate_block_counts(triplet, "rejected", e.details)
             except ErrorWhileSpending as e:
                 # TODO(new scoring): System event / metric
                 logger.warning(e)
+                _aggregate_block_counts(triplet, "failed")
 
-    # Convert back to regular dicts and return
+    # Convert back to regular dicts and emit score gauges
+    _emit_metrics(dict(scores), blocks_per_triplet, spends_per_triplet)
+
     return {
         executor_class: {miner: score for miner, score in miner_scores.items()}
         for executor_class, miner_scores in scores.items()
@@ -311,3 +347,31 @@ def get_hotkey_to_coldkey_mapping(hotkeys: list[str]) -> dict[str, str]:
         )
 
     return hotkey_to_coldkey
+
+
+def _emit_metrics(
+    scores: dict[str, dict[str, float]],
+    blocks_per_triplet: dict[tuple[Triplet, str], int],
+    spends_per_triplet: dict[tuple[Triplet, str], int],
+):
+    for executor_class, miner_scores in scores.items():
+        for miner_hotkey, score in miner_scores.items():
+            VALIDATOR_ALLOWANCE_PAID_JOB_SCORES.labels(
+                miner_hotkey=miner_hotkey, executor_class=executor_class
+            ).set(score)
+
+    for (triplet, result), blocks_count in blocks_per_triplet.items():
+        VALIDATOR_ALLOWANCE_BLOCKS_PROCESSED.labels(
+            validator_hotkey=triplet.validator,
+            miner_hotkey=triplet.miner,
+            executor_class=triplet.executor_class,
+            result=result,
+        ).set(blocks_count)
+
+    for (triplet, result), spends_count in spends_per_triplet.items():
+        VALIDATOR_ALLOWANCE_SPENDING_ATTEMPTS.labels(
+            validator_hotkey=triplet.validator,
+            miner_hotkey=triplet.miner,
+            executor_class=triplet.executor_class,
+            result=result,
+        ).set(spends_count)
