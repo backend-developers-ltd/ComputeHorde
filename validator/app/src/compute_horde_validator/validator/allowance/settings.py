@@ -9,6 +9,9 @@ BLOCK_EVICTION_THRESHOLD = int(BLOCK_LOOKBACK * 1.5)
 BLOCK_EXPIRY = 722
 # A job started at block N can be paid for block N-BLOCK_EXPIRY and newer ones
 
+BLOCK_FINALIZATION_OFFSET = 5
+# The offset from the current block that we consider to be "finalized"
+
 MANIFEST_FETCHING_TIMEOUT = 30.0
 
 MAX_JOB_RUN_TIME = 60 * 60.0

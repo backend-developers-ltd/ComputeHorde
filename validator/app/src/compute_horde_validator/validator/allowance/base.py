@@ -118,6 +118,13 @@ class AllowanceBase(ABC):
         pass
 
     @abstractmethod
+    def get_latest_finalized_block(self) -> int:
+        """
+        Return the latest finalized block number (current block minus finalization offset).
+        """
+        pass
+
+    @abstractmethod
     def get_manifests(self) -> dict[ss58_address, dict[ExecutorClass, int]]:
         """
         Return the latest manifests for all miners.
