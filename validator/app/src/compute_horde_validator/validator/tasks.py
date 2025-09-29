@@ -77,8 +77,9 @@ from compute_horde_validator.validator.synthetic_jobs.utils import (
 )
 
 from . import eviction
+from .allowance import fetch_metagraph_snapshot
 from .allowance import tasks as allowance_tasks  # noqa
-from .clean_me_up import _get_metagraph_for_sync, bittensor_client, get_single_manifest
+from .clean_me_up import bittensor_client, get_single_manifest
 from .collateral import tasks as collateral_tasks  # noqa
 from .dynamic_config import aget_config
 from .models import AdminJobRequest, MetagraphSnapshot, MinerManifest
@@ -1282,13 +1283,13 @@ def send_events_to_facilitator():
 def save_metagraph_snapshot(
     neurons: list[turbobt.Neuron],
     subnet_state: turbobt.subnet.SubnetState,
-    block: turbobt.Block,
+    block_number: int,
     snapshot_type: MetagraphSnapshot.SnapshotType = MetagraphSnapshot.SnapshotType.LATEST,
 ) -> None:
     MetagraphSnapshot.objects.update_or_create(
         id=snapshot_type,  # current metagraph snapshot
         defaults={
-            "block": block.number,
+            "block": block_number,
             "updated_at": now(),
             "alpha_stake": subnet_state["alpha_stake"],
             "tao_stake": subnet_state["tao_stake"],
@@ -1306,15 +1307,15 @@ def save_metagraph_snapshot(
 
 
 @app.task
-@bittensor_client
-def sync_metagraph(bittensor: turbobt.Bittensor) -> None:
-    neurons, subnet_state, block = async_to_sync(_get_metagraph_for_sync)(bittensor)
+def sync_metagraph() -> None:
+    snapshot = fetch_metagraph_snapshot()
 
-    if not block:
-        return
+    neurons = snapshot.neurons
+    subnet_state = snapshot.subnet_state
+    block_number = snapshot.block_number
 
     # save current cycle start metagraph snapshot
-    current_cycle = get_cycle_containing_block(block=block.number, netuid=settings.BITTENSOR_NETUID)
+    current_cycle = get_cycle_containing_block(block=block_number, netuid=settings.BITTENSOR_NETUID)
 
     # check metagraph sync lag
     previous_block = None
@@ -1324,12 +1325,15 @@ def sync_metagraph(bittensor: turbobt.Bittensor) -> None:
             previous_block = previous_metagraph.block
     except Exception as e:
         logger.warning(f"Failed to fetch previous metagraph snapshot block: {e}")
-    blocks_diff = block.number - previous_block if previous_block else None
+    blocks_diff = block_number - previous_block if previous_block else None
     if blocks_diff is not None and blocks_diff != 1:
         if blocks_diff == 0:
             return
         else:
-            msg = f"Metagraph is {blocks_diff} blocks lagging - previous: {previous_block}, current: {block.number}"
+            msg = (
+                f"Metagraph is {blocks_diff} blocks lagging - previous: {previous_block}, "
+                f"current: {block_number}"
+            )
             logger.warning(msg)
             SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).create(
                 type=SystemEvent.EventType.METAGRAPH_SYNCING,
@@ -1338,11 +1342,11 @@ def sync_metagraph(bittensor: turbobt.Bittensor) -> None:
                 data={
                     "blocks_diff": blocks_diff,
                     "previous_block": previous_block,
-                    "block": block.number,
+                    "block": block_number,
                 },
             )
 
-    save_metagraph_snapshot(neurons, subnet_state, block)
+    save_metagraph_snapshot(neurons, subnet_state, block_number)
 
     # sync neurons
     current_hotkeys = [neuron.hotkey for neuron in neurons]
@@ -1403,7 +1407,7 @@ def sync_metagraph(bittensor: turbobt.Bittensor) -> None:
         logger.info(f"Updated axon infos and null coldkeys for {len(miners_to_update)} miners")
 
     data = {
-        "block": block.number,
+        "block": block_number,
         "new_neurons": len(new_hotkeys),
         "updated_axon_infos": len(miners_to_update),
     }
@@ -1420,18 +1424,12 @@ def sync_metagraph(bittensor: turbobt.Bittensor) -> None:
     except Exception as e:
         logger.warning(f"Failed to fetch cycle start metagraph snapshot: {e}")
     if cycle_start_metagraph is None or cycle_start_metagraph.block != current_cycle.start:
-        neurons, subnet_state, block = async_to_sync(_get_metagraph_for_sync)(
-            bittensor,
-            block_number=current_cycle.start,
-        )
-
-        if not block:
-            return
+        cycle_start_snapshot = fetch_metagraph_snapshot(block_number=current_cycle.start)
 
         save_metagraph_snapshot(
-            neurons,
-            subnet_state,
-            block,
+            cycle_start_snapshot.neurons,
+            cycle_start_snapshot.subnet_state,
+            cycle_start_snapshot.block_number,
             snapshot_type=MetagraphSnapshot.SnapshotType.CYCLE_START,
         )
 

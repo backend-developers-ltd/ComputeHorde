@@ -1,7 +1,7 @@
 import logging
 from collections.abc import Callable
 from decimal import Decimal
-from typing import Any, cast
+from typing import Any
 
 import turbobt
 from asgiref.sync import async_to_sync
@@ -12,10 +12,8 @@ from web3 import Web3
 from compute_horde_validator.celery import app
 from compute_horde_validator.validator.models import Miner, SystemEvent
 
-from ..clean_me_up import (  # TODO: replace _get_metagraph_for_sync with a proper call to allowance()
-    _get_metagraph_for_sync,
-    bittensor_client,
-)
+from ..allowance import MetagraphSnapshotData, fetch_metagraph_snapshot, get_block_hash
+from ..allowance.utils.supertensor import supertensor
 from .default import Collateral, collateral
 
 logger = logging.getLogger(__name__)
@@ -25,7 +23,8 @@ class CollateralTaskDependencies:
     def __init__(
         self,
         *,
-        fetch_metagraph: Callable[[turbobt.Bittensor], tuple[list[Any], Any, Any]] | None = None,
+        fetch_metagraph: Callable[[], MetagraphSnapshotData] | None = None,
+        fetch_block_hash: Callable[[int], str] | None = None,
         fetch_evm_key_associations: Callable[[turbobt.Subtensor, int, str | None], dict[int, str]]
         | None = None,
         web3: Callable[[str], Web3] | None = None,
@@ -33,6 +32,7 @@ class CollateralTaskDependencies:
         system_events: Callable[[], Any] | None = None,
     ) -> None:
         self._fetch_metagraph = fetch_metagraph or self._default_fetch_metagraph
+        self._fetch_block_hash = fetch_block_hash or self._default_fetch_block_hash
         self._fetch_evm_key_associations = (
             fetch_evm_key_associations or self._default_fetch_evm_key_associations
         )
@@ -40,8 +40,11 @@ class CollateralTaskDependencies:
         self._collateral = collateral or self._default_collateral
         self._system_events = system_events or self._default_system_events
 
-    def fetch_metagraph(self, bittensor: turbobt.Bittensor) -> tuple[list[Any], Any, Any]:
-        return self._fetch_metagraph(bittensor)
+    def fetch_metagraph(self) -> MetagraphSnapshotData:
+        return self._fetch_metagraph()
+
+    def block_hash(self, block_number: int) -> str:
+        return self._fetch_block_hash(block_number)
 
     def fetch_evm_key_associations(
         self, subtensor: turbobt.Subtensor, netuid: int, block_hash: str | None
@@ -57,9 +60,11 @@ class CollateralTaskDependencies:
     def system_events(self) -> Any:
         return self._system_events()
 
-    def _default_fetch_metagraph(self, bittensor: turbobt.Bittensor) -> tuple[list[Any], Any, Any]:
-        result = async_to_sync(_get_metagraph_for_sync)(bittensor)
-        return cast(tuple[list[Any], Any, Any], result)
+    def _default_fetch_metagraph(self) -> MetagraphSnapshotData:
+        return fetch_metagraph_snapshot()
+
+    def _default_fetch_block_hash(self, block_number: int) -> str:
+        return get_block_hash(block_number)
 
     def _default_fetch_evm_key_associations(
         self, subtensor: turbobt.Subtensor, netuid: int, block_hash: str | None
@@ -128,21 +133,16 @@ async def get_evm_key_associations(
 
 
 @app.task
-@bittensor_client
-def sync_collaterals(
-    bittensor: turbobt.Bittensor,
-    deps: CollateralTaskDependencies | None = None,
-) -> None:
+def sync_collaterals(deps: CollateralTaskDependencies | None = None) -> None:
     """
     Synchronizes miner evm addresses and collateral amounts.
     """
     deps = deps or CollateralTaskDependencies()
     try:
-        neurons, subnet_state, block = deps.fetch_metagraph(bittensor)
-        if not block:
-            logger.warning("Could not get current block for collateral sync")
-            return
-
+        metagraph = deps.fetch_metagraph()
+        block_number = metagraph.block_number
+        block_hash = deps.block_hash(block_number)
+        neurons = metagraph.neurons
         hotkeys = [neuron.hotkey for neuron in neurons]
     except Exception as e:
         msg = f"Error getting metagraph data for collateral sync: {e}"
@@ -156,9 +156,9 @@ def sync_collaterals(
         return
 
     associations = deps.fetch_evm_key_associations(
-        bittensor.subtensor,
+        supertensor().subnet,
         settings.BITTENSOR_NETUID,
-        block.hash,
+        block_hash,
     )
     miners = Miner.objects.filter(hotkey__in=hotkeys)
     w3 = deps.web3(settings.BITTENSOR_NETWORK)
@@ -180,7 +180,7 @@ def sync_collaterals(
         if contract_address:
             try:
                 collateral_wei = get_miner_collateral(
-                    w3, contract_address, miner.evm_address, block.number
+                    w3, contract_address, miner.evm_address, block_number
                 )
                 miner.collateral_wei = Decimal(collateral_wei)
             except Exception as e:
@@ -191,7 +191,7 @@ def sync_collaterals(
                     subtype=SystemEvent.EventSubType.GETTING_MINER_COLLATERAL_FAILED,
                     long_description=msg,
                     data={
-                        "block": block.number,
+                        "block": block_number,
                         "miner_hotkey": miner.hotkey,
                         "evm_address": evm_address,
                     },

@@ -331,6 +331,9 @@ def set_block_number(block_number_, oldest_reachable_block: float | int = float(
                 "tao_stake": [0.0] * len(total_stake),
             }
 
+        def get_block_hash(self, block_number):
+            return f"mock_hash_{block_number}"
+
         def wallet(self):
             return get_test_validator_wallet()
 

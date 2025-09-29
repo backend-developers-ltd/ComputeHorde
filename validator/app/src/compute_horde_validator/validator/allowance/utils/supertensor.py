@@ -109,6 +109,9 @@ class BaseSuperTensor(abc.ABC):
     def get_block_timestamp(self, block_number: int) -> datetime.datetime: ...
 
     @abc.abstractmethod
+    def get_block_hash(self, block_number: int) -> str: ...
+
+    @abc.abstractmethod
     def get_shielded_neurons(self) -> list[turbobt.Neuron]: ...
 
     @abc.abstractmethod
@@ -240,6 +243,17 @@ class SuperTensor(BaseSuperTensor):
     @RETRY_ON_TIMEOUT
     def get_subnet_state(self, block_number: int) -> turbobt.subnet.SubnetState:
         return self._get_subnet_state(block_number)
+
+    @archive_fallback
+    @make_sync
+    async def _get_block_hash(self, block_number: int) -> str:
+        bittensor = bittensor_context.get()
+        async with bittensor.block(block_number) as block:
+            return str(block.hash)
+
+    @RETRY_ON_TIMEOUT
+    def get_block_hash(self, block_number: int) -> str:
+        return self._get_block_hash(block_number)
 
     @RETRY_ON_TIMEOUT
     @make_sync

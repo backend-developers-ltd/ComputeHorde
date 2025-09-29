@@ -1,7 +1,6 @@
-from unittest.mock import MagicMock
-
 import pytest
 
+from compute_horde_validator.validator.allowance import MetagraphSnapshotData
 from compute_horde_validator.validator.models import (
     MetagraphSnapshot,
     Miner,
@@ -11,7 +10,7 @@ from compute_horde_validator.validator.tasks import sync_metagraph
 
 
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
-def test_metagraph_sync__success(bittensor):
+def test_metagraph_sync__success(bittensor, mocker):
     assert SystemEvent.objects.count() == 0
     assert Miner.objects.count() == 0
 
@@ -19,14 +18,40 @@ def test_metagraph_sync__success(bittensor):
     n = 5
     override_block = 1099
 
-    bittensor.block.side_effect = lambda block_number: MagicMock(
-        **{
-            "__aenter__.return_value": MagicMock(
-                number=block_number or override_block,
-            ),
-        }
+    subnet_state = bittensor.subnet.return_value.get_state.return_value
+
+    snapshots = [
+        MetagraphSnapshotData(
+            neurons=list(neurons[:n]),
+            subnet_state=subnet_state,
+            block_number=override_block,
+        ),
+        MetagraphSnapshotData(
+            neurons=list(neurons[:n]),
+            subnet_state=subnet_state,
+            block_number=708,
+        ),
+        MetagraphSnapshotData(
+            neurons=list(neurons[: n + 1]),
+            subnet_state=subnet_state,
+            block_number=override_block + 1,
+        ),
+        MetagraphSnapshotData(
+            neurons=list(neurons[: n + 1]),
+            subnet_state=subnet_state,
+            block_number=1431,
+        ),
+        MetagraphSnapshotData(
+            neurons=list(neurons[: n + 1]),
+            subnet_state=subnet_state,
+            block_number=1430,
+        ),
+    ]
+
+    mocker.patch(
+        "compute_horde_validator.validator.tasks.fetch_metagraph_snapshot",
+        side_effect=snapshots,
     )
-    bittensor.subnet.return_value.list_neurons.return_value = neurons[:n]
 
     sync_metagraph()
 
@@ -60,15 +85,6 @@ def test_metagraph_sync__success(bittensor):
     n = 6
     override_block = 1100
 
-    bittensor.block.side_effect = lambda block_number: MagicMock(
-        **{
-            "__aenter__.return_value": MagicMock(
-                number=block_number or override_block,
-            ),
-        }
-    )
-    bittensor.subnet.return_value.list_neurons.return_value = neurons[:n]
-
     sync_metagraph()
 
     assert Miner.objects.count() == n
@@ -91,14 +107,6 @@ def test_metagraph_sync__success(bittensor):
 
     # check metagraph syncing lagging warns
     override_block = 1431
-
-    bittensor.block.side_effect = lambda block_number: MagicMock(
-        **{
-            "__aenter__.return_value": MagicMock(
-                number=block_number or override_block,
-            ),
-        }
-    )
 
     sync_metagraph()
 
@@ -124,15 +132,13 @@ def test_metagraph_sync__success(bittensor):
 
 
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
-def test_metagraph_sync__fetch_error(bittensor):
+def test_metagraph_sync__fetch_error(bittensor, mocker):
     assert SystemEvent.objects.count() == 0, "No system events should be created before task"
 
-    bittensor.subnet.return_value.list_neurons.side_effect = Exception("Nope")
-
-    sync_metagraph()
-
-    event = SystemEvent.objects.get(
-        type=SystemEvent.EventType.METAGRAPH_SYNCING,
-        subtype=SystemEvent.EventSubType.SUBTENSOR_CONNECTIVITY_ERROR,
+    mocker.patch(
+        "compute_horde_validator.validator.tasks.fetch_metagraph_snapshot",
+        side_effect=Exception("Nope"),
     )
-    assert "Nope" in event.long_description
+
+    with pytest.raises(Exception, match="Nope"):
+        sync_metagraph()
