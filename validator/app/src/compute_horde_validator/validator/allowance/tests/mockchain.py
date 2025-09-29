@@ -346,10 +346,9 @@ def set_block_number(block_number_, oldest_reachable_block: float | int = float(
         responses = manifest_responses(block_number_)
 
         for hotkey, manifest_request, delay in responses:
-            if isinstance(manifest_request, V0ExecutorManifestRequest):
-                transport = SimulationTransport(f"sim_{hotkey}")
-                transport.add_message_sync(manifest_request, send_before=1, sleep_before=delay)
-                transport_map[hotkey] = transport
+            transport = SimulationTransport(f"sim_{hotkey}")
+            transport.add_message_sync(manifest_request, send_before=1, sleep_before=delay)
+            transport_map[hotkey] = transport
 
         return transport_map
 
