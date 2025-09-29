@@ -29,6 +29,7 @@ COPY ./app/envs/prod/celery-beat-entrypoint.sh /root/src/
 COPY ./app/envs/prod/prometheus-cleanup.sh /root/src/
 COPY ./app/envs/prod/celery-worker-healthcheck.sh /root/src/
 COPY ./app/envs/prod/celery_beat_healthcheck.py /root/src/
+COPY ./app/envs/prod/transfer-receipts-entrypoint.sh /root/src/
 
 RUN --mount=type=cache,target=/root/.cache/uv \
 	uv sync --frozen --no-dev --no-editable
