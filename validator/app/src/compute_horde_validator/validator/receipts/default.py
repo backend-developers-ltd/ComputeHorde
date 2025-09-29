@@ -13,7 +13,12 @@ from compute_horde.receipts.models import (
 )
 from compute_horde.receipts.schemas import JobFinishedReceiptPayload, JobStartedReceiptPayload
 from compute_horde.receipts.store.local import N_ACTIVE_PAGES, LocalFilesystemPagedReceiptStore
-from compute_horde.receipts.transfer import MinerInfo, ReceiptsTransfer, TransferResult
+from compute_horde.receipts.transfer import (
+    LineException,
+    MinerInfo,
+    ReceiptsTransfer,
+    TransferResult,
+)
 from compute_horde.utils import sign_blob
 from compute_horde_core.executor_class import ExecutorClass
 from django.conf import settings
@@ -409,7 +414,13 @@ class Receipts(ReceiptsBase):
         # Push line error counts grouped by the exception type
         n_line_errors: defaultdict[type[Exception], int] = defaultdict(int)
         for line_error in result.line_errors:
-            n_line_errors[type(line_error)] += 1
+            # Default to LineException just in case
+            exc_type = (
+                type(line_error.__cause__)
+                if isinstance(line_error.__cause__, Exception)
+                else LineException
+            )
+            n_line_errors[exc_type] += 1
         for exc_type, exc_count in n_line_errors.items():
             self.metrics.line_errors.labels(exc_type=exc_type.__name__).inc(exc_count)
 
