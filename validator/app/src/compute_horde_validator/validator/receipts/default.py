@@ -310,6 +310,9 @@ class Receipts(ReceiptsBase):
                 f"line_errors={len(result.line_errors)} "
             )
 
+            for line_error in result.line_errors:
+                logger.debug(" - line error: %s", line_error)
+
             self._push_common_metrics(result)
         self.metrics.catchup_pages_left.set(0)
 
