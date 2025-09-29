@@ -103,6 +103,7 @@ class JobStartedReceipt(AbstractReceipt):
     ) -> "JobStartedReceipt":
         return JobStartedReceipt(
             job_uuid=payload.job_uuid,
+            validator_hotkey=payload.validator_hotkey,
             miner_hotkey=payload.miner_hotkey,
             validator_signature=validator_signature,
             miner_signature=miner_signature,
@@ -157,6 +158,7 @@ class JobAcceptedReceipt(AbstractReceipt):
         return JobAcceptedReceipt(
             job_uuid=payload.job_uuid,
             miner_hotkey=payload.miner_hotkey,
+            validator_hotkey=payload.validator_hotkey,
             validator_signature=validator_signature,
             miner_signature=miner_signature,
             timestamp=payload.timestamp,
