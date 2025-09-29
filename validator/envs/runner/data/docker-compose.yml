@@ -279,8 +279,11 @@ services:
     init: true
     restart: unless-stopped
     env_file: ./.env
+    environment:
+      - PROMETHEUS_MULTIPROC_DIR=/prometheus-multiproc-dir/transfer-receipts
     volumes:
       - ${HOST_WALLET_DIR}:/root/.bittensor/wallets
+      - ./prometheus-metrics:/prometheus-multiproc-dir
     command: python manage.py transfer_receipts --daemon
     depends_on:
       - redis
