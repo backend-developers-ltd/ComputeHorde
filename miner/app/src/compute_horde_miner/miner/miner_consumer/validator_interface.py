@@ -556,6 +556,7 @@ class MinerValidatorConsumer(BaseConsumer[ValidatorToMinerMessage], ValidatorInt
             time_started=msg.payload.time_started,
             time_took_us=msg.payload.time_took_us,
             score_str=msg.payload.score_str,
+            block_numbers=msg.payload.block_numbers,
         )
 
         (await current_store()).store([created_receipt.to_receipt()])
