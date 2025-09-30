@@ -63,6 +63,7 @@ rows: list[JobSpendingInfo] = await receipts().get_finished_jobs_for_block_range
     start_block: int,
     end_block: int,
     executor_class: ExecutorClass,
+    organic_only=False,
 )
 """Each row is a JobSpendingInfo model with fields:
 - job_uuid: str
