@@ -1,9 +1,18 @@
 # default implementation of the allowance module interface
 
+import time
+
+from asgiref.sync import sync_to_async
+from compute_horde.utils import (
+    BAC_VALIDATOR_SS58_ADDRESS,
+    MIN_VALIDATOR_STAKE,
+    VALIDATORS_LIMIT,
+    ValidatorInfo,
+)
 from compute_horde_core.executor_class import ExecutorClass
 
 from .base import AllowanceBase
-from .types import Miner, Neuron, block_ids, reservation_id, ss58_address
+from .types import MetagraphData, Miner, Neuron, block_ids, reservation_id, ss58_address
 from .utils import blocks, booking, manifests, metagraph
 from .utils.spending import (
     InMemorySpendingBookkeeper,
@@ -11,10 +20,13 @@ from .utils.spending import (
 )
 from .utils.supertensor import supertensor
 
+METAGRAPH_CACHE_TTL_SECONDS = 5.0
+
 
 class Allowance(AllowanceBase):
     def __init__(self):
         self.my_ss58_address: ss58_address = supertensor().wallet().get_hotkey().ss58_address
+        self._metagraph_cache: tuple[float, MetagraphData] | None = None
 
     def reserve_allowance(
         self,
@@ -45,6 +57,54 @@ class Allowance(AllowanceBase):
 
     def get_manifests(self) -> dict[ss58_address, dict[ExecutorClass, int]]:
         return manifests.get_current_manifests()
+
+    def get_metagraph(self, block: int | None = None) -> MetagraphData:
+        if block is not None:
+            return metagraph.fetch_metagraph_snapshot(block)
+
+        cached = self._get_cached_metagraph()
+        if cached is not None:
+            return cached
+
+        data = metagraph.fetch_metagraph_snapshot()
+        self._metagraph_cache = (time.monotonic(), data)
+        return data
+
+    async def aget_metagraph(self, block: int | None = None) -> MetagraphData:
+        return await sync_to_async(self.get_metagraph)(block)
+
+    def get_serving_hotkeys(self) -> list[str]:
+        return self.get_metagraph().serving_hotkeys
+
+    def get_validator_infos(self) -> list[ValidatorInfo]:
+        metagraph_data = self.get_metagraph()
+        validators = [
+            (uid, hotkey, stake)
+            for uid, hotkey, stake in zip(
+                metagraph_data.uids,
+                metagraph_data.hotkeys,
+                metagraph_data.total_stake,
+            )
+            if stake >= MIN_VALIDATOR_STAKE
+        ]
+        top_validators = sorted(
+            validators,
+            key=lambda data: (data[1] == BAC_VALIDATOR_SS58_ADDRESS, data[2]),
+            reverse=True,
+        )[:VALIDATORS_LIMIT]
+        return [
+            ValidatorInfo(uid=uid, hotkey=hotkey, stake=stake)
+            for uid, hotkey, stake in top_validators
+        ]
+
+    def _get_cached_metagraph(self) -> MetagraphData | None:
+        if self._metagraph_cache is None:
+            return None
+        cached_at, data = self._metagraph_cache
+        if time.monotonic() - cached_at > METAGRAPH_CACHE_TTL_SECONDS:
+            self._metagraph_cache = None
+            return None
+        return data
 
     def miners(self) -> list[Miner]:
         return metagraph.miners()

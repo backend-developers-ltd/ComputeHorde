@@ -1,9 +1,32 @@
+from collections.abc import Mapping
+
 import pydantic
+import turbobt
+from pydantic import ConfigDict
 
 ss58_address = str
 reservation_id = int
 block_id = int
 block_ids = list[int]
+
+
+class MetagraphData(pydantic.BaseModel):
+    block: int
+    neurons: list[turbobt.Neuron]
+    subnet_state: Mapping[str, list[float]]
+    alpha_stake: list[float]
+    tao_stake: list[float]
+    total_stake: list[float]
+    uids: list[int]
+    hotkeys: list[str]
+    coldkeys: list[str | None]
+    serving_hotkeys: list[str]
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    @property
+    def block_number(self) -> int:
+        return self.block
 
 
 class Miner(pydantic.BaseModel):

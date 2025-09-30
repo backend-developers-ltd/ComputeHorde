@@ -5,7 +5,7 @@ from typing import Any, cast
 
 from web3 import Web3
 
-from compute_horde_validator.validator.allowance.utils.metagraph import MetagraphSnapshotData
+from compute_horde_validator.validator.allowance.types import MetagraphData
 from compute_horde_validator.validator.collateral import tasks as collateral_tasks
 from compute_horde_validator.validator.collateral.tasks import CollateralTaskDependencies
 
@@ -36,11 +36,36 @@ class CollateralTaskHarness:
         )
         collateral_tasks.sync_collaterals.run(deps=deps)
 
-    def _fetch_metagraph(self) -> MetagraphSnapshotData:
-        return MetagraphSnapshotData(
-            neurons=list(self.neurons),
-            subnet_state={},
-            block_number=self.block_number,
+    def _fetch_metagraph(self) -> MetagraphData:
+        neurons = list(self.neurons)
+        uids = [getattr(neuron, "uid", index) for index, neuron in enumerate(neurons)]
+        hotkeys = [
+            getattr(neuron, "hotkey", f"hotkey-{index}") for index, neuron in enumerate(neurons)
+        ]
+        coldkeys = [getattr(neuron, "coldkey", None) for neuron in neurons]
+        serving_hotkeys = [
+            neuron.hotkey
+            for neuron in neurons
+            if getattr(getattr(neuron, "axon_info", None), "ip", None) not in (None, "0.0.0.0")
+        ]
+        stakes_length = len(neurons)
+        zeros = [0.0] * stakes_length
+
+        return MetagraphData(
+            block=self.block_number,
+            neurons=neurons,
+            subnet_state={
+                "alpha_stake": zeros.copy(),
+                "tao_stake": zeros.copy(),
+                "total_stake": zeros.copy(),
+            },
+            alpha_stake=zeros.copy(),
+            tao_stake=zeros.copy(),
+            total_stake=zeros.copy(),
+            uids=uids,
+            hotkeys=hotkeys,
+            coldkeys=coldkeys,
+            serving_hotkeys=serving_hotkeys,
         )
 
     def _fetch_associations(

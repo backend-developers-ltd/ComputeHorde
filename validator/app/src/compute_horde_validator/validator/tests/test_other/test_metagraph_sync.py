@@ -1,12 +1,55 @@
+from collections.abc import Iterable
+
 import pytest
 
-from compute_horde_validator.validator.allowance.utils.metagraph import MetagraphSnapshotData
+from compute_horde_validator.validator.allowance.types import MetagraphData
 from compute_horde_validator.validator.models import (
     MetagraphSnapshot,
     Miner,
     SystemEvent,
 )
 from compute_horde_validator.validator.tasks import sync_metagraph
+
+
+def _make_metagraph_data(
+    neurons: Iterable,
+    subnet_state: dict,
+    block: int,
+) -> MetagraphData:
+    neuron_list = list(neurons)
+    alpha_stake = list(subnet_state.get("alpha_stake", [0.0] * len(neuron_list)))
+    tao_stake = list(subnet_state.get("tao_stake", [0.0] * len(neuron_list)))
+    total_stake = list(subnet_state.get("total_stake", [0.0] * len(neuron_list)))
+
+    uids = [getattr(neuron, "uid", index) for index, neuron in enumerate(neuron_list)]
+    hotkeys = [
+        getattr(neuron, "hotkey", f"hotkey_{index}") for index, neuron in enumerate(neuron_list)
+    ]
+    coldkeys = [getattr(neuron, "coldkey", None) for neuron in neuron_list]
+    serving_hotkeys = [
+        neuron.hotkey
+        for neuron in neuron_list
+        if getattr(getattr(neuron, "axon_info", None), "ip", None) not in (None, "0.0.0.0")
+    ]
+
+    subnet_state_payload = {
+        "alpha_stake": alpha_stake,
+        "tao_stake": tao_stake,
+        "total_stake": total_stake,
+    }
+
+    return MetagraphData(
+        block=block,
+        neurons=neuron_list,
+        subnet_state=subnet_state_payload,
+        alpha_stake=alpha_stake,
+        tao_stake=tao_stake,
+        total_stake=total_stake,
+        uids=uids,
+        hotkeys=hotkeys,
+        coldkeys=coldkeys,
+        serving_hotkeys=serving_hotkeys,
+    )
 
 
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
@@ -21,31 +64,11 @@ def test_metagraph_sync__success(bittensor, mocker):
     subnet_state = bittensor.subnet.return_value.get_state.return_value
 
     snapshots = [
-        MetagraphSnapshotData(
-            neurons=list(neurons[:n]),
-            subnet_state=subnet_state,
-            block_number=override_block,
-        ),
-        MetagraphSnapshotData(
-            neurons=list(neurons[:n]),
-            subnet_state=subnet_state,
-            block_number=708,
-        ),
-        MetagraphSnapshotData(
-            neurons=list(neurons[: n + 1]),
-            subnet_state=subnet_state,
-            block_number=override_block + 1,
-        ),
-        MetagraphSnapshotData(
-            neurons=list(neurons[: n + 1]),
-            subnet_state=subnet_state,
-            block_number=1431,
-        ),
-        MetagraphSnapshotData(
-            neurons=list(neurons[: n + 1]),
-            subnet_state=subnet_state,
-            block_number=1430,
-        ),
+        _make_metagraph_data(neurons[:n], subnet_state, override_block),
+        _make_metagraph_data(neurons[:n], subnet_state, 708),
+        _make_metagraph_data(neurons[: n + 1], subnet_state, override_block + 1),
+        _make_metagraph_data(neurons[: n + 1], subnet_state, 1431),
+        _make_metagraph_data(neurons[: n + 1], subnet_state, 1430),
     ]
 
     mocker.patch(

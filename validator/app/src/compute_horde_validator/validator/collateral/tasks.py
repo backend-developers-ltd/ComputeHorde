@@ -12,11 +12,8 @@ from web3 import Web3
 from compute_horde_validator.celery import app
 from compute_horde_validator.validator.models import Miner, SystemEvent
 
-from ..allowance.utils.metagraph import (
-    MetagraphSnapshotData,
-    fetch_metagraph_snapshot,
-    get_block_hash,
-)
+from ..allowance.types import MetagraphData
+from ..allowance.utils.metagraph import fetch_metagraph_snapshot, get_block_hash
 from ..allowance.utils.supertensor import supertensor
 from .default import Collateral, collateral
 
@@ -27,7 +24,7 @@ class CollateralTaskDependencies:
     def __init__(
         self,
         *,
-        fetch_metagraph: Callable[[], MetagraphSnapshotData] | None = None,
+        fetch_metagraph: Callable[[], MetagraphData] | None = None,
         fetch_block_hash: Callable[[int], str] | None = None,
         fetch_evm_key_associations: Callable[[turbobt.Subtensor, int, str | None], dict[int, str]]
         | None = None,
@@ -44,7 +41,7 @@ class CollateralTaskDependencies:
         self._collateral = collateral or self._default_collateral
         self._system_events = system_events or self._default_system_events
 
-    def fetch_metagraph(self) -> MetagraphSnapshotData:
+    def fetch_metagraph(self) -> MetagraphData:
         return self._fetch_metagraph()
 
     def block_hash(self, block_number: int) -> str:
@@ -64,7 +61,7 @@ class CollateralTaskDependencies:
     def system_events(self) -> Any:
         return self._system_events()
 
-    def _default_fetch_metagraph(self) -> MetagraphSnapshotData:
+    def _default_fetch_metagraph(self) -> MetagraphData:
         return fetch_metagraph_snapshot()
 
     def _default_fetch_block_hash(self, block_number: int) -> str:
