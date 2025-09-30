@@ -422,6 +422,11 @@ CONSTANCE_CONFIG = {
         "Share of the total score that goes to the main hotkey (80% = 0.8)",
         float,
     ),
+    "DYNAMIC_BLOCK_ALLOWANCE_MULTIPLIER": (
+        1.0,
+        "Multiplier applied to calculated block allowances",
+        float,
+    ),
 }
 
 # Content Security Policy
