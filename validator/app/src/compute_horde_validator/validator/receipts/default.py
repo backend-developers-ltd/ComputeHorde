@@ -27,9 +27,10 @@ from django.utils import timezone
 from prometheus_client import Counter, Gauge, Histogram
 from typing_extensions import deprecated
 
+from compute_horde_validator.validator.allowance.default import allowance
 from compute_horde_validator.validator.allowance.utils.supertensor import supertensor
 from compute_horde_validator.validator.dynamic_config import aget_config
-from compute_horde_validator.validator.models import MetagraphSnapshot, Miner
+from compute_horde_validator.validator.models import Miner
 from compute_horde_validator.validator.models.allowance.internal import Block
 
 from .base import ReceiptsBase
@@ -116,8 +117,8 @@ class Receipts(ReceiptsBase):
             logger.info("Will fetch receipts from metagraph snapshot miners")
 
             async def miners():
-                snapshot = await MetagraphSnapshot.aget_latest()
-                serving_hotkeys = snapshot.serving_hotkeys
+                metagraph = await allowance().aget_metagraph()
+                serving_hotkeys = metagraph.serving_hotkeys
                 serving_miners = [m async for m in Miner.objects.filter(hotkey__in=serving_hotkeys)]
                 return [(m.hotkey, m.address, m.port) for m in serving_miners]
 

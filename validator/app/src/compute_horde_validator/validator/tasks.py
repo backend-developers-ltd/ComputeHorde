@@ -78,6 +78,7 @@ from compute_horde_validator.validator.synthetic_jobs.utils import (
 
 from . import eviction
 from .allowance import tasks as allowance_tasks  # noqa
+from .allowance.default import allowance
 from .allowance.utils.metagraph import fetch_metagraph_snapshot
 from .clean_me_up import bittensor_client, get_single_manifest
 from .collateral import tasks as collateral_tasks  # noqa
@@ -1950,24 +1951,24 @@ async def _poll_miner_manifests() -> None:
     Poll miners connected to this validator for their manifests and update the database.
     """
     try:
-        metagraph = await MetagraphSnapshot.objects.aget(id=MetagraphSnapshot.SnapshotType.LATEST)
-        serving_hotkeys = metagraph.get_serving_hotkeys()
-
-        if not serving_hotkeys:
-            logger.info("No serving miners in metagraph, skipping manifest polling")
-            return
-
-        miners = [m async for m in Miner.objects.filter(hotkey__in=serving_hotkeys)]
-
-        if not miners:
-            logger.info("No serving miners found in database, skipping manifest polling")
-            return
-
-        logger.info(f"Polling manifests from {len(miners)} serving miners")
-
-    except MetagraphSnapshot.DoesNotExist:
-        logger.warning("No metagraph snapshot found, skipping manifest polling")
+        metagraph = await allowance().aget_metagraph()
+    except Exception as exc:  # pragma: no cover - defensive, allowance handles caching
+        logger.warning("No metagraph data available, skipping manifest polling: %s", exc)
         return
+
+    serving_hotkeys = metagraph.serving_hotkeys
+
+    if not serving_hotkeys:
+        logger.info("No serving miners in metagraph, skipping manifest polling")
+        return
+
+    miners = [m async for m in Miner.objects.filter(hotkey__in=serving_hotkeys)]
+
+    if not miners:
+        logger.info("No serving miners found in database, skipping manifest polling")
+        return
+
+    logger.info(f"Polling manifests from {len(miners)} serving miners")
 
     manifests_dict = await get_manifests_from_miners(miners, timeout=30)
 

@@ -10,7 +10,9 @@ from compute_horde.utils import (
 )
 from django.conf import settings
 
-from compute_horde_validator.validator.models import MetagraphSnapshot, Miner, SystemEvent
+from compute_horde_validator.validator.allowance.default import allowance
+from compute_horde_validator.validator.allowance.types import MetagraphData
+from compute_horde_validator.validator.models import Miner, SystemEvent
 from compute_horde_validator.validator.synthetic_jobs.batch_run import execute_synthetic_batch_run
 
 # new synchronized flow waits longer for job responses
@@ -40,7 +42,7 @@ def create_and_run_synthetic_job_batch(netuid, network, synthetic_jobs_batch_id:
         active_validators = []
     else:
         try:
-            metagraph = MetagraphSnapshot.get_latest()
+            metagraph = allowance().get_metagraph()
         except Exception as e:
             msg = f"Failed to get metagraph - will not run synthetic jobs: {e}"
             logger.warning(msg)
@@ -59,16 +61,17 @@ def create_and_run_synthetic_job_batch(netuid, network, synthetic_jobs_batch_id:
 
 
 def get_validator_infos(
-    metagraph: MetagraphSnapshot,
+    metagraph: MetagraphData | None = None,
 ) -> list[ValidatorInfo]:
     """
     Validators are top 24 neurons in terms of stake, only taking into account those that have at least 1000
     and forcibly including BAC_VALIDATOR_SS58_ADDRESS.
     The result is sorted.
     """
+    data = metagraph or allowance().get_metagraph()
     validators = [
         (uid, hotkey, stake)
-        for (uid, hotkey, stake) in zip(metagraph.uids, metagraph.hotkeys, metagraph.stake)
+        for (uid, hotkey, stake) in zip(data.uids, data.hotkeys, data.total_stake)
         if stake >= MIN_VALIDATOR_STAKE
     ]
     top_validators = sorted(
