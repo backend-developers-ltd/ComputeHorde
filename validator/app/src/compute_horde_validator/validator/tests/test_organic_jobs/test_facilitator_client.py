@@ -67,7 +67,7 @@ async def async_patch_all():
 
     with await sync_to_async(set_block_number)(1006):
         hotkeys = await sync_to_async(list)(Miner.objects.values_list("hotkey", flat=True))
-        metagraph = MetagraphData(
+        metagraph = MetagraphData.model_construct(
             block=1006,
             neurons=[],
             subnet_state={"alpha_stake": [], "tao_stake": [], "total_stake": []},

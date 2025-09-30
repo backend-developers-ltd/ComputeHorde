@@ -42,7 +42,7 @@ def add_allowance():
 #       Other fields are not used now.
 @pytest.fixture(autouse=True)
 def metagraph_snapshot(monkeypatch, cycle):
-    metagraph = MetagraphData(
+    metagraph = MetagraphData.model_construct(
         block=cycle.start,
         neurons=[],
         subnet_state={"alpha_stake": [], "tao_stake": [], "total_stake": []},
