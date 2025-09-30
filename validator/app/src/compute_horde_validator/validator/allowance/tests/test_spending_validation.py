@@ -23,6 +23,7 @@ class MockSpendingBookkeeper(SpendingBookkeeperBase):
     """
 
     def __init__(self):
+        super().__init__()
         self._valid_allowances = {}
         self._spent_blocks = set()
         self._invalidated_blocks = set()

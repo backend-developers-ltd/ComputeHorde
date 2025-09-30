@@ -17,6 +17,10 @@ Tests the in-memory implementation of the bookkeeper:
 - doesn't confuse similar triplets
 """
 
+pytestmark = [
+    pytest.mark.django_db,
+]
+
 
 def _datetime_between(dt1: datetime.datetime, dt2: datetime.datetime) -> datetime.datetime:
     """Returns a datetime smack between two passed in dates."""
