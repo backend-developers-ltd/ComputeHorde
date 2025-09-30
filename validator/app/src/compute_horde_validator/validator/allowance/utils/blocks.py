@@ -1,11 +1,11 @@
-import os
 import time
 from collections.abc import Callable
-from typing import Any
+from typing import Any, cast
 
 import turbobt
 from celery.utils.log import get_task_logger
 from compute_horde_core.executor_class import ExecutorClass
+from constance import config
 from django.db import IntegrityError, transaction
 from django.db.models import Case, FloatField, Max, Min, Q, Sum, Value, When
 
@@ -142,6 +142,7 @@ def process_block_allowance(
             creation_timestamp=supertensor_.get_block_timestamp(block_number),
         )
 
+        dynamic_multiplier = cast(float, config.DYNAMIC_BLOCK_ALLOWANCE_MULTIPLIER)
         neurons = supertensor_.list_neurons(block_number)
         save_neurons(neurons, block_number)
 
@@ -221,9 +222,7 @@ def process_block_allowance(
                                         manifests.get((neuron.hotkey, executor_class), 0.0)
                                         * validator_stake_share
                                         * block_duration
-                                        * float(
-                                            os.environ.get("DEBUG_BLOCK_ALLOWANCE_MULTIPLIER", 1.0)
-                                        )  # TODO: remove me
+                                        * dynamic_multiplier
                                     ),
                                     miner_ss58=neuron.hotkey,
                                     validator_ss58=validator.hotkey,
