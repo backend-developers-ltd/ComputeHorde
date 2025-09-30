@@ -427,6 +427,16 @@ CONSTANCE_CONFIG = {
         "Multiplier applied to calculated block allowances",
         float,
     ),
+    "DYNAMIC_SPENDING_VALIDATION_BLOCK_LEEWAY_LOWER": (
+        15,
+        "Additional extension of the allowed block range when validating spendings (lower bound)",
+        int,
+    ),
+    "DYNAMIC_SPENDING_VALIDATION_BLOCK_LEEWAY_UPPER": (
+        0,
+        "Additional extension of the allowed block range when validating spendings (upper bound)",
+        int,
+    ),
 }
 
 # Content Security Policy

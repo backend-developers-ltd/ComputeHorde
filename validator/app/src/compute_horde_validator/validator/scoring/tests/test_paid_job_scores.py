@@ -11,6 +11,7 @@ from compute_horde_validator.validator.receipts.types import JobSpendingInfo
 from compute_horde_validator.validator.scoring.calculations import (
     calculate_allowance_paid_job_scores,
 )
+from compute_horde_validator.validator.tests.helpers import patch_constance
 
 pytestmark = [
     pytest.mark.django_db,
@@ -56,17 +57,13 @@ def mock_settings():
             "compute_horde_validator.validator.allowance.utils.spending.settings.MAX_JOB_RUN_TIME_BLOCKS_APPROX",
             MAX_JOB_RUNTIME,
         ),
-        patch(
-            # TODO: This requires a proper investigation and fix rather than a band-aid.
-            # For clarity of tests, assume there is no leeway.
-            "compute_horde_validator.validator.allowance.utils.spending.settings.SPENDING_VALIDATION_BLOCK_LEEWAY_LOWER",
-            0,
-        ),
-        patch(
-            # TODO: This requires a proper investigation and fix rather than a band-aid.
-            # For clarity of tests, assume there is no leeway.
-            "compute_horde_validator.validator.allowance.utils.spending.settings.SPENDING_VALIDATION_BLOCK_LEEWAY_UPPER",
-            0,
+        patch_constance(
+            {
+                # TODO: This requires a proper investigation and fix rather than a band-aid.
+                # For clarity of tests, assume there is no leeway.
+                "DYNAMIC_SPENDING_VALIDATION_BLOCK_LEEWAY_LOWER": 0,
+                "DYNAMIC_SPENDING_VALIDATION_BLOCK_LEEWAY_UPPER": 0,
+            }
         ),
     ):
         yield
