@@ -12,7 +12,11 @@ from web3 import Web3
 from compute_horde_validator.celery import app
 from compute_horde_validator.validator.models import Miner, SystemEvent
 
-from ..allowance import MetagraphSnapshotData, fetch_metagraph_snapshot, get_block_hash
+from ..allowance.utils.metagraph import (
+    MetagraphSnapshotData,
+    fetch_metagraph_snapshot,
+    get_block_hash,
+)
 from ..allowance.utils.supertensor import supertensor
 from .default import Collateral, collateral
 
@@ -156,7 +160,7 @@ def sync_collaterals(deps: CollateralTaskDependencies | None = None) -> None:
         return
 
     associations = deps.fetch_evm_key_associations(
-        supertensor().subnet,
+        supertensor().bittensor.subtensor,
         settings.BITTENSOR_NETUID,
         block_hash,
     )

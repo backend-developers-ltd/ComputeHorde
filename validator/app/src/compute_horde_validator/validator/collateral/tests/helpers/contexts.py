@@ -5,7 +5,7 @@ from typing import Any, cast
 
 from web3 import Web3
 
-from compute_horde_validator.validator.allowance import MetagraphSnapshotData
+from compute_horde_validator.validator.allowance.utils.metagraph import MetagraphSnapshotData
 from compute_horde_validator.validator.collateral import tasks as collateral_tasks
 from compute_horde_validator.validator.collateral.tasks import CollateralTaskDependencies
 

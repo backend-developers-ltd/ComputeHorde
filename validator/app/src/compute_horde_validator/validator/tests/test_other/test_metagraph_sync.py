@@ -1,6 +1,6 @@
 import pytest
 
-from compute_horde_validator.validator.allowance import MetagraphSnapshotData
+from compute_horde_validator.validator.allowance.utils.metagraph import MetagraphSnapshotData
 from compute_horde_validator.validator.models import (
     MetagraphSnapshot,
     Miner,
@@ -140,5 +140,10 @@ def test_metagraph_sync__fetch_error(bittensor, mocker):
         side_effect=Exception("Nope"),
     )
 
-    with pytest.raises(Exception, match="Nope"):
-        sync_metagraph()
+    sync_metagraph()
+
+    event = SystemEvent.objects.get(
+        type=SystemEvent.EventType.METAGRAPH_SYNCING,
+        subtype=SystemEvent.EventSubType.SUBTENSOR_CONNECTIVITY_ERROR,
+    )
+    assert "Nope" in event.long_description

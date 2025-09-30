@@ -77,8 +77,8 @@ from compute_horde_validator.validator.synthetic_jobs.utils import (
 )
 
 from . import eviction
-from .allowance import fetch_metagraph_snapshot
 from .allowance import tasks as allowance_tasks  # noqa
+from .allowance.utils.metagraph import fetch_metagraph_snapshot
 from .clean_me_up import bittensor_client, get_single_manifest
 from .collateral import tasks as collateral_tasks  # noqa
 from .dynamic_config import aget_config
@@ -1308,7 +1308,18 @@ def save_metagraph_snapshot(
 
 @app.task
 def sync_metagraph() -> None:
-    snapshot = fetch_metagraph_snapshot()
+    try:
+        snapshot = fetch_metagraph_snapshot()
+    except Exception as e:
+        msg = f"Failed to fetch metagraph snapshot: {e}"
+        logger.warning(msg)
+        SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).create(
+            type=SystemEvent.EventType.METAGRAPH_SYNCING,
+            subtype=SystemEvent.EventSubType.SUBTENSOR_CONNECTIVITY_ERROR,
+            long_description=msg,
+            data={},
+        )
+        return
 
     neurons = snapshot.neurons
     subnet_state = snapshot.subnet_state
