@@ -214,7 +214,7 @@ class Receipts(ReceiptsBase):
         return await JobStartedReceipt.objects.aget(job_uuid=job_uuid)
 
     def get_finished_jobs_for_block_range(
-        self, start_block: int, end_block: int, executor_class: ExecutorClass
+        self, start_block: int, end_block: int, executor_class: ExecutorClass, organic_only=False
     ) -> list[JobSpendingInfo]:
         """
         Returns the alleged job spendings as reported by miners via receipt transfer.
@@ -240,6 +240,9 @@ class Receipts(ReceiptsBase):
         starts = JobStartedReceipt.objects.filter(
             job_uuid=OuterRef("job_uuid"), executor_class=str(executor_class)
         )
+        # Filter for organic jobs if requested - also present on the job started receipt
+        if organic_only:
+            starts = starts.filter(is_organic=True)
         finished_qs = finished_qs.filter(Exists(starts))
 
         # TODO(new scoring): this could be inefficient

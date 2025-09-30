@@ -59,8 +59,9 @@ def calculate_allowance_paid_job_scores(
 
     for executor_class in ExecutorClass:
         # Find out what jobs finished within the time and get the associated spending info
+        # We only care about organic jobs here
         job_spendings = receipts().get_finished_jobs_for_block_range(
-            start_block, end_block, executor_class
+            start_block, end_block, executor_class, organic_only=True
         )
 
         logger.info(

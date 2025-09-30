@@ -103,11 +103,16 @@ class ReceiptsBase(ABC):
 
     @abstractmethod
     def get_finished_jobs_for_block_range(
-        self, start_block: int, end_block: int, executor_class: ExecutorClass
+        self,
+        start_block: int,
+        end_block: int,
+        executor_class: ExecutorClass,
+        organic_only: bool = False,
     ) -> list[JobSpendingInfo]:
         """
         Returns tuples for jobs whose finish (receipt) timestamp falls within the
-        given block range [start_block, end_block), filtered by executor class.
+        given block range [start_block, end_block), filtered by executor class and
+        optionally whether the job was organic or not.
         """
         pass
 

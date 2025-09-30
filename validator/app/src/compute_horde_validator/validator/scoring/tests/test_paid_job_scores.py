@@ -231,7 +231,7 @@ def test_paid_job_scores(job_spendings, expected_scores):
     check if for simple and edge cases the scoring setup validates the spendings as expected.
     """
 
-    def finished_jobs(_, __, executor_class):
+    def finished_jobs(_, __, executor_class, organic_only):
         return job_spendings if executor_class == ExecutorClass.always_on__gpu_24gb else []
 
     with patch(
