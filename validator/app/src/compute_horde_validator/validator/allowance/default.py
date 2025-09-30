@@ -20,8 +20,6 @@ from .utils.spending import (
 )
 from .utils.supertensor import supertensor
 
-METAGRAPH_CACHE_TTL_SECONDS = 5.0
-
 
 class Allowance(AllowanceBase):
     def __init__(self):
@@ -59,16 +57,7 @@ class Allowance(AllowanceBase):
         return manifests.get_current_manifests()
 
     def get_metagraph(self, block: int | None = None) -> MetagraphData:
-        if block is not None:
-            return metagraph.fetch_metagraph_snapshot(block)
-
-        cached = self._get_cached_metagraph()
-        if cached is not None:
-            return cached
-
-        data = metagraph.fetch_metagraph_snapshot()
-        self._metagraph_cache = (time.monotonic(), data)
-        return data
+        return supertensor().get_metagraph(block)
 
     async def aget_metagraph(self, block: int | None = None) -> MetagraphData:
         return await sync_to_async(self.get_metagraph)(block)
@@ -96,15 +85,6 @@ class Allowance(AllowanceBase):
             ValidatorInfo(uid=uid, hotkey=hotkey, stake=stake)
             for uid, hotkey, stake in top_validators
         ]
-
-    def _get_cached_metagraph(self) -> MetagraphData | None:
-        if self._metagraph_cache is None:
-            return None
-        cached_at, data = self._metagraph_cache
-        if time.monotonic() - cached_at > METAGRAPH_CACHE_TTL_SECONDS:
-            self._metagraph_cache = None
-            return None
-        return data
 
     def miners(self) -> list[Miner]:
         return metagraph.miners()

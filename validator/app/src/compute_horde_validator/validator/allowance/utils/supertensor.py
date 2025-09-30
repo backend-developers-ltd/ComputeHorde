@@ -248,13 +248,9 @@ class SuperTensor(BaseSuperTensor):
             serving_hotkeys=serving_hotkeys,
         )
 
+    @RETRY_ON_TIMEOUT
     def get_metagraph(self, block_number: int) -> MetagraphData:
-        cached = self._metagraph_cache.get(block_number)
-        if cached is not None:
-            return cached
-        metagraph = self._build_metagraph_data(block_number)
-        self._metagraph_cache[block_number] = metagraph
-        return metagraph
+        return self._build_metagraph_data(block_number)
 
     @archive_fallback
     @make_sync
@@ -583,10 +579,6 @@ class PrecachingSuperTensor(SuperTensor):
             validators = super().list_validators(block_number)
             self.cache.put_validators(block_number, validators)
             return validators
-
-    def get_metagraph(self, block_number: int) -> MetagraphData:
-        self.set_starting_block(block_number)
-        return super().get_metagraph(block_number)
 
     def close(self):
         self.closing = True
