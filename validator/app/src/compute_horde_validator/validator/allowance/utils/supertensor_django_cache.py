@@ -5,7 +5,7 @@ import pickle
 import turbobt
 from django.core.cache import cache
 
-from compute_horde_validator.validator.allowance.types import MetagraphData, ValidatorModel
+from compute_horde_validator.validator.allowance.types import ValidatorModel
 from compute_horde_validator.validator.allowance.utils.supertensor import BaseCache
 
 logger = logging.getLogger(__name__)
@@ -100,24 +100,4 @@ class DjangoCache(BaseCache):
             return unpickled
         except Exception:
             logger.error("Error deserializing validators:", exc_info=True)
-            return None
-
-    def put_metagraph(self, block_number: int, metagraph: MetagraphData):
-        key = self._get_key("metagraph", block_number)
-        try:
-            pickled_data = pickle.dumps(metagraph)
-            cache.set(key, pickled_data, self.cache_timeout)
-        except Exception:
-            logger.error("Error serializing metagraph data:", exc_info=True)
-
-    def get_metagraph(self, block_number: int) -> MetagraphData | None:
-        key = self._get_key("metagraph", block_number)
-        pickled_data = cache.get(key)
-        if pickled_data is None:
-            return None
-        try:
-            unpickled: MetagraphData = pickle.loads(pickled_data)
-            return unpickled
-        except Exception:
-            logger.error("Error deserializing metagraph data:", exc_info=True)
             return None

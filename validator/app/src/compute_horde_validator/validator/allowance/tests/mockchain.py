@@ -10,7 +10,7 @@ from compute_horde.test_wallet import get_test_validator_wallet
 from compute_horde_core.executor_class import ExecutorClass
 from pydantic import BaseModel
 
-from compute_horde_validator.validator.allowance.types import ValidatorModel
+from compute_horde_validator.validator.allowance.types import MetagraphData, ValidatorModel
 from compute_horde_validator.validator.allowance.utils import supertensor
 from compute_horde_validator.validator.tests.transport import SimulationTransport
 
@@ -339,6 +339,27 @@ def set_block_number(block_number_, oldest_reachable_block: float | int = float(
 
         def oldest_reachable_block(self) -> float | int:
             return oldest_reachable_block
+
+        def get_metagraph(self, block_number: int) -> MetagraphData:
+            if block_number < START_BLOCK:
+                block_number = START_BLOCK
+            neurons = self.list_neurons(block_number)
+            subnet_state = self.get_subnet_state(block_number)
+
+            return MetagraphData.model_construct(
+                block=block_number,
+                neurons=neurons,
+                subnet_state=subnet_state,
+                alpha_stake=list(subnet_state.get("alpha_stake", [])),
+                tao_stake=list(subnet_state.get("tao_stake", [])),
+                total_stake=list(subnet_state.get("total_stake", [])),
+                uids=[n.uid for n in neurons],
+                hotkeys=[n.hotkey for n in neurons],
+                coldkeys=[getattr(n, "coldkey", None) for n in neurons],
+                serving_hotkeys=[
+                    n.hotkey for n in neurons if n.axon_info and str(n.axon_info.ip) != "0.0.0.0"
+                ],
+            )
 
     # Create transport map from manifest responses
     def create_transport_map():
