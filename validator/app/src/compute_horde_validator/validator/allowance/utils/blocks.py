@@ -1,6 +1,6 @@
 import time
 from collections.abc import Callable
-from typing import Any
+from typing import Any, cast
 
 import turbobt
 from celery.utils.log import get_task_logger
@@ -142,6 +142,7 @@ def process_block_allowance(
             creation_timestamp=supertensor_.get_block_timestamp(block_number),
         )
 
+        dynamic_multiplier = cast(float, config.DYNAMIC_BLOCK_ALLOWANCE_MULTIPLIER)
         neurons = supertensor_.list_neurons(block_number)
         save_neurons(neurons, block_number)
 
@@ -221,7 +222,7 @@ def process_block_allowance(
                                         manifests.get((neuron.hotkey, executor_class), 0.0)
                                         * validator_stake_share
                                         * block_duration
-                                        * config.DYNAMIC_BLOCK_ALLOWANCE_MULTIPLIER
+                                        * dynamic_multiplier
                                     ),
                                     miner_ss58=neuron.hotkey,
                                     validator_ss58=validator.hotkey,
