@@ -1,4 +1,3 @@
-import os
 import time
 from collections.abc import Callable
 from typing import Any
@@ -6,6 +5,7 @@ from typing import Any
 import turbobt
 from celery.utils.log import get_task_logger
 from compute_horde_core.executor_class import ExecutorClass
+from constance import config
 from django.db import IntegrityError, transaction
 from django.db.models import Case, FloatField, Max, Min, Q, Sum, Value, When
 
@@ -221,9 +221,7 @@ def process_block_allowance(
                                         manifests.get((neuron.hotkey, executor_class), 0.0)
                                         * validator_stake_share
                                         * block_duration
-                                        * float(
-                                            os.environ.get("DEBUG_BLOCK_ALLOWANCE_MULTIPLIER", 1.0)
-                                        )  # TODO: remove me
+                                        * config.DYNAMIC_BLOCK_ALLOWANCE_MULTIPLIER
                                     ),
                                     miner_ss58=neuron.hotkey,
                                     validator_ss58=validator.hotkey,
