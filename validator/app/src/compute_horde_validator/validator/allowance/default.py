@@ -1,6 +1,5 @@
 # default implementation of the allowance module interface
 
-import time
 
 from asgiref.sync import sync_to_async
 from compute_horde.utils import (

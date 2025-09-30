@@ -1,7 +1,6 @@
 from collections.abc import Mapping
 
 import pydantic
-import turbobt
 from pydantic import ConfigDict
 
 ss58_address = str
@@ -12,7 +11,8 @@ block_ids = list[int]
 
 class MetagraphData(pydantic.BaseModel):
     block: int
-    neurons: list[turbobt.Neuron]
+    block_hash: str
+    neurons: list["Neuron"]
     subnet_state: Mapping[str, list[float]]
     alpha_stake: list[float]
     tao_stake: list[float]
@@ -37,8 +37,8 @@ class Miner(pydantic.BaseModel):
 
 
 class Neuron(pydantic.BaseModel):
-    hotkey_ss58: ss58_address
-    coldkey: ss58_address
+    hotkey: ss58_address
+    coldkey: ss58_address | None
 
 
 class ValidatorModel(pydantic.BaseModel):

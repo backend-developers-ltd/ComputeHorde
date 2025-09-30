@@ -20,7 +20,7 @@ from bt_ddos_shield.shield_metagraph import ShieldMetagraphOptions
 from bt_ddos_shield.turbobt import ShieldedBittensor
 from compute_horde.blockchain.block_cache import get_current_block
 
-from compute_horde_validator.validator.allowance.types import MetagraphData, ValidatorModel
+from compute_horde_validator.validator.allowance.types import MetagraphData, Neuron, ValidatorModel
 
 DEFAULT_TIMEOUT = 30.0
 
@@ -104,6 +104,9 @@ class BaseSuperTensor(abc.ABC):
 
     @abc.abstractmethod
     def list_validators(self, block_number: int) -> list[turbobt.Neuron]: ...
+
+    @abc.abstractmethod
+    def get_metagraph(self, block_number: int | None = None) -> MetagraphData: ...
 
     @abc.abstractmethod
     def get_block_timestamp(self, block_number: int) -> datetime.datetime: ...
@@ -221,22 +224,27 @@ class SuperTensor(BaseSuperTensor):
         ]
 
     def _build_metagraph_data(self, block_number: int) -> MetagraphData:
-        neurons = self.list_neurons(block_number)
+        block_hash = self.get_block_hash(block_number)
+        turbobt_neurons = self.list_neurons(block_number)
         subnet_state = self.get_subnet_state(block_number)
         alpha_stake = list(subnet_state.get("alpha_stake", []))
         tao_stake = list(subnet_state.get("tao_stake", []))
         total_stake = list(subnet_state.get("total_stake", []))
-        uids = [neuron.uid for neuron in neurons]
-        hotkeys = [neuron.hotkey for neuron in neurons]
-        coldkeys = [getattr(neuron, "coldkey", None) for neuron in neurons]
+        uids = [neuron.uid for neuron in turbobt_neurons]
+        hotkeys = [neuron.hotkey for neuron in turbobt_neurons]
+        coldkeys = [getattr(neuron, "coldkey", None) for neuron in turbobt_neurons]
         serving_hotkeys = [
             neuron.hotkey
-            for neuron in neurons
+            for neuron in turbobt_neurons
             if neuron.axon_info and str(neuron.axon_info.ip) != "0.0.0.0"
+        ]
+        neurons = [
+            Neuron(hotkey=n.hotkey, coldkey=getattr(n, "coldkey", None)) for n in turbobt_neurons
         ]
 
         return MetagraphData.model_construct(
             block=block_number,
+            block_hash=block_hash,
             neurons=neurons,
             subnet_state=subnet_state,
             alpha_stake=alpha_stake,
@@ -249,7 +257,9 @@ class SuperTensor(BaseSuperTensor):
         )
 
     @RETRY_ON_TIMEOUT
-    def get_metagraph(self, block_number: int) -> MetagraphData:
+    def get_metagraph(self, block_number: int | None = None) -> MetagraphData:
+        if block_number is None:
+            block_number = self.get_current_block()
         return self._build_metagraph_data(block_number)
 
     @archive_fallback

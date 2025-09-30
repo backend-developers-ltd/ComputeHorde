@@ -12,8 +12,6 @@ from web3 import Web3
 from compute_horde_validator.celery import app
 from compute_horde_validator.validator.models import Miner, SystemEvent
 
-from ..allowance.types import MetagraphData
-from ..allowance.utils.metagraph import fetch_metagraph_snapshot, get_block_hash
 from ..allowance.utils.supertensor import supertensor
 from .default import Collateral, collateral
 
@@ -24,28 +22,18 @@ class CollateralTaskDependencies:
     def __init__(
         self,
         *,
-        fetch_metagraph: Callable[[], MetagraphData] | None = None,
-        fetch_block_hash: Callable[[int], str] | None = None,
         fetch_evm_key_associations: Callable[[turbobt.Subtensor, int, str | None], dict[int, str]]
         | None = None,
         web3: Callable[[str], Web3] | None = None,
         collateral: Callable[[], Any] | None = None,
         system_events: Callable[[], Any] | None = None,
     ) -> None:
-        self._fetch_metagraph = fetch_metagraph or self._default_fetch_metagraph
-        self._fetch_block_hash = fetch_block_hash or self._default_fetch_block_hash
         self._fetch_evm_key_associations = (
             fetch_evm_key_associations or self._default_fetch_evm_key_associations
         )
         self._web3 = web3 or self._default_web3
         self._collateral = collateral or self._default_collateral
         self._system_events = system_events or self._default_system_events
-
-    def fetch_metagraph(self) -> MetagraphData:
-        return self._fetch_metagraph()
-
-    def block_hash(self, block_number: int) -> str:
-        return self._fetch_block_hash(block_number)
 
     def fetch_evm_key_associations(
         self, subtensor: turbobt.Subtensor, netuid: int, block_hash: str | None
@@ -60,12 +48,6 @@ class CollateralTaskDependencies:
 
     def system_events(self) -> Any:
         return self._system_events()
-
-    def _default_fetch_metagraph(self) -> MetagraphData:
-        return fetch_metagraph_snapshot()
-
-    def _default_fetch_block_hash(self, block_number: int) -> str:
-        return get_block_hash(block_number)
 
     def _default_fetch_evm_key_associations(
         self, subtensor: turbobt.Subtensor, netuid: int, block_hash: str | None
@@ -140,11 +122,7 @@ def sync_collaterals(deps: CollateralTaskDependencies | None = None) -> None:
     """
     deps = deps or CollateralTaskDependencies()
     try:
-        metagraph = deps.fetch_metagraph()
-        block_number = metagraph.block_number
-        block_hash = deps.block_hash(block_number)
-        neurons = metagraph.neurons
-        hotkeys = [neuron.hotkey for neuron in neurons]
+        metagraph = supertensor().get_metagraph()
     except Exception as e:
         msg = f"Error getting metagraph data for collateral sync: {e}"
         logger.warning(msg)
@@ -155,6 +133,11 @@ def sync_collaterals(deps: CollateralTaskDependencies | None = None) -> None:
             data={"error": str(e)},
         )
         return
+
+    block_hash = metagraph.block_hash
+    block_number = metagraph.block_number
+    neurons = metagraph.neurons
+    hotkeys = [neuron.hotkey for neuron in neurons]
 
     associations = deps.fetch_evm_key_associations(
         supertensor().bittensor.subtensor,
