@@ -2,9 +2,10 @@ import datetime
 import logging
 from abc import ABC, abstractmethod
 from collections import defaultdict
-from typing import NamedTuple
+from typing import NamedTuple, cast
 
 from compute_horde_core.executor_class import ExecutorClass
+from constance import config
 
 from ...models import Block, BlockAllowance
 from .. import settings
@@ -40,6 +41,15 @@ class SpendingBookkeeperBase(ABC):
     A spending bookkeeper is used to validate a series of allowance spendings.
     """
 
+    def __init__(self) -> None:
+        self._block_expiry = settings.BLOCK_EXPIRY
+        self._validation_leeway_lower = cast(
+            int, config.DYNAMIC_SPENDING_VALIDATION_BLOCK_LEEWAY_LOWER
+        )
+        self._validation_leeway_upper = cast(
+            int, config.DYNAMIC_SPENDING_VALIDATION_BLOCK_LEEWAY_UPPER
+        )
+
     def spend(
         self,
         triplet: Triplet,
@@ -60,11 +70,9 @@ class SpendingBookkeeperBase(ABC):
             raise ErrorWhileSpending(f"Cannot find block at job submission time: {spend_time}")
 
         allowed_block_range = range(
-            block_at_spend_time
-            - settings.BLOCK_EXPIRY
-            - settings.SPENDING_VALIDATION_BLOCK_LEEWAY_LOWER,
+            block_at_spend_time - self._block_expiry - self._validation_leeway_lower,
             # +1: range() is upper-exclusive, and we want to include block_at_spend_time
-            block_at_spend_time + settings.SPENDING_VALIDATION_BLOCK_LEEWAY_UPPER + 1,
+            block_at_spend_time + self._validation_leeway_upper + 1,
         )
         blocks_in_range = {b for b in offered_blocks if b in allowed_block_range}
 
@@ -161,6 +169,7 @@ class InMemorySpendingBookkeeper(SpendingBookkeeperBase):
             known_allowances: Allowance data per triplet and block
             blocks: List of blocks, must be sorted by creation_timestamp
         """
+        super().__init__()
         self._allowances = known_allowances
         self._blocks = blocks
         self._spendings_per_triplet: defaultdict[Triplet, set[block_id]] = defaultdict(set)
