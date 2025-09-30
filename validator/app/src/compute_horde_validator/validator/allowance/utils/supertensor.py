@@ -20,7 +20,7 @@ from bt_ddos_shield.shield_metagraph import ShieldMetagraphOptions
 from bt_ddos_shield.turbobt import ShieldedBittensor
 from compute_horde.blockchain.block_cache import get_current_block
 
-from compute_horde_validator.validator.allowance.types import ValidatorModel
+from compute_horde_validator.validator.allowance.types import MetagraphData, ValidatorModel
 
 DEFAULT_TIMEOUT = 30.0
 
@@ -176,6 +176,7 @@ class SuperTensor(BaseSuperTensor):
         self.loop = asyncio.get_event_loop()
 
         self._neuron_list_cache: deque[tuple[int, list[turbobt.Neuron]]] = deque(maxlen=15)
+        self._metagraph_cache: dict[int, MetagraphData] = {}
 
     def oldest_reachable_block(self) -> float | int:
         if self.archive_bittensor is not None:
@@ -218,6 +219,42 @@ class SuperTensor(BaseSuperTensor):
             )
             for n in validators
         ]
+
+    def _build_metagraph_data(self, block_number: int) -> MetagraphData:
+        neurons = self.list_neurons(block_number)
+        subnet_state = self.get_subnet_state(block_number)
+        alpha_stake = list(subnet_state.get("alpha_stake", []))
+        tao_stake = list(subnet_state.get("tao_stake", []))
+        total_stake = list(subnet_state.get("total_stake", []))
+        uids = [neuron.uid for neuron in neurons]
+        hotkeys = [neuron.hotkey for neuron in neurons]
+        coldkeys = [getattr(neuron, "coldkey", None) for neuron in neurons]
+        serving_hotkeys = [
+            neuron.hotkey
+            for neuron in neurons
+            if neuron.axon_info and str(neuron.axon_info.ip) != "0.0.0.0"
+        ]
+
+        return MetagraphData.model_construct(
+            block=block_number,
+            neurons=neurons,
+            subnet_state=subnet_state,
+            alpha_stake=alpha_stake,
+            tao_stake=tao_stake,
+            total_stake=total_stake,
+            uids=uids,
+            hotkeys=hotkeys,
+            coldkeys=coldkeys,
+            serving_hotkeys=serving_hotkeys,
+        )
+
+    def get_metagraph(self, block_number: int) -> MetagraphData:
+        cached = self._metagraph_cache.get(block_number)
+        if cached is not None:
+            return cached
+        metagraph = self._build_metagraph_data(block_number)
+        self._metagraph_cache[block_number] = metagraph
+        return metagraph
 
     @archive_fallback
     @make_sync
@@ -293,6 +330,7 @@ class TaskType(enum.Enum):
     BLOCK_TIMESTAMP = "BLOCK_TIMESTAMP"
     SUBNET_STATE = "SUBNET_STATE"
     VALIDATORS = "VALIDATORS"
+    METAGRAPH = "METAGRAPH"
     THE_END = "THE_END"
 
 
@@ -321,6 +359,12 @@ class BaseCache(abc.ABC):
     @abc.abstractmethod
     def get_validators(self, block_number: int) -> list[ValidatorModel] | None: ...
 
+    @abc.abstractmethod
+    def put_metagraph(self, block_number: int, metagraph: MetagraphData): ...
+
+    @abc.abstractmethod
+    def get_metagraph(self, block_number: int) -> MetagraphData | None: ...
+
 
 class InMemoryCache(BaseCache):
     def __init__(self):
@@ -328,6 +372,7 @@ class InMemoryCache(BaseCache):
         self._block_timestamp_cache: dict[int, datetime.datetime] = {}
         self._subnet_state_cache: dict[int, turbobt.subnet.SubnetState] = {}
         self._validators_cache: dict[int, list[ValidatorModel]] = {}
+        self._metagraph_cache: dict[int, MetagraphData] = {}
 
     def put_neurons(self, block_number: int, neurons: list[turbobt.Neuron]):
         self._neuron_cache[block_number] = neurons
@@ -352,6 +397,12 @@ class InMemoryCache(BaseCache):
 
     def get_validators(self, block_number: int) -> list[ValidatorModel] | None:
         return self._validators_cache.get(block_number)
+
+    def put_metagraph(self, block_number: int, metagraph: MetagraphData):
+        self._metagraph_cache[block_number] = metagraph
+
+    def get_metagraph(self, block_number: int) -> MetagraphData | None:
+        return self._metagraph_cache.get(block_number)
 
 
 class PrecachingSuperTensorCacheMiss(SuperTensorError):
@@ -440,6 +491,15 @@ class PrecachingSuperTensor(SuperTensor):
                         self.cache.put_validators(
                             block_number, super_tensor.list_validators(block_number)
                         )
+                    elif task == TaskType.METAGRAPH:
+                        if self.cache.get_metagraph(block_number) is not None:
+                            logger.debug(
+                                f"Worker {ind} skipping task {task} for block {block_number} (cached)"
+                            )
+                            continue
+                        self.cache.put_metagraph(
+                            block_number, super_tensor._build_metagraph_data(block_number)
+                        )
                     else:
                         assert_never(task)
                     logger.debug(f"Worker {ind} finished task {task} for block {block_number}")
@@ -477,6 +537,7 @@ class PrecachingSuperTensor(SuperTensor):
                 self.task_queue.put((TaskType.BLOCK_TIMESTAMP, block_to_submit))
                 self.task_queue.put((TaskType.SUBNET_STATE, block_to_submit))
                 self.task_queue.put((TaskType.VALIDATORS, block_to_submit))
+                self.task_queue.put((TaskType.METAGRAPH, block_to_submit))
                 self.highest_block_submitted = block_to_submit
             except CannotGetCurrentBlock:
                 time.sleep(1)
@@ -546,6 +607,18 @@ class PrecachingSuperTensor(SuperTensor):
             validators = super().list_validators(block_number)
             self.cache.put_validators(block_number, validators)
             return validators
+
+    def get_metagraph(self, block_number: int) -> MetagraphData:
+        self.set_starting_block(block_number)
+        metagraph = self.cache.get_metagraph(block_number)
+        if metagraph is not None:
+            return metagraph
+        if self.throw_on_cache_miss:
+            raise PrecachingSuperTensorCacheMiss(f"Cache miss for block {block_number} (metagraph)")
+        logger.debug(f"Cache miss for block {block_number} (metagraph)")
+        metagraph = super()._build_metagraph_data(block_number)
+        self.cache.put_metagraph(block_number, metagraph)
+        return metagraph
 
     def close(self):
         self.closing = True

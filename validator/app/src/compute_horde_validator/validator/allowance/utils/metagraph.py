@@ -6,31 +6,22 @@ from ..utils.supertensor import supertensor
 
 def fetch_metagraph_snapshot(block_number: int | None = None) -> MetagraphData:
     target_block = block_number if block_number is not None else supertensor().get_current_block()
-    neurons = supertensor().list_neurons(target_block)
-    subnet_state = supertensor().get_subnet_state(target_block)
-    alpha_stake = subnet_state["alpha_stake"]
-    tao_stake = subnet_state["tao_stake"]
-    total_stake = subnet_state["total_stake"]
-    hotkeys = [neuron.hotkey for neuron in neurons]
-    coldkeys = [neuron.coldkey for neuron in neurons]
-    uids = [neuron.uid for neuron in neurons]
-    serving_hotkeys = [
-        neuron.hotkey
-        for neuron in neurons
-        if neuron.axon_info and str(neuron.axon_info.ip) != "0.0.0.0"
-    ]
-    return MetagraphData(
-        block=target_block,
-        neurons=neurons,
-        subnet_state=subnet_state,
-        alpha_stake=alpha_stake,
-        tao_stake=tao_stake,
-        total_stake=total_stake,
-        uids=uids,
-        hotkeys=hotkeys,
-        coldkeys=coldkeys,
-        serving_hotkeys=serving_hotkeys,
-    )
+    metagraph = supertensor().get_metagraph(target_block)
+    if metagraph.block != target_block:
+        # Ensure consumers receive a view tagged with the requested block number
+        return MetagraphData.model_construct(
+            block=target_block,
+            neurons=metagraph.neurons,
+            subnet_state=metagraph.subnet_state,
+            alpha_stake=metagraph.alpha_stake,
+            tao_stake=metagraph.tao_stake,
+            total_stake=metagraph.total_stake,
+            uids=metagraph.uids,
+            hotkeys=metagraph.hotkeys,
+            coldkeys=metagraph.coldkeys,
+            serving_hotkeys=metagraph.serving_hotkeys,
+        )
+    return metagraph
 
 
 def get_block_hash(block_number: int) -> str:
