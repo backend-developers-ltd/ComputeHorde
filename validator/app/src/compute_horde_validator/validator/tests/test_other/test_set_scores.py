@@ -15,13 +15,13 @@ from compute_horde_validator.validator.models import (
     Miner,
     SyntheticJobBatch,
     SystemEvent,
-    Weights,
 )
 from compute_horde_validator.validator.tasks import (
     _normalize_weights_for_committing,
 )
-from ...scoring.tasks import set_scores, reveal_scores
 
+from ...models.scoring.internal import Weights
+from ...scoring.tasks import reveal_scores, set_scores
 from ..helpers import (
     NUM_NEURONS,
     Celery,
