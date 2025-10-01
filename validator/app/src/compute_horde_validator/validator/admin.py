@@ -22,13 +22,13 @@ from compute_horde_validator.validator.models import (
     SyntheticJob,
     SystemEvent,
     ValidatorWhitelist,
-    Weights,
 )
 from compute_horde_validator.validator.models.allowance.internal import (
     AllowanceBooking,
     AllowanceMinerManifest,
     BlockAllowance,
 )
+from compute_horde_validator.validator.models.scoring.internal import Weights
 
 # noqa
 from compute_horde_validator.validator.tasks import trigger_run_admin_job_request  # noqa
