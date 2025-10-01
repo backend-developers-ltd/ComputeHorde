@@ -40,7 +40,7 @@ class Migration(migrations.Migration):
                     "salt",
                     django.contrib.postgres.fields.ArrayField(
                         base_field=models.IntegerField(),
-                        default=compute_horde_validator.validator.models.get_random_salt,
+                        default=compute_horde_validator.validator.models.scoring.internal.get_random_salt,
                         size=None,
                     ),
                 ),
