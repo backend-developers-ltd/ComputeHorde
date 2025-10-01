@@ -5,6 +5,7 @@ from abc import ABC, abstractmethod
 from compute_horde_core.executor_class import ExecutorClass
 
 from compute_horde_validator.validator.allowance.types import (
+    MetagraphData,
     Miner,
     Neuron,
     block_ids,
@@ -124,6 +125,24 @@ class AllowanceBase(ABC):
         Return the latest manifests for all miners.
         """
         pass
+
+    @abstractmethod
+    def get_metagraph(self, block: int | None = None) -> MetagraphData:
+        """
+        Return metagraph information for the provided block (or the current block if not specified).
+        """
+
+    @abstractmethod
+    async def aget_metagraph(self, block: int | None = None) -> MetagraphData:
+        """
+        Async companion to `get_metagraph`.
+        """
+
+    @abstractmethod
+    def get_serving_hotkeys(self) -> list[str]:
+        """
+        Return hotkeys of miners that are currently serving.
+        """
 
     @abstractmethod
     def miners(self) -> list[Miner]:

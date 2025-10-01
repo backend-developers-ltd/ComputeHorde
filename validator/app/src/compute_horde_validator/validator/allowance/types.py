@@ -14,14 +14,28 @@ class Miner(pydantic.BaseModel):
 
 
 class Neuron(pydantic.BaseModel):
-    hotkey_ss58: ss58_address
-    coldkey: ss58_address
+    hotkey: ss58_address
+    coldkey: ss58_address | None
 
 
 class ValidatorModel(pydantic.BaseModel):
     uid: int
     hotkey: ss58_address
     effective_stake: float
+
+
+class MetagraphData(pydantic.BaseModel):
+    block: int
+    block_hash: str
+    neurons: list[Neuron]
+    subnet_state: dict[str, list[float]]
+    alpha_stake: list[float]
+    tao_stake: list[float]
+    total_stake: list[float]
+    uids: list[int]
+    hotkeys: list[str]
+    coldkeys: list[str | None]
+    serving_hotkeys: list[str]
 
 
 class SpendingDetails(pydantic.BaseModel):

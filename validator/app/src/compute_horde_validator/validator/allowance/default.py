@@ -1,9 +1,10 @@
 # default implementation of the allowance module interface
 
+from asgiref.sync import sync_to_async
 from compute_horde_core.executor_class import ExecutorClass
 
 from .base import AllowanceBase
-from .types import Miner, Neuron, block_ids, reservation_id, ss58_address
+from .types import MetagraphData, Miner, Neuron, block_ids, reservation_id, ss58_address
 from .utils import blocks, booking, manifests, metagraph
 from .utils.spending import (
     InMemorySpendingBookkeeper,
@@ -45,6 +46,15 @@ class Allowance(AllowanceBase):
 
     def get_manifests(self) -> dict[ss58_address, dict[ExecutorClass, int]]:
         return manifests.get_current_manifests()
+
+    def get_metagraph(self, block: int | None = None) -> MetagraphData:
+        return supertensor().get_metagraph(block)
+
+    async def aget_metagraph(self, block: int | None = None) -> MetagraphData:
+        return await sync_to_async(self.get_metagraph)(block)
+
+    def get_serving_hotkeys(self) -> list[str]:
+        return self.get_metagraph().serving_hotkeys
 
     def miners(self) -> list[Miner]:
         return metagraph.miners()

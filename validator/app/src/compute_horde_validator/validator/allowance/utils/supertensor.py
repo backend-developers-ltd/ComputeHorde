@@ -20,7 +20,8 @@ from bt_ddos_shield.shield_metagraph import ShieldMetagraphOptions
 from bt_ddos_shield.turbobt import ShieldedBittensor
 from compute_horde.blockchain.block_cache import get_current_block
 
-from compute_horde_validator.validator.allowance.types import ValidatorModel
+from compute_horde_validator.validator.allowance.types import MetagraphData, Neuron, ValidatorModel
+from compute_horde_validator.validator.models import Miner as MinerModel
 
 DEFAULT_TIMEOUT = 30.0
 
@@ -104,6 +105,9 @@ class BaseSuperTensor(abc.ABC):
 
     @abc.abstractmethod
     def list_validators(self, block_number: int) -> list[turbobt.Neuron]: ...
+
+    @abc.abstractmethod
+    def get_metagraph(self, block_number: int | None = None) -> MetagraphData: ...
 
     @abc.abstractmethod
     def get_block_timestamp(self, block_number: int) -> datetime.datetime: ...
@@ -201,6 +205,7 @@ class SuperTensor(BaseSuperTensor):
         subnet = subnet_context.get()
         async with bittensor.block(block_number):
             result: list[turbobt.Neuron] = await subnet.list_neurons()
+            await self._sync_miners_from_neurons(block_number, result)
             return result
 
     def list_validators(self, block_number: int) -> list[ValidatorModel]:
@@ -218,6 +223,128 @@ class SuperTensor(BaseSuperTensor):
             )
             for n in validators
         ]
+
+    async def _sync_miners_from_neurons(
+        self, block_number: int, neurons: list[turbobt.Neuron]
+    ) -> None:
+        """
+        Upsert Miner records from neuron data.
+
+        This ensures that all neurons have corresponding Miner rows in the database,
+        which are required for manifest polling, collateral sync, and other validator operations.
+
+        For serving miners (those with valid axon info), we also update their address/port/ip_version.
+        """
+        hotkeys = [n.hotkey for n in neurons]
+        miners_to_create = []
+        miners_to_update = []
+        existing_miners = {
+            miner.hotkey: miner async for miner in MinerModel.objects.filter(hotkey__in=hotkeys)
+        }
+
+        for neuron in neurons:
+            miner = existing_miners.get(neuron.hotkey)
+            is_serving = neuron.axon_info and str(neuron.axon_info.ip) != "0.0.0.0"
+
+            if miner is None:
+                address = "0.0.0.0"
+                port = 0
+                ip_version = 4
+
+                if is_serving:
+                    shield_address = getattr(neuron.axon_info, "shield_address", None)
+                    address = shield_address if shield_address else str(neuron.axon_info.ip)
+                    port = neuron.axon_info.port
+                    ip_version = neuron.axon_info.ip.version
+
+                miners_to_create.append(
+                    MinerModel(
+                        hotkey=neuron.hotkey,
+                        coldkey=neuron.coldkey or "",
+                        uid=neuron.uid,
+                        address=address,
+                        port=port,
+                        ip_version=ip_version,
+                    )
+                )
+            else:
+                needs_update = False
+
+                if miner.uid != neuron.uid:
+                    miner.uid = neuron.uid
+                    needs_update = True
+
+                if miner.coldkey != neuron.coldkey and neuron.coldkey:
+                    miner.coldkey = neuron.coldkey
+                    needs_update = True
+
+                if is_serving:
+                    shield_address = getattr(neuron.axon_info, "shield_address", None)
+                    address = shield_address if shield_address else str(neuron.axon_info.ip)
+                    port = neuron.axon_info.port
+                    ip_version = neuron.axon_info.ip.version
+
+                    if (
+                        miner.address != address
+                        or miner.port != port
+                        or miner.ip_version != ip_version
+                    ):
+                        miner.address = address
+                        miner.port = port
+                        miner.ip_version = ip_version
+                        needs_update = True
+
+                if needs_update:
+                    miners_to_update.append(miner)
+
+        if miners_to_create:
+            await MinerModel.objects.abulk_create(miners_to_create, ignore_conflicts=True)
+            logger.info(
+                f"Created {len(miners_to_create)} new Miner records for block {block_number}"
+            )
+
+        if miners_to_update:
+            await MinerModel.objects.abulk_update(
+                miners_to_update, fields=["uid", "coldkey", "address", "port", "ip_version"]
+            )
+            logger.info(f"Updated {len(miners_to_update)} Miner records for block {block_number}")
+
+    def _build_metagraph_data(self, block_number: int) -> MetagraphData:
+        block_hash = self.get_block_hash(block_number)
+        turbobt_neurons = self.list_neurons(block_number)
+        subnet_state = self.get_subnet_state(block_number)
+        alpha_stake = list(subnet_state.get("alpha_stake", []))
+        tao_stake = list(subnet_state.get("tao_stake", []))
+        total_stake = list(subnet_state.get("total_stake", []))
+        uids = [neuron.uid for neuron in turbobt_neurons]
+        hotkeys = [neuron.hotkey for neuron in turbobt_neurons]
+        coldkeys = [neuron.coldkey if neuron.coldkey else None for neuron in turbobt_neurons]
+        serving_hotkeys = [
+            neuron.hotkey
+            for neuron in turbobt_neurons
+            if neuron.axon_info and str(neuron.axon_info.ip) != "0.0.0.0"
+        ]
+        neurons = [Neuron(hotkey=n.hotkey, coldkey=n.coldkey or None) for n in turbobt_neurons]
+
+        return MetagraphData.model_construct(
+            block=block_number,
+            block_hash=block_hash,
+            neurons=neurons,
+            subnet_state=subnet_state,
+            alpha_stake=alpha_stake,
+            tao_stake=tao_stake,
+            total_stake=total_stake,
+            uids=uids,
+            hotkeys=hotkeys,
+            coldkeys=coldkeys,
+            serving_hotkeys=serving_hotkeys,
+        )
+
+    @RETRY_ON_TIMEOUT
+    def get_metagraph(self, block_number: int | None = None) -> MetagraphData:
+        if block_number is None:
+            block_number = self.get_current_block()
+        return self._build_metagraph_data(block_number)
 
     @archive_fallback
     @make_sync
@@ -291,6 +418,7 @@ CACHE_AHEAD = 10
 class TaskType(enum.Enum):
     NEURONS = "NEURONS"
     BLOCK_TIMESTAMP = "BLOCK_TIMESTAMP"
+    BLOCK_HASH = "BLOCK_HASH"
     SUBNET_STATE = "SUBNET_STATE"
     VALIDATORS = "VALIDATORS"
     THE_END = "THE_END"
@@ -304,10 +432,16 @@ class BaseCache(abc.ABC):
     def put_block_timestamp(self, block_number: int, timestamp: datetime.datetime): ...
 
     @abc.abstractmethod
+    def put_block_hash(self, block_number: int, block_hash: str): ...
+
+    @abc.abstractmethod
     def get_neurons(self, block_number: int) -> list[turbobt.Neuron] | None: ...
 
     @abc.abstractmethod
     def get_block_timestamp(self, block_number: int) -> datetime.datetime | None: ...
+
+    @abc.abstractmethod
+    def get_block_hash(self, block_number: int) -> str | None: ...
 
     @abc.abstractmethod
     def put_subnet_state(self, block_number: int, state: turbobt.subnet.SubnetState): ...
@@ -326,6 +460,7 @@ class InMemoryCache(BaseCache):
     def __init__(self):
         self._neuron_cache: dict[int, list[turbobt.Neuron]] = {}
         self._block_timestamp_cache: dict[int, datetime.datetime] = {}
+        self._block_hash_cache: dict[int, str] = {}
         self._subnet_state_cache: dict[int, turbobt.subnet.SubnetState] = {}
         self._validators_cache: dict[int, list[ValidatorModel]] = {}
 
@@ -335,11 +470,17 @@ class InMemoryCache(BaseCache):
     def put_block_timestamp(self, block_number: int, timestamp: datetime.datetime):
         self._block_timestamp_cache[block_number] = timestamp
 
+    def put_block_hash(self, block_number: int, block_hash: str):
+        self._block_hash_cache[block_number] = block_hash
+
     def get_neurons(self, block_number: int) -> list[turbobt.Neuron] | None:
         return self._neuron_cache.get(block_number)
 
     def get_block_timestamp(self, block_number: int) -> datetime.datetime | None:
         return self._block_timestamp_cache.get(block_number)
+
+    def get_block_hash(self, block_number: int) -> str | None:
+        return self._block_hash_cache.get(block_number)
 
     def put_subnet_state(self, block_number: int, state: turbobt.subnet.SubnetState):
         self._subnet_state_cache[block_number] = state
@@ -422,6 +563,15 @@ class PrecachingSuperTensor(SuperTensor):
                         self.cache.put_block_timestamp(
                             block_number, super_tensor.get_block_timestamp(block_number)
                         )
+                    elif task == TaskType.BLOCK_HASH:
+                        if self.cache.get_block_hash(block_number) is not None:
+                            logger.debug(
+                                f"Worker {ind} skipping task {task} for block {block_number} (cached)"
+                            )
+                            continue
+                        self.cache.put_block_hash(
+                            block_number, super_tensor.get_block_hash(block_number)
+                        )
                     elif task == TaskType.SUBNET_STATE:
                         if self.cache.get_subnet_state(block_number) is not None:
                             logger.debug(
@@ -475,6 +625,7 @@ class PrecachingSuperTensor(SuperTensor):
                 logger.debug(f"Submitting tasks for block {block_to_submit}")
                 self.task_queue.put((TaskType.NEURONS, block_to_submit))
                 self.task_queue.put((TaskType.BLOCK_TIMESTAMP, block_to_submit))
+                self.task_queue.put((TaskType.BLOCK_HASH, block_to_submit))
                 self.task_queue.put((TaskType.SUBNET_STATE, block_to_submit))
                 self.task_queue.put((TaskType.VALIDATORS, block_to_submit))
                 self.highest_block_submitted = block_to_submit
@@ -517,6 +668,20 @@ class PrecachingSuperTensor(SuperTensor):
         else:
             logger.debug(f"Cache miss for block {block_number}")
             return super()._get_block_timestamp(block_number)
+
+    @RETRY_ON_TIMEOUT
+    def get_block_hash(self, block_number: int) -> str:
+        self.set_starting_block(block_number)
+        block_hash = self.cache.get_block_hash(block_number)
+        if block_hash is not None:
+            return block_hash
+        elif self.throw_on_cache_miss:
+            raise PrecachingSuperTensorCacheMiss(f"Cache miss for block {block_number}")
+        else:
+            logger.debug(f"Cache miss for block {block_number}")
+            block_hash = super().get_block_hash(block_number)
+            self.cache.put_block_hash(block_number, block_hash)
+            return block_hash
 
     @RETRY_ON_TIMEOUT
     def get_subnet_state(self, block_number: int) -> turbobt.subnet.SubnetState:
