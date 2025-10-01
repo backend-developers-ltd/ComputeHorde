@@ -2,7 +2,6 @@ import contextlib
 import time
 
 from celery.utils.log import get_task_logger
-from compute_horde.subtensor import get_cycle_containing_block
 from django.conf import settings
 from django.db import transaction
 from django.db.models import Q, Subquery
@@ -64,11 +63,6 @@ def scan_blocks_and_calculate_allowance(
                         report_allowance_checkpoint.delay,
                         backfilling_supertensor,
                     )
-                    backfilling_supertensor.get_metagraph(current_block)
-                    cycle = get_cycle_containing_block(
-                        block=current_block, netuid=settings.BITTENSOR_NETUID
-                    )
-                    backfilling_supertensor.get_metagraph(cycle.start)
                 time_left = MAX_RUN_TIME - (time.time() - start_time)
                 if time_left < 0:
                     raise blocks.TimesUpError

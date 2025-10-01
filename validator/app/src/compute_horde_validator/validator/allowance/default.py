@@ -1,13 +1,6 @@
 # default implementation of the allowance module interface
 
-
 from asgiref.sync import sync_to_async
-from compute_horde.utils import (
-    BAC_VALIDATOR_SS58_ADDRESS,
-    MIN_VALIDATOR_STAKE,
-    VALIDATORS_LIMIT,
-    ValidatorInfo,
-)
 from compute_horde_core.executor_class import ExecutorClass
 
 from .base import AllowanceBase
@@ -63,27 +56,6 @@ class Allowance(AllowanceBase):
 
     def get_serving_hotkeys(self) -> list[str]:
         return self.get_metagraph().serving_hotkeys
-
-    def get_validator_infos(self) -> list[ValidatorInfo]:
-        metagraph_data = self.get_metagraph()
-        validators = [
-            (uid, hotkey, stake)
-            for uid, hotkey, stake in zip(
-                metagraph_data.uids,
-                metagraph_data.hotkeys,
-                metagraph_data.total_stake,
-            )
-            if stake >= MIN_VALIDATOR_STAKE
-        ]
-        top_validators = sorted(
-            validators,
-            key=lambda data: (data[1] == BAC_VALIDATOR_SS58_ADDRESS, data[2]),
-            reverse=True,
-        )[:VALIDATORS_LIMIT]
-        return [
-            ValidatorInfo(uid=uid, hotkey=hotkey, stake=stake)
-            for uid, hotkey, stake in top_validators
-        ]
 
     def miners(self) -> list[Miner]:
         return metagraph.miners()

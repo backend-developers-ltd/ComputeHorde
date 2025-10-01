@@ -9,6 +9,7 @@ from django.conf import settings
 
 from compute_horde_validator.validator.allowance.default import allowance
 from compute_horde_validator.validator.models import MinerManifest
+from compute_horde_validator.validator.synthetic_jobs.utils import get_validator_infos
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +29,8 @@ async def filter_valid_excuse_receipts(
         return []
 
     if active_validators is None:
-        active_validators = allowance().get_validator_infos()
+        metagraph = allowance().get_metagraph()
+        active_validators = get_validator_infos(metagraph)
 
     allowed_validators = {
         validator_info.hotkey

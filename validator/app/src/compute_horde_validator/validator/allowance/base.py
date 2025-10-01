@@ -2,7 +2,6 @@
 
 from abc import ABC, abstractmethod
 
-from compute_horde.utils import ValidatorInfo
 from compute_horde_core.executor_class import ExecutorClass
 
 from compute_horde_validator.validator.allowance.types import (
@@ -143,12 +142,6 @@ class AllowanceBase(ABC):
     def get_serving_hotkeys(self) -> list[str]:
         """
         Return hotkeys of miners that are currently serving (have a reachable axon).
-        """
-
-    @abstractmethod
-    def get_validator_infos(self) -> list[ValidatorInfo]:
-        """
-        Return validator info objects derived from the latest metagraph.
         """
 
     @abstractmethod
