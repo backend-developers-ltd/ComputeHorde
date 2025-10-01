@@ -69,6 +69,7 @@ def mock_block_expiration():
         yield
 
 
+@pytest.mark.django_db(transaction=True)
 def test_spend__successful(bookkeeper, triplet, spend_time):
     # Two valid blocks (1: 10.0, 2: 5.0) with 15.0 total allowance for 12.0 spend
     bookkeeper._valid_allowances = {1: 10.0, 2: 5.0}
@@ -89,6 +90,7 @@ def test_spend__successful(bookkeeper, triplet, spend_time):
     mock_register_transaction.assert_has_calls([mock.call(triplet, [1, 2])])
 
 
+@pytest.mark.django_db(transaction=True)
 def test_spend__blocks_outside_range(bookkeeper, triplet, spend_time):
     # Block 1 is valid (5.0 allowance), block 50 is outside allowed range (1-4)
     # Spending is still good, the one block is enough
@@ -111,6 +113,7 @@ def test_spend__blocks_outside_range(bookkeeper, triplet, spend_time):
     mock_register_transaction.assert_has_calls([mock.call(triplet, [1])])
 
 
+@pytest.mark.django_db(transaction=True)
 def test_spend__double_spent_blocks(bookkeeper, triplet, spend_time):
     # Block 1 is already spent, block 2 has 5.0 allowance (insufficient for 12.0 spend)
     bookkeeper._valid_allowances = {2: 5.0}
@@ -136,6 +139,7 @@ def test_spend__double_spent_blocks(bookkeeper, triplet, spend_time):
     mock_register_transaction.assert_has_calls([])
 
 
+@pytest.mark.django_db(transaction=True)
 def test_spend__invalidated_blocks(bookkeeper, triplet, spend_time):
     # Block 2 is invalidated, block 1 has 10.0 allowance (insufficient for 12.0 spend)
     bookkeeper._valid_allowances = {1: 10.0}
@@ -161,6 +165,7 @@ def test_spend__invalidated_blocks(bookkeeper, triplet, spend_time):
     mock_register_transaction.assert_has_calls([])
 
 
+@pytest.mark.django_db(transaction=True)
 def test_spend__insufficient_allowance(bookkeeper, triplet, spend_time):
     # Two valid blocks with 8.0 total allowance (5.0 + 3.0), insufficient for 10.0 spend
     bookkeeper._valid_allowances = {1: 5.0, 2: 3.0}
@@ -185,6 +190,7 @@ def test_spend__insufficient_allowance(bookkeeper, triplet, spend_time):
     mock_register_transaction.assert_has_calls([])
 
 
+@pytest.mark.django_db(transaction=True)
 def test_spend__no_block_at_time(bookkeeper, triplet, spend_time):
     # Block 1 has sufficient allowance, but no block exists at submission time
     bookkeeper._valid_allowances = {1: 10.0}
@@ -199,6 +205,7 @@ def test_spend__no_block_at_time(bookkeeper, triplet, spend_time):
     mock_register_transaction.assert_has_calls([])
 
 
+@pytest.mark.django_db(transaction=True)
 def test_spend__partial_success(bookkeeper, triplet, spend_time):
     # Blocks 1,2 are valid (15.0 total allowance), block 50 is outside range (1-4)
     bookkeeper._valid_allowances = {1: 10.0, 2: 5.0}
@@ -219,6 +226,7 @@ def test_spend__partial_success(bookkeeper, triplet, spend_time):
     mock_register_transaction.assert_has_calls([mock.call(triplet, [1, 2])])
 
 
+@pytest.mark.django_db(transaction=True)
 def test_spend__multiple_issues__fails_when_not_enough(bookkeeper, triplet, spend_time):
     # Setup blocks with different issues:
     # - Block 1: already spent (5.0 allowance, but unavailable)
@@ -248,6 +256,7 @@ def test_spend__multiple_issues__fails_when_not_enough(bookkeeper, triplet, spen
     mock_register_transaction.assert_has_calls([])
 
 
+@pytest.mark.django_db(transaction=True)
 def test_spend__multiple_issues__succeeds_anyway(bookkeeper, triplet, spend_time):
     # Same as above, except the single valid block has enough allowance for the spend
     bookkeeper._spent_blocks = {1}
@@ -270,6 +279,7 @@ def test_spend__multiple_issues__succeeds_anyway(bookkeeper, triplet, spend_time
     mock_register_transaction.assert_has_calls([])
 
 
+@pytest.mark.django_db(transaction=True)
 def test_spend__empty_payment_blocks(bookkeeper, triplet, spend_time):
     # No blocks provided, 0.0 allowance for 10.0 spend requirement
     bookkeeper._block_at_spending_time = 4
@@ -292,6 +302,7 @@ def test_spend__empty_payment_blocks(bookkeeper, triplet, spend_time):
     mock_register_transaction.assert_has_calls([])
 
 
+@pytest.mark.django_db(transaction=True)
 def test_spend__duplicate_blocks_deduplicated(bookkeeper, triplet, spend_time):
     # Duplicate blocks [1,1,2,2] should be deduplicated to [1,2] with 15.0 total allowance
     bookkeeper._valid_allowances = {1: 10.0, 2: 5.0}
