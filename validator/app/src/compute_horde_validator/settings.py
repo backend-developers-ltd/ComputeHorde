@@ -589,31 +589,8 @@ CELERY_BEAT_SCHEDULE = {
             "expires": timedelta(minutes=5).total_seconds(),
         },
     },
-    "schedule_synthetic_jobs": {
-        "task": "compute_horde_validator.validator.tasks.schedule_synthetic_jobs",
-        "schedule": timedelta(minutes=1),
-        "options": {
-            "expires": timedelta(minutes=1).total_seconds(),
-        },
-    },
-    "run_synthetic_jobs": {
-        "task": "compute_horde_validator.validator.tasks.run_synthetic_jobs",
-        "schedule": timedelta(seconds=env.int("DEBUG_RUN_SYNTHETIC_JOBS_SECONDS", default=30)),
-        "options": {
-            "expires": timedelta(
-                seconds=env.int("DEBUG_RUN_SYNTHETIC_JOBS_SECONDS", default=30)
-            ).total_seconds(),
-        },
-    },
-    "check_missed_synthetic_jobs": {
-        "task": "compute_horde_validator.validator.tasks.check_missed_synthetic_jobs",
-        "schedule": timedelta(minutes=10),
-        "options": {
-            "expires": timedelta(minutes=10).total_seconds(),
-        },
-    },
     "set_scores": {
-        "task": "compute_horde_validator.validator.tasks.set_scores",
+        "task": "compute_horde_validator.validator.scoring.tasks.set_scores",
         "schedule": crontab(
             minute=env("DEBUG_SET_SCORES_MINUTE", default="*/1"),
             hour=env("DEBUG_SET_SCORES_HOUR", default="*"),
@@ -623,7 +600,7 @@ CELERY_BEAT_SCHEDULE = {
         },
     },
     "reveal_scores": {
-        "task": "compute_horde_validator.validator.tasks.reveal_scores",
+        "task": "compute_horde_validator.validator.scoring.tasks.reveal_scores",
         "schedule": timedelta(minutes=1),
         "options": {
             "expires": timedelta(minutes=1).total_seconds(),
@@ -638,27 +615,6 @@ CELERY_BEAT_SCHEDULE = {
     },
     "fetch_dynamic_config": {
         "task": "compute_horde_validator.validator.tasks.fetch_dynamic_config",
-        "schedule": timedelta(minutes=5),
-        "options": {
-            "expires": timedelta(minutes=5).total_seconds(),
-        },
-    },
-    "llm_prompt_generation": {
-        "task": "compute_horde_validator.validator.tasks.llm_prompt_generation",
-        "schedule": timedelta(minutes=5),
-        "options": {
-            "expires": timedelta(minutes=5).total_seconds(),
-        },
-    },
-    "llm_prompt_sampling": {
-        "task": "compute_horde_validator.validator.tasks.llm_prompt_sampling",
-        "schedule": timedelta(minutes=30),
-        "options": {
-            "expires": timedelta(minutes=30).total_seconds(),
-        },
-    },
-    "llm_prompt_answering": {
-        "task": "compute_horde_validator.validator.tasks.llm_prompt_answering",
         "schedule": timedelta(minutes=5),
         "options": {
             "expires": timedelta(minutes=5).total_seconds(),

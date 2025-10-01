@@ -2,7 +2,6 @@ import contextlib
 import random
 import time
 import traceback
-from datetime import timedelta
 from functools import cached_property
 from typing import Union
 
@@ -25,12 +24,21 @@ from pydantic import JsonValue
 
 from compute_horde_validator.celery import app
 from compute_horde_validator.validator.clean_me_up import bittensor_client
-from compute_horde_validator.validator.locks import get_advisory_lock, LockType, Locked
-from compute_horde_validator.validator.models import SystemEvent, SyntheticJobBatch, Weights
+from compute_horde_validator.validator.locks import Locked, LockType, get_advisory_lock
+from compute_horde_validator.validator.models import SystemEvent
+from compute_horde_validator.validator.models.scoring.internal import (
+    Weights,
+    WeightSettingFinishedEvent,
+)
 from compute_horde_validator.validator.scoring import create_scoring_engine
-from compute_horde_validator.validator.tasks import logger, SCORING_ALGO_VERSION, \
-    _normalize_weights_for_committing
+from compute_horde_validator.validator.tasks import (
+    SCORING_ALGO_VERSION,
+    _normalize_weights_for_committing,
+    logger,
+)
 
+if False:
+    import torch
 
 
 @contextlib.contextmanager
@@ -40,6 +48,10 @@ def save_event_on_error(subtype, exception_class=Exception):
     except exception_class:
         save_weight_setting_failure(subtype, traceback.format_exc(), {})
         raise
+
+
+class MaximumNumberOfAttemptsExceeded(Exception):
+    pass
 
 
 @app.task
@@ -69,118 +81,104 @@ def set_scores(bittensor: turbobt.Bittensor):
             return
 
     with save_event_on_error(SystemEvent.EventSubType.GENERIC_ERROR):
-        with transaction.atomic():
-            try:
-                get_advisory_lock(LockType.WEIGHT_SETTING)
-            except Locked:
-                logger.debug("Another thread already setting weights")
-                return
-
-            subnet = bittensor.subnet(settings.BITTENSOR_NETUID)
-            hyperparameters = async_to_sync(subnet.get_hyperparameters)(current_block.hash)
-            neurons = async_to_sync(subnet.list_neurons)(current_block.hash)
-
-            batches = list(
-                SyntheticJobBatch.objects.select_related("cycle")
-                .filter(
-                    scored=False,
-                    should_be_scored=True,
-                    started_at__gte=now() - timedelta(days=1),
-                    cycle__stop__lt=current_block.number,
-                )
-                .order_by("started_at")
-            )
-            if not batches:
-                logger.info("No batches - nothing to score")
-                return
-            if len(batches) > 1:
-                logger.error("Unexpected number batches eligible for scoring: %s", len(batches))
-                for batch in batches[:-1]:
-                    batch.scored = True
-                    batch.save()
-                batches = [batches[-1]]
-
-            logger.info(
-                "Selected batches for scoring: [%s]",
-                ", ".join(str(batch.id) for batch in batches),
-            )
-
-            hotkey_scores = _score_cycles(current_block.number)
-
-            if not hotkey_scores:
-                logger.warning("No scores calculated")
-
-            uids, weights = normalize_batch_scores(
-                hotkey_scores,
-                neurons,
-                min_allowed_weights=hyperparameters["min_allowed_weights"],
-                max_weight_limit=hyperparameters["max_weights_limit"],
-            )
-
-            uids, weights = apply_dancing_burners(
-                uids,
-                weights,
-                neurons,
-                batches[-1].cycle.start,
-                min_allowed_weights=hyperparameters["min_allowed_weights"],
-                max_weight_limit=hyperparameters["max_weights_limit"],
-            )
-
-            for batch in batches:
-                batch.scored = True
-                batch.save()
-
-            for try_number in range(WEIGHT_SETTING_ATTEMPTS):
-                logger.debug(
-                    f"Setting weights (attempt #{try_number}):\nuids={uids}\nscores={weights}"
-                )
-                success = False
-
+        try:
+            with transaction.atomic():
                 try:
-                    result = do_set_weights.apply_async(
-                        kwargs=dict(
-                            netuid=settings.BITTENSOR_NETUID,
-                            uids=uids.tolist(),
-                            weights=weights.tolist(),
-                            wait_for_inclusion=True,
-                            wait_for_finalization=False,
-                            version_key=SCORING_ALGO_VERSION,
-                        ),
-                        soft_time_limit=WEIGHT_SETTING_TTL,
-                        time_limit=WEIGHT_SETTING_HARD_TTL,
+                    get_advisory_lock(LockType.WEIGHT_SETTING)
+                except Locked:
+                    logger.debug("Another thread already setting weights")
+                    return
+
+                subnet = bittensor.subnet(settings.BITTENSOR_NETUID)
+                hyperparameters = async_to_sync(subnet.get_hyperparameters)(current_block.hash)
+                neurons = async_to_sync(subnet.list_neurons)(current_block.hash)
+                # TODO: refactor to use neurons from `allowance`
+                wsfe, created = WeightSettingFinishedEvent.from_block(
+                    current_block.number, settings.BITTENSOR_NETUID
+                )
+                if not created:
+                    logger.debug(
+                        f"Weights already set for cycle {wsfe.block_from}-{wsfe.block_to} (current_block={current_block.number})"
                     )
-                    logger.info(f"Setting weights task id: {result.id}")
+                    return
+
+                hotkey_scores = _score_cycles(current_block.number)
+
+                if not hotkey_scores:
+                    logger.warning("No scores calculated")
+
+                uids, weights = normalize_batch_scores(
+                    hotkey_scores,
+                    neurons,
+                    min_allowed_weights=hyperparameters["min_allowed_weights"],
+                    max_weight_limit=hyperparameters["max_weights_limit"],
+                )
+
+                uids, weights = apply_dancing_burners(
+                    uids,
+                    weights,
+                    neurons,
+                    wsfe.block_from,
+                    min_allowed_weights=hyperparameters["min_allowed_weights"],
+                    max_weight_limit=hyperparameters["max_weights_limit"],
+                )
+
+                for try_number in range(WEIGHT_SETTING_ATTEMPTS):
+                    logger.debug(
+                        f"Setting weights (attempt #{try_number}):\nuids={uids}\nscores={weights}"
+                    )
+                    success = False
+
                     try:
-                        with allow_join_result():
-                            success, msg = result.get(timeout=WEIGHT_SETTING_TTL)
-                    except (celery.exceptions.TimeoutError, billiard.exceptions.TimeLimitExceeded):
-                        result.revoke(terminate=True)
-                        logger.info(f"Setting weights timed out (attempt #{try_number})")
+                        result = do_set_weights.apply_async(
+                            kwargs=dict(
+                                netuid=settings.BITTENSOR_NETUID,
+                                uids=uids.tolist(),
+                                weights=weights.tolist(),
+                                wait_for_inclusion=True,
+                                wait_for_finalization=False,
+                                version_key=SCORING_ALGO_VERSION,
+                            ),
+                            soft_time_limit=WEIGHT_SETTING_TTL,
+                            time_limit=WEIGHT_SETTING_HARD_TTL,
+                        )
+                        logger.info(f"Setting weights task id: {result.id}")
+                        try:
+                            with allow_join_result():
+                                success, msg = result.get(timeout=WEIGHT_SETTING_TTL)
+                        except (
+                            celery.exceptions.TimeoutError,
+                            billiard.exceptions.TimeLimitExceeded,
+                        ):
+                            result.revoke(terminate=True)
+                            logger.info(f"Setting weights timed out (attempt #{try_number})")
+                            save_weight_setting_failure(
+                                subtype=SystemEvent.EventSubType.WRITING_TO_CHAIN_TIMEOUT,
+                                long_description=traceback.format_exc(),
+                                data={"try_number": try_number, "operation": "setting/committing"},
+                            )
+                            continue
+                    except Exception:
+                        logger.warning("Encountered when setting weights: ", exc_info=True)
                         save_weight_setting_failure(
-                            subtype=SystemEvent.EventSubType.WRITING_TO_CHAIN_TIMEOUT,
+                            subtype=SystemEvent.EventSubType.WRITING_TO_CHAIN_GENERIC_ERROR,
                             long_description=traceback.format_exc(),
                             data={"try_number": try_number, "operation": "setting/committing"},
                         )
                         continue
-                except Exception:
-                    logger.warning("Encountered when setting weights: ", exc_info=True)
-                    save_weight_setting_failure(
-                        subtype=SystemEvent.EventSubType.WRITING_TO_CHAIN_GENERIC_ERROR,
-                        long_description=traceback.format_exc(),
-                        data={"try_number": try_number, "operation": "setting/committing"},
-                    )
-                    continue
-                if success:
-                    break
-                time.sleep(WEIGHT_SETTING_FAILURE_BACKOFF)
-            else:
-                msg = f"Failed to set weights after {WEIGHT_SETTING_ATTEMPTS} attempts"
-                logger.warning(msg)
-                save_weight_setting_failure(
-                    subtype=SystemEvent.EventSubType.GIVING_UP,
-                    long_description=msg,
-                    data={"try_number": WEIGHT_SETTING_ATTEMPTS, "operation": "setting/committing"},
-                )
+                    if success:
+                        break
+                    time.sleep(WEIGHT_SETTING_FAILURE_BACKOFF)
+                else:
+                    raise MaximumNumberOfAttemptsExceeded()
+        except MaximumNumberOfAttemptsExceeded:
+            msg = f"Failed to set weights after {WEIGHT_SETTING_ATTEMPTS} attempts"
+            logger.warning(msg)
+            save_weight_setting_failure(
+                subtype=SystemEvent.EventSubType.GIVING_UP,
+                long_description=msg,
+                data={"try_number": WEIGHT_SETTING_ATTEMPTS, "operation": "setting/committing"},
+            )
 
 
 WEIGHT_SETTING_TTL = 60
@@ -329,58 +327,28 @@ def _score_cycles(current_block: int) -> dict[str, float]:
     Returns:
         Dictionary mapping hotkey to score
     """
-    try:
-        current_cycle_start, previous_cycle_start = _get_cycles_for_scoring(current_block)
+    current_cycle_start, previous_cycle_start = _get_cycles_for_scoring(current_block)
 
-        if current_cycle_start is None or previous_cycle_start is None:
-            logger.error("Could not determine cycles for scoring")
-            return {}
-
-        if previous_cycle_start < 0:
-            logger.warning("Previous cycle start is negative, using 0")
-            previous_cycle_start = 0
-
-        engine = create_scoring_engine()
-
-        logger.info(
-            f"Calculating scores for cycles: current={current_cycle_start}, previous={previous_cycle_start}"
-        )
-
-        scores = engine.calculate_scores_for_cycles(
-            current_cycle_start=current_cycle_start,
-            previous_cycle_start=previous_cycle_start,
-        )
-
-        if scores:
-            _mark_cycle_as_scored(current_cycle_start)
-
-        return scores
-
-    except Exception as e:
-        logger.error(f"Failed to score cycles directly: {e}")
+    if current_cycle_start is None or previous_cycle_start is None:
+        logger.error("Could not determine cycles for scoring")
         return {}
 
+    if previous_cycle_start < 0:
+        logger.warning("Previous cycle start is negative, using 0")
+        previous_cycle_start = 0
 
-def _mark_cycle_as_scored(current_cycle_start: int):
-    """
-    Mark the current cycle as scored by updating any related batches.
+    engine = create_scoring_engine()
 
-    Args:
-        current_cycle_start: Current cycle start block
-    """
-    try:
-        batches_updated = SyntheticJobBatch.objects.filter(
-            cycle__start=current_cycle_start,
-            scored=False,
-        ).update(scored=True)
+    logger.info(
+        f"Calculating scores for cycles: current={current_cycle_start}, previous={previous_cycle_start}"
+    )
 
-        if batches_updated > 0:
-            logger.info(
-                f"Marked {batches_updated} batches as scored for cycle {current_cycle_start}"
-            )
+    scores = engine.calculate_scores_for_cycles(
+        current_cycle_start=current_cycle_start,
+        previous_cycle_start=previous_cycle_start,
+    )
 
-    except Exception as e:
-        logger.warning(f"Failed to mark cycle {current_cycle_start} as scored: {e}")
+    return scores
 
 
 def normalize_batch_scores(

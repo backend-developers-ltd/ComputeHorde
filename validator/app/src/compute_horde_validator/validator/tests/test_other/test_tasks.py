@@ -19,7 +19,6 @@ from compute_horde_validator.validator.models import (
     SystemEvent,
 )
 from compute_horde_validator.validator.tasks import (
-    ScheduleError,
     calculate_job_start_block,
     check_missed_synthetic_jobs,
     run_synthetic_jobs,
