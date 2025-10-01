@@ -68,9 +68,9 @@ from . import eviction
 from .allowance import tasks as allowance_tasks  # noqa
 from .clean_me_up import _get_metagraph_for_sync, bittensor_client, get_single_manifest
 from .collateral import tasks as collateral_tasks  # noqa
-from .scoring import tasks as scoring_tasks # noqa
 from .dynamic_config import aget_config
 from .models import AdminJobRequest, MetagraphSnapshot, MinerManifest
+from .scoring import tasks as scoring_tasks  # noqa
 
 if False:
     import torch  # noqa
@@ -79,8 +79,6 @@ logger = get_task_logger(__name__)
 
 JOB_WINDOW = 2 * 60 * 60
 MAX_SEED = (1 << 32) - 1
-
-SCORING_ALGO_VERSION = 2
 
 COMPUTE_TIME_OVERHEAD_SECONDS = 30  # TODO: approximate a realistic value
 
@@ -335,11 +333,6 @@ def check_missed_synthetic_jobs(bittensor: turbobt.Bittensor) -> None:
                 },
             )
         past_job_batches.update(is_missed=True)
-
-
-def _normalize_weights_for_committing(weights: list[float], max_: int):
-    factor = max_ / max(weights)
-    return [round(w * factor) for w in weights]
 
 
 @shared_task
