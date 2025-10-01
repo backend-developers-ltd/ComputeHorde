@@ -1,0 +1,110 @@
+name: Commit Message Linting
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+env:
+  PYTHON_DEFAULT_VERSION: "3.11"
+
+jobs:
+  commit_message_lint:
+    name: Commit message lint
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python ${{ env.PYTHON_DEFAULT_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_DEFAULT_VERSION }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.8.x"
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv tool install gitlint-core
+
+      - name: Determine commit range
+        id: range
+        shell: bash
+        run: |
+          BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+          echo "base=$BASE_SHA" >> "$GITHUB_OUTPUT"
+          echo "head=$HEAD_SHA" >> "$GITHUB_OUTPUT"
+          echo "range=$BASE_SHA..$HEAD_SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Run gitlint
+        id: gitlint
+        shell: bash
+        continue-on-error: true
+        run: |
+          set +e
+          RANGE="${{ steps.range.outputs.range }}"
+          echo "Linting commit range: $RANGE" | tee gitlint_output.txt
+          echo "gitlint --commits \"$RANGE\"" >> gitlint_output.txt 
+          gitlint --commits "$RANGE" >> gitlint_output.txt 2>&1
+          EXIT_CODE=$?
+          echo "exit_code=$EXIT_CODE" >> "$GITHUB_OUTPUT"
+          if [ $EXIT_CODE -ne 0 ]; then
+            echo "Gitlint found issues in the commit messages." >> gitlint_output.txt
+          else
+            echo "No issues found by gitlint." >> gitlint_output.txt
+          fi
+          tail -n +1 gitlint_output.txt
+
+      - name: Build PR comment body
+        shell: bash
+        run: |
+          {
+            echo "### Commit message lint report"
+            echo "\`gitlint --commits ${{ steps.range.outputs.range }}\`" 
+            echo
+            echo
+            if [ "${{ steps.gitlint.outputs.exit_code }}" = "0" ]; then
+              echo "Status: ✅ No issues found."
+            else
+              echo "Status: ❌ Issues found."
+              echo
+              echo "gitlint output:"
+              echo
+              echo '```'
+              cat gitlint_output.txt
+              echo '```'
+              echo 
+              echo "Fix by amending/rewording your commits (e.g., using \`git rebase -i\` and \`git commit --amend\`)."
+            fi
+          } > lint_report.md
+
+      - name: Post or update sticky PR comment
+        id: comment
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: commit_message_lint_report
+          path: lint_report.md
+          recreate: true
+
+      - name: Debug info about sticky comments
+        run: |
+          echo "Previous comment id: ${{ steps.comment.outputs.previous_comment_id }}"
+          echo "Created comment id: ${{ steps.comment.outputs.created_comment_id }}"
+
+      - name: Write job summary
+        shell: bash
+        run: |
+          cat lint_report.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Fail job when commit messages violate rules
+        if: ${{ steps.gitlint.outputs.exit_code != '0' }}
+        shell: bash
+        run: exit 1
