@@ -1,6 +1,5 @@
 import asyncio
 import uuid
-from datetime import timedelta
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -9,19 +8,15 @@ from compute_horde.protocol_messages import (
 )
 from django.conf import settings
 from django.test import TestCase
-from django.utils import timezone
 
 from compute_horde_validator.validator.models import (
-    Cycle,
     Miner,
     OrganicJob,
-    SyntheticJob,
-    SyntheticJobBatch,
 )
-from compute_horde_validator.validator.scoring.engine import DefaultScoringEngine
-from compute_horde_validator.validator.scoring.models import (
+from compute_horde_validator.validator.models.scoring.internal import (
     MinerMainHotkey,
 )
+from compute_horde_validator.validator.scoring.engine import DefaultScoringEngine
 from compute_horde_validator.validator.tests.transport import SimulationTransport
 
 
@@ -51,20 +46,6 @@ class TestMainHotkeyScoringEngine(TestCase):
         )
         self.miner_hotkey7 = Miner.objects.create(
             coldkey="coldkey2", hotkey="hotkey6", address="127.0.0.1", port=8087
-        )
-
-        self.current_cycle = Cycle.objects.create(start=1000, stop=1722)
-        self.previous_cycle = Cycle.objects.create(start=278, stop=1000)
-
-        self.current_batch = SyntheticJobBatch.objects.create(
-            accepting_results_until=timezone.now() + timedelta(hours=1),
-            block=1000,
-            cycle=self.current_cycle,
-        )
-        self.previous_batch = SyntheticJobBatch.objects.create(
-            accepting_results_until=timezone.now() + timedelta(hours=1),
-            block=278,
-            cycle=self.previous_cycle,
         )
 
         wallet = settings.BITTENSOR_WALLET()
@@ -199,23 +180,6 @@ class TestMainHotkeyScoringEngine(TestCase):
                 cheated=False,
                 miner_address_ip_version=4,
                 miner_port=8082,
-            )
-
-            SyntheticJob.objects.create(
-                miner=self.miner1,
-                batch=self.current_batch,
-                status=SyntheticJob.Status.COMPLETED,
-                score=10.0,
-                miner_address_ip_version=4,
-                miner_port=8081,
-            )
-            SyntheticJob.objects.create(
-                miner=self.miner3,
-                batch=self.current_batch,
-                status=SyntheticJob.Status.COMPLETED,
-                score=15.0,
-                miner_address_ip_version=4,
-                miner_port=8083,
             )
 
             scores = engine.calculate_scores_for_cycles(
@@ -390,15 +354,6 @@ class TestMainHotkeyScoringEngine(TestCase):
                 miner_port=8081,
             )
 
-            SyntheticJob.objects.create(
-                miner=self.miner1,
-                batch=self.current_batch,
-                status=SyntheticJob.Status.COMPLETED,
-                score=10.0,
-                miner_address_ip_version=4,
-                miner_port=8081,
-            )
-
             OrganicJob.objects.create(
                 miner=self.miner2,
                 job_uuid=uuid.uuid4(),
@@ -461,15 +416,6 @@ class TestMainHotkeyScoringEngine(TestCase):
                 block=1000,
                 status=OrganicJob.Status.COMPLETED,
                 cheated=False,
-                miner_address_ip_version=4,
-                miner_port=8081,
-            )
-
-            SyntheticJob.objects.create(
-                miner=self.miner1,
-                batch=self.current_batch,
-                status=SyntheticJob.Status.EXCUSED,
-                score=15,
                 miner_address_ip_version=4,
                 miner_port=8081,
             )
@@ -539,15 +485,6 @@ class TestMainHotkeyScoringEngine(TestCase):
                 on_trusted_miner=False,
                 miner_address_ip_version=4,
                 miner_port=8081,
-            )
-
-            SyntheticJob.objects.create(
-                miner=self.miner2,
-                batch=self.current_batch,
-                status=SyntheticJob.Status.COMPLETED,
-                score=10.0,
-                miner_address_ip_version=4,
-                miner_port=8082,
             )
 
             scores = engine.calculate_scores_for_cycles(

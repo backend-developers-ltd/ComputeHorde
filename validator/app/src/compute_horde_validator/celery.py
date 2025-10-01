@@ -19,22 +19,14 @@ app.autodiscover_tasks(lambda: settings.INSTALLED_APPS)
 DEFAULT_QUEUE = "default"
 
 TASK_QUEUE_MAP = {
-    # Synthetic jobs
-    "compute_horde_validator.validator.tasks.check_missed_synthetic_jobs": "jobs",
-    "compute_horde_validator.validator.tasks._run_synthetic_jobs": "jobs",
-    "compute_horde_validator.validator.tasks.run_synthetic_jobs": "jobs",
-    "compute_horde_validator.validator.tasks.schedule_synthetic_jobs": "jobs",
     # Organic jobs
     "compute_horde_validator.validator.tasks._execute_organic_job_on_worker": "organic_jobs",
     "compute_horde_validator.validator.tasks.slash_collateral_task": "organic_jobs",
-    # LLM job tasks
-    "compute_horde_validator.validator.tasks.llm_prompt_generation": "llm",
-    "compute_horde_validator.validator.tasks.llm_prompt_sampling": "llm",
-    "compute_horde_validator.validator.tasks.llm_prompt_answering": "llm",
     # Scores/weights
-    "compute_horde_validator.validator.tasks.reveal_scores": "weights",
-    "compute_horde_validator.validator.tasks.set_scores": "weights",
-    "compute_horde_validator.validator.tasks.do_set_weights": "weights",
+    "compute_horde_validator.validator.scoring.tasks.reveal_scores": "weights",
+    "compute_horde_validator.validator.scoring.tasks.set_scores": "weights",
+    "compute_horde_validator.validator.scoring.tasks.do_set_weights": "weights",
+    "compute_horde_validator.validator.scoring.tasks.do_reveal_weights": "weights",
     # Misc
     "compute_horde_validator.validator.tasks.send_events_to_facilitator": DEFAULT_QUEUE,
     "compute_horde_validator.validator.tasks.fetch_dynamic_config": DEFAULT_QUEUE,
