@@ -23,7 +23,6 @@ from compute_horde_validator.validator.tasks import (
     calculate_job_start_block,
     check_missed_synthetic_jobs,
     run_synthetic_jobs,
-    schedule_synthetic_jobs,
     send_events_to_facilitator,
     trigger_run_admin_job_request,
 )
@@ -144,73 +143,6 @@ def test__calculate_job_start_block():
     assert calculate_job_start_block(cycle=range(100, 201), offset=10, total=3, index_=0) == 110
     assert calculate_job_start_block(cycle=range(100, 201), offset=10, total=3, index_=1) == 140
     assert calculate_job_start_block(cycle=range(100, 201), offset=10, total=3, index_=2) == 170
-
-
-@pytest.mark.django_db(databases=["default", "default_alias"])
-def test__schedule_validation_run__not_in_validators(bittensor):
-    assert SyntheticJobBatch.objects.count() == 0
-    with pytest.raises(ScheduleError):
-        schedule_synthetic_jobs()
-    assert SyntheticJobBatch.objects.count() == 0
-
-
-@pytest.mark.django_db(databases=["default", "default_alias"])
-def test__schedule_validation_run__unable_to_fetch_metagraph(bittensor):
-    bittensor.blocks.head.return_value.number = 1200
-
-    assert SyntheticJobBatch.objects.count() == 0
-    with pytest.raises(ScheduleError):
-        schedule_synthetic_jobs()
-    assert SyntheticJobBatch.objects.count() == 0
-
-
-@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
-def test__schedule_validation_run__simple(bittensor, validators_with_this_hotkey):
-    bittensor.blocks.__getitem__.return_value.get.return_value.hash = (
-        "0xed0050a68f7027abdf10a5e4bd7951c00d886ddbb83bed5b3236ed642082b464"
-    )
-    bittensor.blocks.head.return_value.number = 140
-    bittensor.subnet.return_value.list_validators.return_value = sorted(
-        validators_with_this_hotkey,
-        key=lambda validator: validator.stake,
-        reverse=True,
-    )
-
-    assert SyntheticJobBatch.objects.count() == 0
-    schedule_synthetic_jobs()
-    assert SyntheticJobBatch.objects.count() == 1
-
-    schedule = SyntheticJobBatch.objects.last()
-    assert schedule.block == 390
-
-
-@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
-def test__schedule_validation_run__concurrent(bittensor, validators_with_this_hotkey):
-    bittensor.blocks.__getitem__.return_value.get.return_value.hash = (
-        "0xed0050a68f7027abdf10a5e4bd7951c00d886ddbb83bed5b3236ed642082b464"
-    )
-    bittensor.blocks.head.return_value.number = 140
-    bittensor.subnet.return_value.list_validators.return_value = validators_with_this_hotkey
-
-    assert SyntheticJobBatch.objects.count() == 0
-    num_threads = 10
-    with ThreadPoolExecutor(max_workers=num_threads) as pool:
-        pool.map(lambda _: schedule_synthetic_jobs(), range(num_threads))
-
-    assert SyntheticJobBatch.objects.count() == 1
-
-
-@pytest.mark.django_db(databases=["default", "default_alias"])
-def test__schedule_validation_run__already_scheduled(bittensor, validators_with_this_hotkey):
-    current_block = 1000
-
-    SyntheticJobBatch.objects.create(block=current_block + 20, cycle=_get_cycle(current_block + 20))
-
-    bittensor.blocks.head.return_value.number = current_block
-    bittensor.subnet.return_value.neurons.validators.return_value = validators_with_this_hotkey
-
-    schedule_synthetic_jobs()
-    assert SyntheticJobBatch.objects.count() == 1
 
 
 @patch("compute_horde_validator.validator.tasks._run_synthetic_jobs")

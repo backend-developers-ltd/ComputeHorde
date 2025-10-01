@@ -1,9 +1,7 @@
 import asyncio
-import contextlib
 import json
 import random
 import time
-import traceback
 import uuid
 from datetime import timedelta
 from math import ceil, floor
@@ -72,7 +70,6 @@ from .clean_me_up import _get_metagraph_for_sync, bittensor_client, get_single_m
 from .collateral import tasks as collateral_tasks  # noqa
 from .dynamic_config import aget_config
 from .models import AdminJobRequest, MetagraphSnapshot, MinerManifest
-from .scoring.tasks import save_weight_setting_failure
 
 if False:
     import torch
@@ -155,54 +152,6 @@ def calculate_job_start_block(cycle: range, total: int, index_: int, offset: int
     """
     blocks_between_runs = (cycle.stop - cycle.start - offset) / total
     return cycle.start + offset + floor(blocks_between_runs * index_)
-
-
-@app.task
-@bittensor_client
-def schedule_synthetic_jobs(bittensor: turbobt.Bittensor) -> None:
-    """
-    For current cycle, decide when miners' validation should happen.
-    Result is a SyntheticJobBatch object in the database.
-    """
-    with save_event_on_error(SystemEvent.EventSubType.GENERIC_ERROR), transaction.atomic():
-        try:
-            get_advisory_lock(LockType.VALIDATION_SCHEDULING)
-        except Locked:
-            logger.debug("Another thread already scheduling validation")
-            return
-
-        current_block = async_to_sync(bittensor.blocks.head)()
-        current_cycle = get_cycle_containing_block(
-            block=current_block.number, netuid=settings.BITTENSOR_NETUID
-        )
-
-        batch_in_current_cycle = (
-            SyntheticJobBatch.objects.filter(
-                block__gte=current_cycle.start,
-                block__lt=current_cycle.stop,
-                should_be_scored=True,
-            )
-            .order_by("block")
-            .last()
-        )
-        if batch_in_current_cycle:
-            logger.debug(
-                "Synthetic jobs are already scheduled at block %s", batch_in_current_cycle.block
-            )
-            return
-
-        next_run_block = async_to_sync(when_to_run)(
-            bittensor,
-            current_cycle,
-            config.DYNAMIC_BLOCK_FINALIZATION_NUMBER,
-        )
-
-        cycle, _ = Cycle.objects.get_or_create(start=current_cycle.start, stop=current_cycle.stop)
-        batch = SyntheticJobBatch.objects.create(
-            block=next_run_block,
-            cycle=cycle,
-        )
-        logger.debug("Scheduled synthetic jobs run %s", batch)
 
 
 @app.task(
@@ -456,15 +405,6 @@ def save_receipt_event(subtype: str, long_description: str, data: JsonValue):
         long_description=long_description,
         data=data,
     )
-
-
-@contextlib.contextmanager
-def save_event_on_error(subtype, exception_class=Exception):
-    try:
-        yield
-    except exception_class:
-        save_weight_setting_failure(subtype, traceback.format_exc(), {})
-        raise
 
 
 @shared_task
