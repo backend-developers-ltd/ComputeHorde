@@ -19,9 +19,8 @@ from compute_horde_validator.validator.models import (
 )
 from compute_horde_validator.validator.tasks import (
     _normalize_weights_for_committing,
-    reveal_scores,
-    set_scores,
 )
+from ...scoring.tasks import set_scores, reveal_scores
 
 from ..helpers import (
     NUM_NEURONS,

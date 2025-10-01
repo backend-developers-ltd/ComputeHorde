@@ -1,7 +1,8 @@
 import pytest
 from pytest_mock import MockerFixture
 
-from compute_horde_validator.validator.tasks import run_synthetic_jobs, set_scores
+from compute_horde_validator.validator.tasks import run_synthetic_jobs
+from compute_horde_validator.validator.scoring.tasks import set_scores
 
 
 @pytest.mark.django_db
