@@ -13,12 +13,9 @@ from compute_horde_validator.validator.models import (
     Miner,
     SystemEvent,
 )
-from compute_horde_validator.validator.tasks import (
-    _normalize_weights_for_committing,
-)
 
 from ...models.scoring.internal import Weights, WeightSettingFinishedEvent
-from ...scoring.tasks import reveal_scores, set_scores
+from ...scoring.tasks import _normalize_weights_for_committing, reveal_scores, set_scores
 from ..helpers import (
     NUM_NEURONS,
     Celery,

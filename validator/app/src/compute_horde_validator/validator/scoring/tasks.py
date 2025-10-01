@@ -1,4 +1,5 @@
 import contextlib
+import logging
 import random
 import time
 import traceback
@@ -31,14 +32,13 @@ from compute_horde_validator.validator.models.scoring.internal import (
     WeightSettingFinishedEvent,
 )
 from compute_horde_validator.validator.scoring import create_scoring_engine
-from compute_horde_validator.validator.tasks import (
-    SCORING_ALGO_VERSION,
-    _normalize_weights_for_committing,
-    logger,
-)
 
 if False:
     import torch
+
+logger = logging.getLogger(__name__)
+
+SCORING_ALGO_VERSION = 2
 
 
 @contextlib.contextmanager
@@ -286,6 +286,11 @@ def save_weight_setting_failure(subtype: str, long_description: str, data: JsonV
         long_description=long_description,
         data=data,
     )
+
+
+def _normalize_weights_for_committing(weights: list[float], max_: int):
+    factor = max_ / max(weights)
+    return [round(w * factor) for w in weights]
 
 
 def _get_subtensor_for_setting_scores(network):
