@@ -68,6 +68,7 @@ from . import eviction
 from .allowance import tasks as allowance_tasks  # noqa
 from .clean_me_up import _get_metagraph_for_sync, bittensor_client, get_single_manifest
 from .collateral import tasks as collateral_tasks  # noqa
+from .scoring import tasks as scoring_tasks # noqa
 from .dynamic_config import aget_config
 from .models import AdminJobRequest, MetagraphSnapshot, MinerManifest
 
