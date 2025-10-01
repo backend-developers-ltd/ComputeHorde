@@ -72,12 +72,3 @@ jobs:
         run: uv tool install nox
       - name: Run unit tests
         run: nox -vs test
-      - name: Publish Test Results
-        uses: EnricoMi/publish-unit-test-result-action@v2
-        if: always()
-        with:
-          check_name: "Library test report"
-          files: "compute_horde/test-report.xml"
-          fail_on: "nothing"
-          comment_mode: "failures"
-          check_run: true
