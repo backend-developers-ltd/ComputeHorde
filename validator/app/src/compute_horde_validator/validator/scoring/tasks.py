@@ -1,3 +1,4 @@
+import contextlib
 import random
 import time
 import traceback
@@ -27,8 +28,18 @@ from compute_horde_validator.validator.clean_me_up import bittensor_client
 from compute_horde_validator.validator.locks import get_advisory_lock, LockType, Locked
 from compute_horde_validator.validator.models import SystemEvent, SyntheticJobBatch, Weights
 from compute_horde_validator.validator.scoring import create_scoring_engine
-from compute_horde_validator.validator.tasks import save_event_on_error, logger, SCORING_ALGO_VERSION, \
+from compute_horde_validator.validator.tasks import logger, SCORING_ALGO_VERSION, \
     _normalize_weights_for_committing
+
+
+
+@contextlib.contextmanager
+def save_event_on_error(subtype, exception_class=Exception):
+    try:
+        yield
+    except exception_class:
+        save_weight_setting_failure(subtype, traceback.format_exc(), {})
+        raise
 
 
 @app.task
