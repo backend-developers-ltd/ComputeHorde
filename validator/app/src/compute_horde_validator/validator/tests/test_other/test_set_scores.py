@@ -280,8 +280,8 @@ def test_set_scores__set_weight_success(
         )
 
 
-@patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_ATTEMPTS", 1)
-@patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_FAILURE_BACKOFF", 0)
+@patch("compute_horde_validator.validator.scoring.tasks.WEIGHT_SETTING_ATTEMPTS", 1)
+@patch("compute_horde_validator.validator.scoring.tasks.WEIGHT_SETTING_FAILURE_BACKOFF", 0)
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 @patch_constance({"DYNAMIC_COMMIT_REVEAL_WEIGHTS_ENABLED": False})
 def test_set_scores__set_weight_failure(settings, bittensor):
@@ -303,8 +303,8 @@ def test_set_scores__set_weight_failure(settings, bittensor):
     )
 
 
-@patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_ATTEMPTS", 3)
-@patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_FAILURE_BACKOFF", 0)
+@patch("compute_horde_validator.validator.scoring.tasks.WEIGHT_SETTING_ATTEMPTS", 3)
+@patch("compute_horde_validator.validator.scoring.tasks.WEIGHT_SETTING_FAILURE_BACKOFF", 0)
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 @patch_constance({"DYNAMIC_COMMIT_REVEAL_WEIGHTS_ENABLED": False})
 def test_set_scores__set_weight_eventual_success(settings, bittensor):
@@ -331,8 +331,8 @@ def test_set_scores__set_weight_eventual_success(settings, bittensor):
     )
 
 
-@patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_ATTEMPTS", 1)
-@patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_FAILURE_BACKOFF", 0)
+@patch("compute_horde_validator.validator.scoring.tasks.WEIGHT_SETTING_ATTEMPTS", 1)
+@patch("compute_horde_validator.validator.scoring.tasks.WEIGHT_SETTING_FAILURE_BACKOFF", 0)
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 @patch_constance({"DYNAMIC_COMMIT_REVEAL_WEIGHTS_ENABLED": False})
 def test_set_scores__set_weight__exception(settings, bittensor):
@@ -354,8 +354,8 @@ def test_set_scores__set_weight__exception(settings, bittensor):
     )
 
 
-@patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_ATTEMPTS", 1)
-@patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_FAILURE_BACKOFF", 0)
+@patch("compute_horde_validator.validator.scoring.tasks.WEIGHT_SETTING_ATTEMPTS", 1)
+@patch("compute_horde_validator.validator.scoring.tasks.WEIGHT_SETTING_FAILURE_BACKOFF", 0)
 @patch(
     "bittensor.subtensor",
     lambda *args, **kwargs: MockSubtensor(
@@ -380,10 +380,10 @@ def test_set_scores__set_weight__commit__exception(bittensor):
     )
 
 
-@patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_ATTEMPTS", 1)
-@patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_FAILURE_BACKOFF", 0)
-@patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_HARD_TTL", 1)
-@patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_TTL", 1)
+@patch("compute_horde_validator.validator.scoring.tasks.WEIGHT_SETTING_ATTEMPTS", 1)
+@patch("compute_horde_validator.validator.scoring.tasks.WEIGHT_SETTING_FAILURE_BACKOFF", 0)
+@patch("compute_horde_validator.validator.scoring.tasks.WEIGHT_SETTING_HARD_TTL", 1)
+@patch("compute_horde_validator.validator.scoring.tasks.WEIGHT_SETTING_TTL", 1)
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 @patch_constance({"DYNAMIC_COMMIT_REVEAL_WEIGHTS_ENABLED": False})
 def test_set_scores__set_weight_timeout(settings, bittensor):
@@ -406,10 +406,10 @@ def test_set_scores__set_weight_timeout(settings, bittensor):
     )
 
 
-@patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_ATTEMPTS", 1)
-@patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_FAILURE_BACKOFF", 0)
-@patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_HARD_TTL", 1)
-@patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_TTL", 1)
+@patch("compute_horde_validator.validator.scoring.tasks.WEIGHT_SETTING_ATTEMPTS", 1)
+@patch("compute_horde_validator.validator.scoring.tasks.WEIGHT_SETTING_FAILURE_BACKOFF", 0)
+@patch("compute_horde_validator.validator.scoring.tasks.WEIGHT_SETTING_HARD_TTL", 1)
+@patch("compute_horde_validator.validator.scoring.tasks.WEIGHT_SETTING_TTL", 1)
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 @patch_constance({"DYNAMIC_COMMIT_REVEAL_WEIGHTS_INTERVAL": 722})
 @pytest.mark.parametrize(
@@ -597,10 +597,10 @@ def test_set_scores__set_weight__commit(
 
 
 @pytest.mark.parametrize("current_block", [723, 999, 1082, 1430, 1443])
-@patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_ATTEMPTS", 1)
-@patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_FAILURE_BACKOFF", 0)
-@patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_HARD_TTL", 1)
-@patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_TTL", 1)
+@patch("compute_horde_validator.validator.scoring.tasks.WEIGHT_SETTING_ATTEMPTS", 1)
+@patch("compute_horde_validator.validator.scoring.tasks.WEIGHT_SETTING_FAILURE_BACKOFF", 0)
+@patch("compute_horde_validator.validator.scoring.tasks.WEIGHT_SETTING_HARD_TTL", 1)
+@patch("compute_horde_validator.validator.scoring.tasks.WEIGHT_SETTING_TTL", 1)
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 def test_set_scores__set_weight__commit__too_early_or_too_late(bittensor, current_block: int):
     bittensor.blocks.head.return_value.number = current_block
@@ -783,10 +783,10 @@ def test_set_scores__set_weight__reveal__timeout(bittensor, run_uuid):
         ), system_events
 
 
-@patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_ATTEMPTS", 1)
-@patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_FAILURE_BACKOFF", 0)
-@patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_HARD_TTL", 1)
-@patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_TTL", 1)
+@patch("compute_horde_validator.validator.scoring.tasks.WEIGHT_SETTING_ATTEMPTS", 1)
+@patch("compute_horde_validator.validator.scoring.tasks.WEIGHT_SETTING_FAILURE_BACKOFF", 0)
+@patch("compute_horde_validator.validator.scoring.tasks.WEIGHT_SETTING_HARD_TTL", 1)
+@patch("compute_horde_validator.validator.scoring.tasks.WEIGHT_SETTING_TTL", 1)
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 def test_set_scores__multiple_starts(settings, bittensor):
     bittensor.blocks.head.return_value.number = 1234
