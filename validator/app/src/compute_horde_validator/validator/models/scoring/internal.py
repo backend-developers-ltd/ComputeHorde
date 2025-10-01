@@ -1,4 +1,5 @@
 """Models internal for the scoring module, not to be used by other modules."""
+
 from dataclasses import dataclass
 from os import urandom
 from typing import Self
@@ -15,6 +16,11 @@ def get_random_salt() -> list[int]:
 
 
 class WeightSettingFinishedEvent(models.Model):
+    """
+    A record in this table indicates a successful weight setting event. Weight setting in cycle N does calculations
+    based on work done in cycle N-1 and this is reflected in columns `block_from` and `block_to`.
+    """
+
     created_at = models.DateTimeField(default=now)
     block_from = models.BigIntegerField()
     block_to = models.BigIntegerField()
@@ -30,7 +36,9 @@ class WeightSettingFinishedEvent(models.Model):
     @classmethod
     def from_block(cls, block: int, netuid: int) -> tuple[Self, bool]:
         r = get_cycle_containing_block(block=block, netuid=netuid)
-        return cls.objects.get_or_create(block_from=r.start, block_to=r.stop)
+        return cls.objects.get_or_create(
+            block_from=r.start - (r.stop - r.start), block_to=r.stop - (r.stop - r.start)
+        )
 
 
 class Weights(models.Model):

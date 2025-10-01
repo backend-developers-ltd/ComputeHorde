@@ -72,7 +72,7 @@ from .dynamic_config import aget_config
 from .models import AdminJobRequest, MetagraphSnapshot, MinerManifest
 
 if False:
-    import torch
+    import torch  # noqa
 
 logger = get_task_logger(__name__)
 

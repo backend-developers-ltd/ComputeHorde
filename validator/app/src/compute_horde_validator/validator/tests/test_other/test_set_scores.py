@@ -8,19 +8,16 @@ from constance import config
 from constance.test.pytest import override_config
 from django.db.models import Max
 from django.test import override_settings
-from django.utils.timezone import now
 
 from compute_horde_validator.validator.models import (
-    Cycle,
     Miner,
-    SyntheticJobBatch,
     SystemEvent,
 )
 from compute_horde_validator.validator.tasks import (
     _normalize_weights_for_committing,
 )
 
-from ...models.scoring.internal import Weights
+from ...models.scoring.internal import Weights, WeightSettingFinishedEvent
 from ...scoring.tasks import reveal_scores, set_scores
 from ..helpers import (
     NUM_NEURONS,
@@ -48,21 +45,12 @@ def _default_commit_reveal_params():
 
 
 @contextmanager
-def setup_db_and_scores(cycle_number=0, hotkey_to_score=None):
+def setup_db_and_scores(hotkey_to_score=None):
     if hotkey_to_score is None:
         hotkey_to_score = {f"hotkey_{i}": i for i in range(NUM_NEURONS)}
     for i in range(NUM_NEURONS):
         Miner.objects.update_or_create(hotkey=f"hotkey_{i}")
 
-    # Batch is still required for scoring but we don't require jobs in the batch
-    SyntheticJobBatch.objects.create(
-        started_at=now(),
-        accepting_results_until=now(),
-        scored=False,
-        block=722 * cycle_number + 1,
-        cycle=Cycle.objects.create(start=722 * cycle_number, stop=722 * (cycle_number + 1)),
-    )
-    # ... instead, the main source for scores is calculate_allowance_paid_job_scores:
     with patch(
         "compute_horde_validator.validator.scoring.engine.calculate_allowance_paid_job_scores",
         return_value={DEFAULT_EXECUTOR_CLASS: hotkey_to_score},
@@ -81,9 +69,9 @@ def test_normalize_scores():
 
 
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
-def test_set_scores__no_batches_found(settings, bittensor):
+def test_set_scores__already_done(settings, bittensor):
     bittensor.blocks.head.return_value.number = 361
-
+    WeightSettingFinishedEvent.from_block(361, settings.BITTENSOR_NETUID)
     set_scores()
     assert SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 0
 
@@ -233,6 +221,11 @@ def test_set_scores__too_early(settings, bittensor):
         ),
     ],
 )
+@override_settings(
+    BITTENSOR_NETUID=359
+)  # these test cases were written assuming RNGs are being seeded with the right
+# block numbers here and there and now that the code calculating the cycle start/stop has been refactored
+# in order to get the expected values we need to meddle with the NETUID
 def test_set_scores__set_weight_success(
     settings,
     bittensor,
@@ -249,7 +242,7 @@ def test_set_scores__set_weight_success(
 
     bittensor.blocks.head.return_value.number = 723 + cycle_number * 722
 
-    with setup_db_and_scores(cycle_number=cycle_number, hotkey_to_score=hotkey_to_score):
+    with setup_db_and_scores(hotkey_to_score=hotkey_to_score):
         with override_config(
             DYNAMIC_BURN_TARGET_SS58ADDRESSES=burn_targets,
             DYNAMIC_BURN_RATE=burn_rate,
@@ -278,6 +271,18 @@ def test_set_scores__set_weight_success(
             SystemEvent.EventSubType.SET_WEIGHTS_SUCCESS,
             1,
         )
+    assert [
+        {
+            "block_from": r.block_from,
+            "block_to": r.block_to,
+        }
+        for r in WeightSettingFinishedEvent.objects.all()
+    ] == [
+        {
+            "block_from": 722 * cycle_number,
+            "block_to": 722 * (cycle_number + 1),
+        }
+    ]
 
 
 @patch("compute_horde_validator.validator.scoring.tasks.WEIGHT_SETTING_ATTEMPTS", 1)
@@ -301,6 +306,13 @@ def test_set_scores__set_weight_failure(settings, bittensor):
     check_system_events(
         SystemEvent.EventType.WEIGHT_SETTING_FAILURE, SystemEvent.EventSubType.GIVING_UP, 1
     )
+    assert [
+        {
+            "block_from": r.block_from,
+            "block_to": r.block_to,
+        }
+        for r in WeightSettingFinishedEvent.objects.all()
+    ] == []
 
 
 @patch("compute_horde_validator.validator.scoring.tasks.WEIGHT_SETTING_ATTEMPTS", 3)
@@ -545,6 +557,11 @@ def test_set_scores__set_weight_timeout(settings, bittensor):
         ),
     ],
 )
+@override_settings(
+    BITTENSOR_NETUID=359
+)  # these test cases were written assuming RNGs are being seeded with the right
+# block numbers here and there and now that the code calculating the cycle start/stop has been refactored
+# in order to get the expected values we need to meddle with the NETUID
 def test_set_scores__set_weight__commit(
     settings,
     bittensor,
@@ -571,7 +588,7 @@ def test_set_scores__set_weight__commit(
             "compute_horde_validator.validator.scoring.engine.calculate_allowance_paid_job_scores",
             return_value={DEFAULT_EXECUTOR_CLASS: hotkey_to_score},
         ),
-        setup_db_and_scores(cycle_number=cycle_number, hotkey_to_score=hotkey_to_score),
+        setup_db_and_scores(hotkey_to_score=hotkey_to_score),
         override_config(
             DYNAMIC_BURN_TARGET_SS58ADDRESSES=burn_targets,
             DYNAMIC_BURN_RATE=burn_rate,
@@ -594,6 +611,18 @@ def test_set_scores__set_weight__commit(
             SystemEvent.EventSubType.COMMIT_WEIGHTS_SUCCESS,
             1,
         )
+    assert [
+        {
+            "block_from": r.block_from,
+            "block_to": r.block_to,
+        }
+        for r in WeightSettingFinishedEvent.objects.all()
+    ] == [
+        {
+            "block_from": 722 * cycle_number,
+            "block_to": 722 * (cycle_number + 1),
+        }
+    ]
 
 
 @pytest.mark.parametrize("current_block", [723, 999, 1082, 1430, 1443])

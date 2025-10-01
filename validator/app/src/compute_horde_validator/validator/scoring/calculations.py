@@ -1,6 +1,6 @@
 import logging
 from collections import defaultdict
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from typing import Literal
 
 import numpy as np
@@ -14,7 +14,7 @@ from compute_horde_validator.validator.allowance.types import (
     SpendingDetails,
 )
 from compute_horde_validator.validator.allowance.utils.spending import Triplet
-from compute_horde_validator.validator.models import Miner, OrganicJob, SyntheticJob
+from compute_horde_validator.validator.models import Miner, OrganicJob
 from compute_horde_validator.validator.receipts import receipts
 from compute_horde_validator.validator.scoring.metrics import (
     VALIDATOR_ALLOWANCE_BLOCKS_PROCESSED,
@@ -164,21 +164,6 @@ def horde_score(
     return scaled_avg_benchmark * sum_agent * scaled_inverted_n
 
 
-def score_synthetic_jobs(
-    jobs: Sequence[SyntheticJob],
-    score_aggregation: Callable[[list[float]], float] = sum,
-) -> dict[str, float]:
-    """Score synthetic jobs using the provided aggregation function."""
-    batch_scores = defaultdict(list)
-    score_per_hotkey = {}
-    for job in jobs:
-        hotkey = job.miner.hotkey
-        batch_scores[hotkey].append(job.score)
-    for hotkey, hotkey_batch_scores in batch_scores.items():
-        score_per_hotkey[hotkey] = score_aggregation(hotkey_batch_scores)
-    return score_per_hotkey
-
-
 def score_organic_jobs(jobs: Sequence[OrganicJob]) -> dict[str, float]:
     """Score organic jobs."""
     batch_scores: defaultdict[str, float] = defaultdict(float)
@@ -229,77 +214,6 @@ def calculate_organic_scores(organic_jobs: list[OrganicJob]) -> dict[str, dict[s
             organic_scores_by_executor[executor_class] = executor_class_scores
 
     return organic_scores_by_executor
-
-
-def calculate_synthetic_scores(
-    synthetic_jobs: list[SyntheticJob],
-) -> dict[str, dict[str, float]]:
-    """
-    Calculate raw scores from synthetic jobs for each executor class.
-
-    Args:
-        synthetic_jobs: List of synthetic jobs
-
-    Returns:
-        Dictionary mapping executor class to hotkey scores
-    """
-    executor_class_synthetic_jobs = defaultdict(list)
-
-    # Group synthetic jobs by executor class
-    for job in synthetic_jobs:
-        if job.status == SyntheticJob.Status.COMPLETED:
-            executor_class_synthetic_jobs[job.executor_class].append(job)
-
-    synthetic_scores_by_executor: dict[str, dict[str, float]] = {}
-
-    for executor_class, jobs in executor_class_synthetic_jobs.items():
-        executor_class_scores: dict[str, float] = {}
-
-        for job in jobs:
-            hotkey = job.miner.hotkey
-            executor_class_scores[hotkey] = executor_class_scores.get(hotkey, 0) + job.score
-
-        if executor_class_scores:
-            synthetic_scores_by_executor[executor_class] = executor_class_scores
-
-    return synthetic_scores_by_executor
-
-
-def combine_scores(
-    organic_scores_by_executor: dict[str, dict[str, float]],
-    synthetic_scores_by_executor: dict[str, dict[str, float]],
-) -> dict[str, dict[str, float]]:
-    """
-    Combine organic and synthetic scores for each executor class.
-
-    Args:
-        organic_scores_by_executor: Raw scores from organic jobs grouped by executor class
-        synthetic_scores_by_executor: Raw scores from synthetic jobs grouped by executor class
-
-    Returns:
-        Combined raw scores grouped by executor class (not normalized)
-    """
-    combined_scores_by_executor: dict[str, dict[str, float]] = {}
-
-    all_executor_classes = set(organic_scores_by_executor.keys()) | set(
-        synthetic_scores_by_executor.keys()
-    )
-
-    for executor_class in all_executor_classes:
-        executor_class_scores: dict[str, float] = {}
-
-        if executor_class in organic_scores_by_executor:
-            for hotkey, score in organic_scores_by_executor[executor_class].items():
-                executor_class_scores[hotkey] = executor_class_scores.get(hotkey, 0) + score
-
-        if executor_class in synthetic_scores_by_executor:
-            for hotkey, score in synthetic_scores_by_executor[executor_class].items():
-                executor_class_scores[hotkey] = executor_class_scores.get(hotkey, 0) + score
-
-        if executor_class_scores:
-            combined_scores_by_executor[executor_class] = executor_class_scores
-
-    return combined_scores_by_executor
 
 
 def get_coldkey_to_hotkey_mapping(miners: list[Miner]) -> dict[str, list[str]]:
