@@ -1,3 +1,4 @@
+import ipaddress
 import logging
 
 import turbobt
@@ -11,70 +12,55 @@ def sync_miners_from_neurons(block_number: int, neurons: list[turbobt.Neuron]) -
     """
     Upsert Miner records from neuron data.
     """
-    hotkeys = [n.hotkey for n in neurons]
-    miners_to_create = []
+    current_hotkeys = [neuron.hotkey for neuron in neurons]
+    miners = list(MinerModel.objects.filter(hotkey__in=current_hotkeys).all())
+    existing_hotkeys = {m.hotkey for m in miners}
+    new_hotkeys = set(current_hotkeys) - existing_hotkeys
+
+    if len(new_hotkeys) > 0:
+        new_miners = []
+        hotkey_to_neuron = {neuron.hotkey: neuron for neuron in neurons}
+        for hotkey in new_hotkeys:
+            neuron = hotkey_to_neuron.get(hotkey)
+            coldkey = neuron.coldkey if neuron else None
+            new_miners.append(MinerModel(hotkey=hotkey, coldkey=coldkey))
+        new_miners = MinerModel.objects.bulk_create(new_miners)
+        miners.extend(new_miners)
+        logger.info(f"Created new neurons: {new_hotkeys}")
+
+    # update axon info of neurons
     miners_to_update = []
-    existing_miners = {
-        miner.hotkey: miner for miner in MinerModel.objects.filter(hotkey__in=hotkeys)
+    hotkey_to_neuron = {
+        neuron.hotkey: neuron
+        for neuron in neurons
+        if neuron.axon_info and str(neuron.axon_info.ip) != "0.0.0.0"
     }
 
-    for neuron in neurons:
-        miner = existing_miners.get(neuron.hotkey)
-        is_serving = neuron.axon_info and str(neuron.axon_info.ip) != "0.0.0.0"
+    for miner in miners:
+        neuron = hotkey_to_neuron.get(miner.hotkey)
+        if neuron and neuron.axon_info:
+            shield_address = getattr(neuron.axon_info, "shield_address", str(neuron.axon_info.ip))
+            try:
+                ip_version = ipaddress.ip_address(str(neuron.axon_info.ip)).version
+            except ValueError:
+                ip_version = 4
 
-        if miner is None:
-            address = "0.0.0.0"
-            port = 0
-            ip_version = 4
-
-            if is_serving:
-                shield_address = getattr(neuron.axon_info, "shield_address", None)
-                address = shield_address if shield_address else str(neuron.axon_info.ip)
-                port = neuron.axon_info.port
-                ip_version = neuron.axon_info.ip.version
-
-            miners_to_create.append(
-                MinerModel(
-                    hotkey=neuron.hotkey,
-                    coldkey=neuron.coldkey or "",
-                    uid=neuron.uid,
-                    address=address,
-                    port=port,
-                    ip_version=ip_version,
-                )
-            )
-        else:
-            needs_update = False
-
-            if miner.uid != neuron.uid:
+            if (
+                miner.uid != neuron.uid
+                or miner.address != shield_address
+                or miner.port != neuron.axon_info.port
+                or miner.ip_version != ip_version
+                or miner.coldkey != neuron.coldkey
+            ):
                 miner.uid = neuron.uid
-                needs_update = True
-
-            if miner.coldkey != neuron.coldkey and neuron.coldkey:
+                miner.address = shield_address
+                miner.port = neuron.axon_info.port
+                miner.ip_version = ip_version
                 miner.coldkey = neuron.coldkey
-                needs_update = True
-
-            if is_serving:
-                shield_address = getattr(neuron.axon_info, "shield_address", None)
-                address = shield_address if shield_address else str(neuron.axon_info.ip)
-                port = neuron.axon_info.port
-                ip_version = neuron.axon_info.ip.version
-
-                if miner.address != address or miner.port != port or miner.ip_version != ip_version:
-                    miner.address = address
-                    miner.port = port
-                    miner.ip_version = ip_version
-                    needs_update = True
-
-            if needs_update:
                 miners_to_update.append(miner)
-
-    if miners_to_create:
-        MinerModel.objects.bulk_create(miners_to_create, ignore_conflicts=True)
-        logger.info(f"Created {len(miners_to_create)} new Miner records for block {block_number}")
 
     if miners_to_update:
         MinerModel.objects.bulk_update(
-            miners_to_update, fields=["uid", "coldkey", "address", "port", "ip_version"]
+            miners_to_update, fields=["uid", "address", "port", "ip_version", "coldkey"]
         )
-        logger.info(f"Updated {len(miners_to_update)} Miner records for block {block_number}")
+        logger.info(f"Updated axon infos and null coldkeys for {len(miners_to_update)} miners")
