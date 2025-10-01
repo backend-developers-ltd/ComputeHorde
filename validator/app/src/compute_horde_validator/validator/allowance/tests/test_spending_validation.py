@@ -14,6 +14,8 @@ from compute_horde_validator.validator.allowance.utils.spending import (
     Triplet,
 )
 
+pytestmark = [pytest.mark.django_db(transaction=True)]
+
 
 class MockSpendingBookkeeper(SpendingBookkeeperBase):
     """
