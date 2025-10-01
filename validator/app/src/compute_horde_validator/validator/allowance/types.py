@@ -1,32 +1,9 @@
-from collections.abc import Mapping
-
 import pydantic
-from pydantic import ConfigDict
 
 ss58_address = str
 reservation_id = int
 block_id = int
 block_ids = list[int]
-
-
-class MetagraphData(pydantic.BaseModel):
-    block: int
-    block_hash: str
-    neurons: list["Neuron"]
-    subnet_state: Mapping[str, list[float]]
-    alpha_stake: list[float]
-    tao_stake: list[float]
-    total_stake: list[float]
-    uids: list[int]
-    hotkeys: list[str]
-    coldkeys: list[str | None]
-    serving_hotkeys: list[str]
-
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-
-    @property
-    def block_number(self) -> int:
-        return self.block
 
 
 class Miner(pydantic.BaseModel):
@@ -45,6 +22,20 @@ class ValidatorModel(pydantic.BaseModel):
     uid: int
     hotkey: ss58_address
     effective_stake: float
+
+
+class MetagraphData(pydantic.BaseModel):
+    block: int
+    block_hash: str
+    neurons: list[Neuron]
+    subnet_state: dict[str, list[float]]
+    alpha_stake: list[float]
+    tao_stake: list[float]
+    total_stake: list[float]
+    uids: list[int]
+    hotkeys: list[str]
+    coldkeys: list[str | None]
+    serving_hotkeys: list[str]
 
 
 class SpendingDetails(pydantic.BaseModel):

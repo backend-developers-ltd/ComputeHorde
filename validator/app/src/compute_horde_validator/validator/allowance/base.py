@@ -141,7 +141,7 @@ class AllowanceBase(ABC):
     @abstractmethod
     def get_serving_hotkeys(self) -> list[str]:
         """
-        Return hotkeys of miners that are currently serving (have a reachable axon).
+        Return hotkeys of miners that are currently serving.
         """
 
     @abstractmethod

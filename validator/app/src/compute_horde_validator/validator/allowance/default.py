@@ -16,7 +16,6 @@ from .utils.supertensor import supertensor
 class Allowance(AllowanceBase):
     def __init__(self):
         self.my_ss58_address: ss58_address = supertensor().wallet().get_hotkey().ss58_address
-        self._metagraph_cache: tuple[float, MetagraphData] | None = None
 
     def reserve_allowance(
         self,

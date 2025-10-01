@@ -135,7 +135,7 @@ def sync_collaterals(deps: CollateralTaskDependencies | None = None) -> None:
         return
 
     block_hash = metagraph.block_hash
-    block_number = metagraph.block_number
+    block_number = metagraph.block
     neurons = metagraph.neurons
     hotkeys = [neuron.hotkey for neuron in neurons]
 

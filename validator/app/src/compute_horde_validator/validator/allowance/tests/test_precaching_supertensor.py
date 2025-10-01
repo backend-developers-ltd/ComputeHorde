@@ -37,6 +37,7 @@ def prepare_mocks():
                 return mockchain.get_block_timestamp(block_number)
 
             block_context.get_timestamp = get_timestamp
+            block_context.hash = f"mock_hash_{block_number}"
 
             yield block_context
 
