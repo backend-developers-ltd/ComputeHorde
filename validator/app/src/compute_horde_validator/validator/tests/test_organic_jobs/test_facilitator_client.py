@@ -69,14 +69,10 @@ async def async_patch_all():
         hotkeys = await sync_to_async(list)(Miner.objects.values_list("hotkey", flat=True))
         metagraph = MetagraphData.model_construct(
             block=1006,
-            neurons=[],
-            subnet_state={"alpha_stake": [], "tao_stake": [], "total_stake": []},
-            alpha_stake=[],
-            tao_stake=[],
+            block_hash="hash_1006",
             total_stake=[],
             uids=[],
             hotkeys=hotkeys,
-            coldkeys=[],
             serving_hotkeys=hotkeys,
         )
 

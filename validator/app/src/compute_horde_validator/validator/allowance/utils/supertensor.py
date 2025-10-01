@@ -20,8 +20,7 @@ from bt_ddos_shield.shield_metagraph import ShieldMetagraphOptions
 from bt_ddos_shield.turbobt import ShieldedBittensor
 from compute_horde.blockchain.block_cache import get_current_block
 
-from compute_horde_validator.validator.allowance.types import MetagraphData, Neuron, ValidatorModel
-from compute_horde_validator.validator.models import Miner as MinerModel
+from compute_horde_validator.validator.allowance.types import MetagraphData, ValidatorModel
 
 DEFAULT_TIMEOUT = 30.0
 
@@ -205,7 +204,6 @@ class SuperTensor(BaseSuperTensor):
         subnet = subnet_context.get()
         async with bittensor.block(block_number):
             result: list[turbobt.Neuron] = await subnet.list_neurons()
-            await self._sync_miners_from_neurons(block_number, result)
             return result
 
     def list_validators(self, block_number: int) -> list[ValidatorModel]:
@@ -224,119 +222,25 @@ class SuperTensor(BaseSuperTensor):
             for n in validators
         ]
 
-    async def _sync_miners_from_neurons(
-        self, block_number: int, neurons: list[turbobt.Neuron]
-    ) -> None:
-        """
-        Upsert Miner records from neuron data.
-
-        This ensures that all neurons have corresponding Miner rows in the database,
-        which are required for manifest polling, collateral sync, and other validator operations.
-
-        For serving miners (those with valid axon info), we also update their address/port/ip_version.
-        """
-        hotkeys = [n.hotkey for n in neurons]
-        miners_to_create = []
-        miners_to_update = []
-        existing_miners = {
-            miner.hotkey: miner async for miner in MinerModel.objects.filter(hotkey__in=hotkeys)
-        }
-
-        for neuron in neurons:
-            miner = existing_miners.get(neuron.hotkey)
-            is_serving = neuron.axon_info and str(neuron.axon_info.ip) != "0.0.0.0"
-
-            if miner is None:
-                address = "0.0.0.0"
-                port = 0
-                ip_version = 4
-
-                if is_serving:
-                    shield_address = getattr(neuron.axon_info, "shield_address", None)
-                    address = shield_address if shield_address else str(neuron.axon_info.ip)
-                    port = neuron.axon_info.port
-                    ip_version = neuron.axon_info.ip.version
-
-                miners_to_create.append(
-                    MinerModel(
-                        hotkey=neuron.hotkey,
-                        coldkey=neuron.coldkey or "",
-                        uid=neuron.uid,
-                        address=address,
-                        port=port,
-                        ip_version=ip_version,
-                    )
-                )
-            else:
-                needs_update = False
-
-                if miner.uid != neuron.uid:
-                    miner.uid = neuron.uid
-                    needs_update = True
-
-                if miner.coldkey != neuron.coldkey and neuron.coldkey:
-                    miner.coldkey = neuron.coldkey
-                    needs_update = True
-
-                if is_serving:
-                    shield_address = getattr(neuron.axon_info, "shield_address", None)
-                    address = shield_address if shield_address else str(neuron.axon_info.ip)
-                    port = neuron.axon_info.port
-                    ip_version = neuron.axon_info.ip.version
-
-                    if (
-                        miner.address != address
-                        or miner.port != port
-                        or miner.ip_version != ip_version
-                    ):
-                        miner.address = address
-                        miner.port = port
-                        miner.ip_version = ip_version
-                        needs_update = True
-
-                if needs_update:
-                    miners_to_update.append(miner)
-
-        if miners_to_create:
-            await MinerModel.objects.abulk_create(miners_to_create, ignore_conflicts=True)
-            logger.info(
-                f"Created {len(miners_to_create)} new Miner records for block {block_number}"
-            )
-
-        if miners_to_update:
-            await MinerModel.objects.abulk_update(
-                miners_to_update, fields=["uid", "coldkey", "address", "port", "ip_version"]
-            )
-            logger.info(f"Updated {len(miners_to_update)} Miner records for block {block_number}")
-
     def _build_metagraph_data(self, block_number: int) -> MetagraphData:
         block_hash = self.get_block_hash(block_number)
         turbobt_neurons = self.list_neurons(block_number)
         subnet_state = self.get_subnet_state(block_number)
-        alpha_stake = list(subnet_state.get("alpha_stake", []))
-        tao_stake = list(subnet_state.get("tao_stake", []))
         total_stake = list(subnet_state.get("total_stake", []))
         uids = [neuron.uid for neuron in turbobt_neurons]
         hotkeys = [neuron.hotkey for neuron in turbobt_neurons]
-        coldkeys = [neuron.coldkey if neuron.coldkey else None for neuron in turbobt_neurons]
         serving_hotkeys = [
             neuron.hotkey
             for neuron in turbobt_neurons
             if neuron.axon_info and str(neuron.axon_info.ip) != "0.0.0.0"
         ]
-        neurons = [Neuron(hotkey=n.hotkey, coldkey=n.coldkey or None) for n in turbobt_neurons]
 
         return MetagraphData.model_construct(
             block=block_number,
             block_hash=block_hash,
-            neurons=neurons,
-            subnet_state=subnet_state,
-            alpha_stake=alpha_stake,
-            tao_stake=tao_stake,
             total_stake=total_stake,
             uids=uids,
             hotkeys=hotkeys,
-            coldkeys=coldkeys,
             serving_hotkeys=serving_hotkeys,
         )
 

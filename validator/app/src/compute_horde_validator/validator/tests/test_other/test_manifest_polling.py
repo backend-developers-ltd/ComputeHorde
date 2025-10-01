@@ -117,14 +117,10 @@ def common_test_setup():
 def _metagraph_data(serving_hotkeys: list[str], block: int = 100) -> MetagraphData:
     return MetagraphData.model_construct(
         block=block,
-        neurons=[],
-        subnet_state={"alpha_stake": [], "tao_stake": [], "total_stake": []},
-        alpha_stake=[],
-        tao_stake=[],
+        block_hash=f"hash_{block}",
         total_stake=[],
         uids=[],
         hotkeys=[],
-        coldkeys=[],
         serving_hotkeys=serving_hotkeys,
     )
 

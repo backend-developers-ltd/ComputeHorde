@@ -6,7 +6,7 @@ from unittest.mock import Mock, patch
 
 from web3 import Web3
 
-from compute_horde_validator.validator.allowance.types import MetagraphData, Neuron
+from compute_horde_validator.validator.allowance.types import MetagraphData
 from compute_horde_validator.validator.collateral import tasks as collateral_tasks
 from compute_horde_validator.validator.collateral.tasks import CollateralTaskDependencies
 
@@ -37,19 +37,15 @@ class CollateralTaskHarness:
         metagraph = MetagraphData(
             block=self.block_number,
             block_hash=self.block_hash,
-            neurons=[Neuron(hotkey=n.hotkey, coldkey=None) for n in self.neurons],
-            subnet_state={},
-            alpha_stake=[],
-            tao_stake=[],
             total_stake=[],
             uids=[],
             hotkeys=[n.hotkey for n in self.neurons],
-            coldkeys=[],
             serving_hotkeys=[],
         )
 
         mock_supertensor = Mock()
         mock_supertensor.get_metagraph.return_value = metagraph
+        mock_supertensor.list_neurons.return_value = self.neurons
         mock_supertensor.bittensor.subtensor = Mock()
 
         with patch(

@@ -136,8 +136,7 @@ def sync_collaterals(deps: CollateralTaskDependencies | None = None) -> None:
 
     block_hash = metagraph.block_hash
     block_number = metagraph.block
-    neurons = metagraph.neurons
-    hotkeys = [neuron.hotkey for neuron in neurons]
+    hotkeys = metagraph.hotkeys
 
     associations = deps.fetch_evm_key_associations(
         supertensor().bittensor.subtensor,

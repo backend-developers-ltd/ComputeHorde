@@ -27,14 +27,9 @@ class ValidatorModel(pydantic.BaseModel):
 class MetagraphData(pydantic.BaseModel):
     block: int
     block_hash: str
-    neurons: list[Neuron]
-    subnet_state: dict[str, list[float]]
-    alpha_stake: list[float]
-    tao_stake: list[float]
     total_stake: list[float]
     uids: list[int]
     hotkeys: list[str]
-    coldkeys: list[str | None]
     serving_hotkeys: list[str]
 
 

@@ -44,14 +44,10 @@ def add_allowance():
 def metagraph_snapshot(monkeypatch, cycle):
     metagraph = MetagraphData.model_construct(
         block=cycle.start,
-        neurons=[],
-        subnet_state={"alpha_stake": [], "tao_stake": [], "total_stake": []},
-        alpha_stake=[],
-        tao_stake=[],
+        block_hash=f"hash_{cycle.start}",
         total_stake=[],
         uids=[],
         hotkeys=[],
-        coldkeys=[],
         serving_hotkeys=[],
     )
 

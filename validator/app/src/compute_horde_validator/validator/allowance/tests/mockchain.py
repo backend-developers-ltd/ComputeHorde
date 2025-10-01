@@ -10,7 +10,7 @@ from compute_horde.test_wallet import get_test_validator_wallet
 from compute_horde_core.executor_class import ExecutorClass
 from pydantic import BaseModel
 
-from compute_horde_validator.validator.allowance.types import MetagraphData, Neuron, ValidatorModel
+from compute_horde_validator.validator.allowance.types import MetagraphData, ValidatorModel
 from compute_horde_validator.validator.allowance.utils import supertensor
 from compute_horde_validator.validator.tests.transport import SimulationTransport
 
@@ -351,16 +351,9 @@ def set_block_number(block_number_, oldest_reachable_block: float | int = float(
             return MetagraphData.model_construct(
                 block=block_number,
                 block_hash=self.get_block_hash(block_number),
-                neurons=[
-                    Neuron(hotkey=n.hotkey, coldkey=n.coldkey or None) for n in turbobt_neurons
-                ],
-                subnet_state=subnet_state,
-                alpha_stake=list(subnet_state.get("alpha_stake", [])),
-                tao_stake=list(subnet_state.get("tao_stake", [])),
                 total_stake=list(subnet_state.get("total_stake", [])),
                 uids=[n.uid for n in turbobt_neurons],
                 hotkeys=[n.hotkey for n in turbobt_neurons],
-                coldkeys=[n.coldkey if n.coldkey else None for n in turbobt_neurons],
                 serving_hotkeys=[
                     n.hotkey
                     for n in turbobt_neurons
