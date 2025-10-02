@@ -41,6 +41,7 @@ VALIDATOR_ALLOWANCE_CHECKPOINT = prometheus_client.Gauge(
     labelnames=["miner_hotkey", "validator_hotkey", "executor_class"],
     namespace="validator",
     unit="seconds",
+    multiprocess_mode="livemostrecent",
 )
 
 VALIDATOR_STAKE_SHARE_REPORT = prometheus_client.Gauge(
@@ -49,7 +50,7 @@ VALIDATOR_STAKE_SHARE_REPORT = prometheus_client.Gauge(
     labelnames=["validator_hotkey"],
     namespace="validator",
     unit="fraction",
-    multiprocess_mode="liveall",
+    multiprocess_mode="livemostrecent",
 )
 
 VALIDATOR_MINER_MANIFEST_REPORT = prometheus_client.Gauge(
@@ -58,7 +59,7 @@ VALIDATOR_MINER_MANIFEST_REPORT = prometheus_client.Gauge(
     labelnames=["miner_hotkey", "executor_class"],
     namespace="validator",
     unit="count",
-    multiprocess_mode="liveall",
+    multiprocess_mode="livemostrecent",
 )
 
 VALIDATOR_BLOCK_DURATION = prometheus_client.Gauge(
@@ -66,7 +67,7 @@ VALIDATOR_BLOCK_DURATION = prometheus_client.Gauge(
     "block duration",
     namespace="validator",
     unit="seconds",
-    multiprocess_mode="liveall",
+    multiprocess_mode="livemostrecent",
 )
 
 
