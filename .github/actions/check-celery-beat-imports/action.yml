@@ -1,0 +1,54 @@
+name: Check Celery Beat Imports
+description: Verify that all tasks in CELERY_BEAT_SCHEDULE are registered with Celery
+
+inputs:
+  working-directory:
+    description: Working directory containing the Django project
+    required: true
+  celery-module:
+    description: Python module path to the celery app (e.g., compute_horde_validator.celery)
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Check celery beat task imports
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        uv run python manage.py shell <<'EOF'
+        import sys
+        import importlib
+        from django.conf import settings
+
+        celery_module = importlib.import_module("${{ inputs.celery-module }}")
+        app = celery_module.app
+
+        beat_schedule = settings.CELERY_BEAT_SCHEDULE
+
+        if not beat_schedule:
+            print("✓ No tasks in CELERY_BEAT_SCHEDULE")
+            sys.exit(0)
+
+        registered_tasks = set(app.tasks.keys())
+        missing_tasks = []
+
+        for schedule_name, schedule_config in beat_schedule.items():
+            task_name = schedule_config.get("task")
+            if not task_name:
+                print(f"⚠ Schedule '{schedule_name}' has no task defined")
+                continue
+
+            if task_name not in registered_tasks:
+                missing_tasks.append(task_name)
+                print(f"✗ Task '{task_name}' from schedule '{schedule_name}' is NOT registered")
+            else:
+                print(f"✓ {task_name}")
+
+        if missing_tasks:
+            print(f"\n✗ {len(missing_tasks)} task(s) in CELERY_BEAT_SCHEDULE are not registered with Celery")
+            print("  These tasks will be silently skipped by celery beat!")
+            sys.exit(1)
+        else:
+            print(f"\n✓ All {len(beat_schedule)} tasks in CELERY_BEAT_SCHEDULE are properly registered")
+        EOF

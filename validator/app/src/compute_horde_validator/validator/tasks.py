@@ -77,7 +77,7 @@ from compute_horde_validator.validator.synthetic_jobs.utils import (
 )
 
 from . import eviction
-from .allowance import tasks as allowance_tasks  # noqa
+# from .allowance import tasks as allowance_tasks  # noqa
 from .clean_me_up import _get_metagraph_for_sync, bittensor_client, get_single_manifest
 from .collateral import tasks as collateral_tasks  # noqa
 from .dynamic_config import aget_config

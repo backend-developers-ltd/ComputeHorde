@@ -53,6 +53,28 @@ jobs:
         run: cp ./envs/dev/.env.template .env
       - name: Run mypy
         run: nox -vs type_check
+  beat-tasks:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./executor/app/src
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python ${{ env.PYTHON_DEFAULT_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_DEFAULT_VERSION }}
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.8.x"
+          enable-cache: true
+      - name: Create dotenv file
+        run: cp ../../envs/dev/.env.template .env
+      - uses: ./.github/actions/check-celery-beat-imports
+        with:
+          working-directory: ./executor/app/src
+          celery-module: compute_horde_executor.celery
   test:
     timeout-minutes: 10
     runs-on: ubuntu-latest

@@ -29,6 +29,28 @@ jobs:
         run: uv tool install nox
       - name: Run linters
         run: nox -vs lint
+  beat-tasks:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./facilitator/app/src
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python ${{ env.PYTHON_DEFAULT_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_DEFAULT_VERSION }}
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.8.x"
+          enable-cache: true
+      - name: Create dotenv file
+        run: cp ../../envs/dev/.env.template .env
+      - uses: ./.github/actions/check-celery-beat-imports
+        with:
+          working-directory: ./facilitator/app/src
+          celery-module: project.celery
   test:
     timeout-minutes: 10
     runs-on: ubuntu-latest
