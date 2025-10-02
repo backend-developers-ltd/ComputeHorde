@@ -9,6 +9,7 @@ import prometheus_client.metrics
 from compute_horde_validator.validator.models import SystemEvent
 
 from ...models.allowance.internal import Block, BlockAllowance
+from ...tests.utils_for_tests import lenient_float_factory
 
 
 def get_histogram_metric_values(metric):
@@ -43,17 +44,7 @@ def assert_metric_observed(metric: prometheus_client.Histogram, operation_name: 
     assert count_after > count_before, f"{operation_name} metric should have been observed"
 
 
-class LenientFloat(float):
-    rel_tol = 1e-6
-    abs_tol = 1e-12
-
-    def __eq__(self, other):
-        if isinstance(other, int | float):
-            return abs(self - other) <= max(self.rel_tol * max(abs(self), abs(other)), self.abs_tol)
-        return super().__eq__(other)
-
-
-LF = LenientFloat
+LF = lenient_float_factory(1e-6, 1e-12)
 
 
 def allowance_dict(allowances: list[tuple[str, float]]) -> dict[str, float]:
