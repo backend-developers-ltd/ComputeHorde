@@ -78,3 +78,6 @@ jobs:
         run: docker compose up -d --wait
       - name: Run unit tests
         run: nox -vs test
+      - name: Stop dockerized services
+        if: success() || failure()
+        run: docker compose down -v
