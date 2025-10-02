@@ -60,7 +60,9 @@ class Receipts(ReceiptsBase):
                 "receipttransfer_receipts_total", documentation="Number of transferred receipts"
             ),
             miners=Gauge(
-                "receipttransfer_miners", documentation="Number of miners to transfer from"
+                "receipttransfer_miners",
+                documentation="Number of miners to transfer from",
+                multiprocess_mode="livemostrecent",
             ),
             successful_transfers=Counter(
                 "receipttransfer_successful_transfers_total",
@@ -83,6 +85,7 @@ class Receipts(ReceiptsBase):
             catchup_pages_left=Gauge(
                 "receipttransfer_catchup_pages_left",
                 documentation="Pages waiting for catch-up",
+                multiprocess_mode="livemostrecent",
             ),
         )
 

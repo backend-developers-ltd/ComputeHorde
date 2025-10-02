@@ -10,6 +10,7 @@ VALIDATOR_ALLOWANCE_BLOCKS_PROCESSED = prometheus_client.Gauge(
     "Blocks accepted for spending in last batch run",
     labelnames=["validator_hotkey", "miner_hotkey", "executor_class", "result"],
     namespace="validator",
+    multiprocess_mode="livemostrecent",
 )
 
 VALIDATOR_ALLOWANCE_SPENDING_ATTEMPTS = prometheus_client.Gauge(
@@ -17,6 +18,7 @@ VALIDATOR_ALLOWANCE_SPENDING_ATTEMPTS = prometheus_client.Gauge(
     "Allowance spending attempts by result in last batch run",
     labelnames=["validator_hotkey", "miner_hotkey", "executor_class", "result"],
     namespace="validator",
+    multiprocess_mode="livemostrecent",
 )
 
 VALIDATOR_ALLOWANCE_PAID_JOB_SCORES = prometheus_client.Gauge(
@@ -24,4 +26,5 @@ VALIDATOR_ALLOWANCE_PAID_JOB_SCORES = prometheus_client.Gauge(
     "Current allowance-based job scores by miner and executor class",
     labelnames=["miner_hotkey", "executor_class"],
     namespace="validator",
+    multiprocess_mode="livemostrecent",
 )
