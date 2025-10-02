@@ -24,6 +24,7 @@ from ..metrics import (
 )
 from ..types import AllowanceException, NotEnoughAllowanceException, ValidatorModel, ss58_address
 from .manifests import get_manifest_drops, get_manifests
+from .miners import sync_miners_from_neurons
 from .supertensor import CannotGetCurrentBlock, SuperTensor, SuperTensorError, supertensor
 
 logger = get_task_logger(__name__)
@@ -120,6 +121,8 @@ def save_neurons(neurons: list[turbobt.Neuron], block: int):
             for neuron in neurons
         ]
     )
+
+    sync_miners_from_neurons(block, neurons)
 
 
 def process_block_allowance(

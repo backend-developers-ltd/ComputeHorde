@@ -44,7 +44,6 @@ from compute_horde_validator.validator.allowance.default import allowance
 from compute_horde_validator.validator.dynamic_config import aget_config
 from compute_horde_validator.validator.models import (
     AdminJobRequest,
-    MetagraphSnapshot,
     Miner,
     OrganicJob,
     SystemEvent,
@@ -166,7 +165,7 @@ async def _dummy_notify_callback(_: JobStatusUpdate) -> None:
 
 
 async def _get_current_block() -> int:
-    return (await MetagraphSnapshot.aget_latest()).block
+    return (await allowance().aget_metagraph()).block
 
 
 async def execute_organic_job_request(
