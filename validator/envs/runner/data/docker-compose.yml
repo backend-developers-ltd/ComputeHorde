@@ -25,6 +25,18 @@ services:
     logging:
       <<: *logging
 
+  pylon:
+    image: docker.io/backenddevelopersltd/bittensor-pylon:git-1a0d98e348529bf0e62e33aa2446dee37b1ffc39@sha256:9185714dad5f08cd4fdb0375343deb9eaf1be270a291ab8ea1f00ed9cec5b3de
+    init: true
+    restart: unless-stopped
+    env_file: ./.env
+    environment:
+      - AUTH_TOKEN=abc
+    volumes:
+      - ${HOST_WALLET_DIR}:/root/.bittensor/wallets
+    logging:
+      <<: *logging
+
   app:
     image: backenddevelopersltd/${VALIDATOR_IMAGE_REPO}:v0-latest
     pull_policy: ${PULL_POLICY:-always}
@@ -66,9 +78,11 @@ services:
     tmpfs: /run
     depends_on:
       - redis
+      - pylon
     links:
       - redis
       - db
+      - pylon
     logging:
       <<: *logging
     labels:
