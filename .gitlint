@@ -142,6 +142,7 @@
 [general]
 contrib=contrib-title-conventional-commits
 extra-path=gitlint_rules
+ignore=body-min-length
 
 [contrib-title-conventional-commits]
 types=fix,feat,perf,doc,ci,style,refactor,chore,build,test
