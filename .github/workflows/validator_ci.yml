@@ -112,15 +112,6 @@ jobs:
         run: docker compose up -d --wait
       - name: Run unit tests (${{ matrix.target }})
         run: nox -vs test -- compute_horde_validator/validator/${{ matrix.target }}
-      - name: Publish Test Results
-        uses: EnricoMi/publish-unit-test-result-action@v2
-        if: always()
-        with:
-          check_name: "Validator test report"
-          files: "validator/app/src/test-report.xml"
-          fail_on: "nothing"
-          comment_mode: "failures"
-          check_run: true
       - name: Stop dockerized services
         if: success() || failure()
         run: docker compose down -v
