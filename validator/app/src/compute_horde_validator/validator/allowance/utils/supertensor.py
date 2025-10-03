@@ -413,6 +413,7 @@ class PrecachingSuperTensor(SuperTensor):
         *args,
         cache: BaseCache | None = None,
         throw_on_cache_miss: bool = False,
+        start_workers: bool = True,
         **kwargs,
     ):
         self.closing = False
@@ -420,12 +421,14 @@ class PrecachingSuperTensor(SuperTensor):
             cache = InMemoryCache()
         self.cache = cache
         self.throw_on_cache_miss = throw_on_cache_miss
+        self.start_workers_flag = start_workers
         super().__init__(*args, **kwargs)
         self.task_queue: Queue[tuple[TaskType, int]] = Queue()
         self.highest_block_requested: int | None = None
         self.highest_block_submitted: int | None = None
-        self.start_workers()
-        self.start_producer()
+        if self.start_workers_flag:
+            self.start_workers()
+            self.start_producer()
 
     def worker(self, ind: int):
         while True:
@@ -618,8 +621,9 @@ class PrecachingSuperTensor(SuperTensor):
 
     def close(self):
         self.closing = True
-        for _ in range(N_THREADS):
-            self.task_queue.put((TaskType.THE_END, 0))
+        if self.start_workers_flag:
+            for _ in range(N_THREADS):
+                self.task_queue.put((TaskType.THE_END, 0))
         super().close()
 
     def __enter__(self):
@@ -635,5 +639,10 @@ _supertensor_instance: SuperTensor | None = None
 def supertensor() -> SuperTensor:
     global _supertensor_instance
     if _supertensor_instance is None:
-        _supertensor_instance = SuperTensor()
+        from .supertensor_django_cache import DjangoCache
+        
+        _supertensor_instance = PrecachingSuperTensor(
+            cache=DjangoCache(),
+            start_workers=False,  # Consumer mode - read from cache only
+        )
     return _supertensor_instance
