@@ -28,6 +28,7 @@ class SystemEvent(models.Model):
     """
 
     class EventType(models.TextChoices):
+        WEIGHT_SETTING_INFO = "WEIGHT_SETTING_INFO"
         WEIGHT_SETTING_SUCCESS = "WEIGHT_SETTING_SUCCESS"
         WEIGHT_SETTING_FAILURE = "WEIGHT_SETTING_FAILURE"
         # the two above are blankets for setting, committing and revealing
