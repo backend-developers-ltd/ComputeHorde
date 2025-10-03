@@ -56,7 +56,6 @@ class MaximumNumberOfAttemptsExceeded(Exception):
 )
 @bittensor_client
 def set_scores(bittensor: turbobt.Bittensor):
-    return
     if not config.SERVING:
         logger.warning("Not setting scores, SERVING is disabled in constance config")
         return
