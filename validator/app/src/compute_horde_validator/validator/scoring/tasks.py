@@ -101,6 +101,19 @@ def set_scores(bittensor: turbobt.Bittensor):
                         f"Weights already set for cycle {wsfe.block_from}-{wsfe.block_to} (current_block={current_block.number})"
                     )
                     return
+                save_weight_setting_event(
+                    SystemEvent.EventType.WEIGHT_SETTING_INFO,
+                    SystemEvent.EventSubType.SUCCESS,
+                    "",
+                    {
+                        "DYNAMIC_COMMIT_REVEAL_WEIGHTS_INTERVAL": config.DYNAMIC_COMMIT_REVEAL_WEIGHTS_INTERVAL,
+                        "DYNAMIC_COMMIT_REVEAL_COMMIT_START_OFFSET": config.DYNAMIC_COMMIT_REVEAL_COMMIT_START_OFFSET,
+                        "DYNAMIC_COMMIT_REVEAL_COMMIT_END_BUFFER": config.DYNAMIC_COMMIT_REVEAL_COMMIT_END_BUFFER,
+                        "DYNAMIC_COMMIT_REVEAL_REVEAL_END_BUFFER": config.DYNAMIC_COMMIT_REVEAL_REVEAL_END_BUFFER,
+                        "DYNAMIC_COMMIT_REVEAL_WEIGHTS_ENABLED": config.DYNAMIC_COMMIT_REVEAL_WEIGHTS_ENABLED,
+                        "current_block_number": current_block.number,
+                    },
+                )
 
                 hotkey_scores = _score_cycles(current_block.number)
 
