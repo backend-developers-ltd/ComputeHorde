@@ -246,7 +246,7 @@ def test_set_scores__set_weight_success(
             DYNAMIC_BURN_PARTITION=burn_partition,
         ):
             set_scores()
-        assert SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 2
+        assert SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 4
 
         # reconcile weights set with expected ones, disregarding rounding errors:
         # (the very precise comparisons can be found in the weight committing tests and commit-reveal is the one used
@@ -293,7 +293,7 @@ def test_set_scores__set_weight_failure(settings, bittensor):
     with setup_db_and_scores():
         set_scores()
 
-    assert SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 3
+    assert SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 4
     check_system_events(
         SystemEvent.EventType.WEIGHT_SETTING_FAILURE,
         SystemEvent.EventSubType.SET_WEIGHTS_ERROR,
@@ -327,7 +327,7 @@ def test_set_scores__set_weight_eventual_success(settings, bittensor):
     with setup_db_and_scores():
         set_scores()
 
-    assert SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 4
+    assert SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 5
     check_system_events(
         SystemEvent.EventType.WEIGHT_SETTING_FAILURE,
         SystemEvent.EventSubType.SET_WEIGHTS_ERROR,
@@ -351,7 +351,7 @@ def test_set_scores__set_weight__exception(settings, bittensor):
     with setup_db_and_scores():
         set_scores()
 
-    assert SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 3
+    assert SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 4
     check_system_events(
         SystemEvent.EventType.WEIGHT_SETTING_FAILURE,
         SystemEvent.EventSubType.SET_WEIGHTS_ERROR,
@@ -403,7 +403,7 @@ def test_set_scores__set_weight_timeout(settings, bittensor):
     with setup_db_and_scores():
         set_scores()
 
-    assert SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 3
+    assert SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 4
     check_system_events(
         SystemEvent.EventType.WEIGHT_SETTING_FAILURE,
         SystemEvent.EventSubType.WRITING_TO_CHAIN_TIMEOUT,
@@ -600,7 +600,7 @@ def test_set_scores__set_weight__commit(
         assert from_db.block == current_block
         assert from_db.revealed_at is None
 
-        assert SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 2, (
+        assert SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 3, (
             SystemEvent.objects.all()
         )
         check_system_events(
@@ -828,7 +828,7 @@ def test_set_scores__multiple_starts(settings, bittensor):
         for _ in range(threads):
             pool.submit(set_scores)
 
-    assert SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 3
+    assert SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 4
 
     check_system_events(
         SystemEvent.EventType.WEIGHT_SETTING_FAILURE,
