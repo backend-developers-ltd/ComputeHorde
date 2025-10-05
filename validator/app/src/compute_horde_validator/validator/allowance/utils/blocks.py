@@ -247,7 +247,7 @@ def process_block_allowance(
 def process_block_allowance_with_reporting(
     block_number: int,
     supertensor_: SuperTensor,
-    live=False,
+    live: bool = False,
     blocks_behind: int = 0,
 ):
     """
@@ -354,7 +354,9 @@ def backfill_blocks_if_necessary(
             # TODO process_block_allowance_with_reporting never throws, but logs errors appropriately. maybe it should
             # be retried? otherwise random failures will leave holes until they are backfilled
             process_block_allowance_with_reporting(
-                block_number, backfilling_supertensor, blocks_behind=current_block - block_number
+                block_number,
+                backfilling_supertensor,
+                blocks_behind=current_block - block_number,
             )
             if not block_number % 100 and report_callback:
                 report_callback(block_number, block_number - 100)
@@ -375,7 +377,11 @@ def livefill_blocks(
             wait_for_block(current_block + 1, timer.time_left())
             current_block += 1
 
-            process_block_allowance_with_reporting(current_block, supertensor(), live=True)
+            process_block_allowance_with_reporting(
+                current_block,
+                supertensor(),
+                live=True,
+            )
             if not current_block % 100 and report_callback:
                 report_callback(current_block, current_block - 100)
             timer.check_time()
