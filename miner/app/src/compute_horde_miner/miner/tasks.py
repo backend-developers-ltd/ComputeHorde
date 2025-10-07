@@ -117,22 +117,16 @@ def commit_manifest_to_chain():
        a. Commit to subtensor
        b. Log success/failure
 
+    Note: Empty manifests are allowed to support "pausing" a miner.
+
     Error handling:
     - Rate limit: Skip silently, will retry next cycle
     - Connection errors: Log warning, retry next cycle
     - Format errors: Log critical error
     """
-    if not getattr(config, "MANIFEST_COMMITMENT_ENABLED", True):
-        logger.debug("Manifest commitment is disabled")
-        return
-
     try:
-        # Get current manifest
+        # Get current manifest (empty manifest is valid for pausing)
         manifest = async_to_sync(current.executor_manager.get_manifest)()
-
-        if not manifest:
-            logger.debug("Empty manifest, skipping commitment")
-            return
 
         # Get on-chain commitment
         wallet = settings.BITTENSOR_WALLET()

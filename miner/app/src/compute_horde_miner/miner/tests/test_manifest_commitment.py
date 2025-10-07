@@ -210,15 +210,17 @@ class TestCommitManifestToSubtensor:
         assert result is False
 
     def test_commit_manifest_to_subtensor_empty_manifest(self):
+        # Empty manifest should be allowed (for pausing)
         manifest = {}
         wallet = Mock()
         subtensor = Mock()
+        subtensor.commit = Mock(return_value=True)
         netuid = 49
 
         result = commit_manifest_to_subtensor(manifest, wallet, subtensor, netuid)
 
-        assert result is False
-        subtensor.commit.assert_not_called()
+        assert result is True
+        subtensor.commit.assert_called_once_with(wallet, netuid, "")
 
     def test_commit_manifest_to_subtensor_too_long(self):
         # Create a manifest that would be too long (exceeds 128 chars)
@@ -288,10 +290,8 @@ class TestCommitManifestToChainTask:
     @patch("compute_horde_miner.miner.tasks.current")
     @patch("compute_horde_miner.miner.tasks.settings")
     @patch("compute_horde_miner.miner.tasks.bittensor")
-    @patch("compute_horde_miner.miner.tasks.config")
     def test_commit_manifest_to_chain_task_manifest_changed(
         self,
-        mock_config,
         mock_bittensor,
         mock_settings,
         mock_current,
@@ -300,17 +300,7 @@ class TestCommitManifestToChainTask:
     ):
         from compute_horde_miner.miner.tasks import commit_manifest_to_chain
 
-        # Setup mocks
-        mock_config.MANIFEST_COMMITMENT_ENABLED = True
-
         manifest = {ExecutorClass.always_on__gpu_24gb: 3}
-
-        # Mock async_to_sync to execute the coroutine and return the result
-        def async_to_sync_impl(coro):
-            import asyncio
-
-            return lambda: asyncio.run(coro)
-
         mock_async_to_sync.side_effect = lambda f: lambda: manifest
 
         mock_wallet = Mock()
@@ -331,53 +321,49 @@ class TestCommitManifestToChainTask:
         # Verify commit was called
         assert mock_commit.called
 
-    @patch("compute_horde_miner.miner.tasks.async_to_sync")
-    @patch("compute_horde_miner.miner.tasks.current")
-    @patch("compute_horde_miner.miner.tasks.config")
-    def test_commit_manifest_to_chain_task_disabled(
-        self, mock_config, mock_current, mock_async_to_sync
-    ):
-        from compute_horde_miner.miner.tasks import commit_manifest_to_chain
-
-        mock_config.MANIFEST_COMMITMENT_ENABLED = False
-
-        commit_manifest_to_chain()
-
-        # Should not call async_to_sync
-        assert not mock_async_to_sync.called
-
+    @patch("compute_horde_miner.miner.tasks.commit_manifest_to_subtensor")
     @patch("compute_horde_miner.miner.tasks.async_to_sync")
     @patch("compute_horde_miner.miner.tasks.current")
     @patch("compute_horde_miner.miner.tasks.settings")
-    @patch("compute_horde_miner.miner.tasks.config")
+    @patch("compute_horde_miner.miner.tasks.bittensor")
     def test_commit_manifest_to_chain_task_empty_manifest(
-        self, mock_config, mock_settings, mock_current, mock_async_to_sync
+        self, mock_bittensor, mock_settings, mock_current, mock_async_to_sync, mock_commit
     ):
         from compute_horde_miner.miner.tasks import commit_manifest_to_chain
 
-        mock_config.MANIFEST_COMMITMENT_ENABLED = True
-
-        # Empty manifest
+        # Empty manifest should be allowed (for pausing)
         manifest = {}
         mock_async_to_sync.side_effect = lambda f: lambda: manifest
 
-        # Run task - should exit early
+        mock_wallet = Mock()
+        mock_wallet.hotkey.ss58_address = "test_hotkey"
+        mock_settings.BITTENSOR_WALLET.return_value = mock_wallet
+        mock_settings.BITTENSOR_NETWORK = "test"
+        mock_settings.BITTENSOR_NETUID = 49
+
+        mock_subtensor_instance = Mock()
+        # Chain has a non-empty manifest, we want to commit empty
+        mock_subtensor_instance.get_commitment.return_value = "always_on.gpu-24gb=3"
+        mock_bittensor.subtensor.return_value = mock_subtensor_instance
+
+        mock_commit.return_value = True
+
+        # Run task - should commit empty manifest
         commit_manifest_to_chain()
 
-        # Should not try to get wallet or subtensor
-        assert not mock_settings.BITTENSOR_WALLET.called
+        # Should commit empty manifest
+        assert mock_commit.called
+        mock_commit.assert_called_once_with(manifest, mock_wallet, mock_subtensor_instance, 49)
 
     @patch("compute_horde_miner.miner.tasks.commit_manifest_to_subtensor")
     @patch("compute_horde_miner.miner.tasks.async_to_sync")
     @patch("compute_horde_miner.miner.tasks.current")
     @patch("compute_horde_miner.miner.tasks.settings")
     @patch("compute_horde_miner.miner.tasks.bittensor")
-    @patch("compute_horde_miner.miner.tasks.config")
     @patch("compute_horde_miner.miner.tasks.logger")
     def test_commit_manifest_to_chain_task_unchanged_manifest(
         self,
         mock_logger,
-        mock_config,
         mock_bittensor,
         mock_settings,
         mock_current,
@@ -385,8 +371,6 @@ class TestCommitManifestToChainTask:
         mock_commit,
     ):
         from compute_horde_miner.miner.tasks import commit_manifest_to_chain
-
-        mock_config.MANIFEST_COMMITMENT_ENABLED = True
 
         manifest = {ExecutorClass.always_on__gpu_24gb: 3}
         mock_async_to_sync.side_effect = lambda f: lambda: manifest
@@ -414,20 +398,16 @@ class TestCommitManifestToChainTask:
     @patch("compute_horde_miner.miner.tasks.current")
     @patch("compute_horde_miner.miner.tasks.settings")
     @patch("compute_horde_miner.miner.tasks.bittensor")
-    @patch("compute_horde_miner.miner.tasks.config")
     @patch("compute_horde_miner.miner.tasks.logger")
     def test_commit_manifest_to_chain_task_exception_handling(
         self,
         mock_logger,
-        mock_config,
         mock_bittensor,
         mock_settings,
         mock_current,
         mock_async_to_sync,
     ):
         from compute_horde_miner.miner.tasks import commit_manifest_to_chain
-
-        mock_config.MANIFEST_COMMITMENT_ENABLED = True
 
         # Make async_to_sync raise an exception
         def raise_error():

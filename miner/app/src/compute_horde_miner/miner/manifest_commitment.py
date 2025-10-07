@@ -108,18 +108,16 @@ def commit_manifest_to_subtensor(
     2. Validate length <= 128 chars
     3. Call subtensor.commit(wallet, netuid, commitment_string)
     4. Handle rate limiting (100 blocks)
+
+    Note: Empty manifests are allowed to support "pausing" a miner.
     """
     try:
-        # Format manifest to commitment string
+        # Format manifest to commitment string (empty manifests result in empty string)
         commitment_string = format_manifest_commitment(manifest)
 
-        if not commitment_string:
-            logger.warning("Empty manifest, skipping commitment")
-            return False
+        logger.info(f"Committing manifest to chain: {commitment_string or '(empty)'}")
 
-        logger.info(f"Committing manifest to chain: {commitment_string}")
-
-        # Commit to subtensor
+        # Commit to subtensor (empty string is valid for pausing)
         # Note: subtensor.commit() is rate limited to 100 blocks
         success = subtensor.commit(wallet, netuid, commitment_string)
 
