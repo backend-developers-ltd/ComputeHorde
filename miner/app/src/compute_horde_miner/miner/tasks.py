@@ -1,5 +1,6 @@
 import datetime
 
+import bittensor
 from asgiref.sync import async_to_sync
 from celery.utils.log import get_task_logger
 from compute_horde.dynamic_config import fetch_dynamic_configs_from_contract, sync_dynamic_config
@@ -11,6 +12,11 @@ from django.conf import settings
 
 from compute_horde_miner.celery import app
 from compute_horde_miner.miner import eviction, quasi_axon
+from compute_horde_miner.miner.executor_manager import current
+from compute_horde_miner.miner.manifest_commitment import (
+    commit_manifest_to_subtensor,
+    has_manifest_changed,
+)
 from compute_horde_miner.miner.models import Validator
 from compute_horde_miner.miner.receipts import current_store
 
@@ -96,3 +102,64 @@ def archive_receipt_pages():
         return
 
     store.archive_old_pages()
+
+
+@app.task
+def commit_manifest_to_chain():
+    """
+    Periodically checks and commits manifest if changed.
+
+    Steps:
+    1. Get current manifest from executor_manager
+    2. Get on-chain commitment via subtensor.get_commitment()
+    3. Compare: has_manifest_changed()
+    4. If changed:
+       a. Commit to subtensor
+       b. Log success/failure
+
+    Error handling:
+    - Rate limit: Skip silently, will retry next cycle
+    - Connection errors: Log warning, retry next cycle
+    - Format errors: Log critical error
+    """
+    if not getattr(config, "MANIFEST_COMMITMENT_ENABLED", True):
+        logger.debug("Manifest commitment is disabled")
+        return
+
+    try:
+        # Get current manifest
+        manifest = async_to_sync(current.executor_manager.get_manifest)()
+
+        if not manifest:
+            logger.debug("Empty manifest, skipping commitment")
+            return
+
+        # Get on-chain commitment
+        wallet = settings.BITTENSOR_WALLET()
+        subtensor = bittensor.subtensor(network=settings.BITTENSOR_NETWORK)
+
+        try:
+            # Get commitment for this miner's hotkey
+            chain_commitment = subtensor.get_commitment(
+                netuid=settings.BITTENSOR_NETUID,
+                hotkey=wallet.hotkey.ss58_address,
+            )
+        except Exception as e:
+            logger.warning(f"Failed to get on-chain commitment: {e}")
+            chain_commitment = None
+
+        # Check if manifest has changed
+        if has_manifest_changed(manifest, chain_commitment):
+            logger.info("Manifest has changed, committing to chain")
+            success = async_to_sync(commit_manifest_to_subtensor)(
+                manifest, wallet, subtensor, settings.BITTENSOR_NETUID
+            )
+            if success:
+                logger.info("Successfully committed manifest to chain")
+            else:
+                logger.warning("Failed to commit manifest to chain")
+        else:
+            logger.debug("Manifest unchanged, skipping commitment")
+
+    except Exception as e:
+        logger.error(f"Error in commit_manifest_to_chain: {e}", exc_info=True)

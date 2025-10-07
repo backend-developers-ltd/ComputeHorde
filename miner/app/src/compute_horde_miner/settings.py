@@ -329,6 +329,13 @@ PROD_CELERY_BEAT_SCHEDULE = {
         "schedule": timedelta(minutes=1),
         "options": {},
     },
+    "commit_manifest_to_chain": {
+        "task": "compute_horde_miner.miner.tasks.commit_manifest_to_chain",
+        "schedule": timedelta(minutes=5),
+        "options": {
+            "expires": timedelta(minutes=5).total_seconds(),
+        },
+    },
 }
 
 if IS_LOCAL_MINER:
