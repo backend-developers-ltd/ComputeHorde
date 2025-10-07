@@ -12,10 +12,7 @@ import websockets
 from asgiref.sync import sync_to_async
 from channels.layers import get_channel_layer
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
-from compute_horde.fv_protocol.facilitator_requests import (
-    OrganicJobRequest,
-    Response,
-)
+from compute_horde.fv_protocol.facilitator_requests import OrganicJobRequest, Response
 from compute_horde.fv_protocol.validator_requests import (
     JobStatusUpdate,
     V0AuthenticationRequest,
@@ -310,10 +307,22 @@ async def test_facilitator_client__job_completed(ws_server_cls):
 @pytest.mark.asyncio
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 async def test_facilitator_client__cheated_job():
+    from compute_horde_validator.validator.models import SystemEvent
+
     await setup_db()
     facilitator_client = FacilitatorClient(get_keypair(), "ws://127.0.0.1:1233/")
     job_uuid = str(uuid.uuid4())
-    cheated_job_request = get_dummy_job_cheated_request_v0(job_uuid)
+    trusted_job_uuid = str(uuid.uuid4())
+    cheat_details = {
+        "expected_hash": "expected_hash",
+        "actual_hash": "def456",
+        "reason": "hash_mismatch",
+    }
+    cheated_job_request = get_dummy_job_cheated_request_v0(
+        job_uuid,
+        trusted_job_uuid,
+        details=cheat_details,
+    )
 
     async with async_patch_all():
         miner = await Miner.objects.afirst()
@@ -335,6 +344,19 @@ async def test_facilitator_client__cheated_job():
         assert (
             await MinerBlacklist.objects.aget(miner_id=miner.id)
         ).reason == MinerBlacklist.BlacklistReason.JOB_CHEATED
+
+        system_event = (
+            await SystemEvent.objects.using("default_alias")
+            .filter(
+                type=SystemEvent.EventType.MINER_ORGANIC_JOB_FAILURE,
+                subtype=SystemEvent.EventSubType.JOB_CHEATED,
+            )
+            .afirst()
+        )
+        assert system_event is not None
+        assert system_event.data["job_uuid"] == job_uuid
+        assert system_event.data["trusted_job_uuid"] == trusted_job_uuid
+        assert system_event.data["cheat_details"] == cheat_details
 
         await facilitator_client.process_miner_cheat_report(cheated_job_request)
         await job.arefresh_from_db()

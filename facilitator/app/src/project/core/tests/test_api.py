@@ -1,5 +1,6 @@
 import json
 import time
+from datetime import UTC, datetime
 from http import HTTPStatus
 from unittest.mock import patch
 
@@ -12,7 +13,7 @@ from django.contrib.auth.models import User
 from rest_framework.exceptions import ErrorDetail
 from rest_framework.test import APIClient
 
-from project.core.models import HotkeyWhitelist, Job, JobFeedback, Validator
+from project.core.models import CheatedJobReport, HotkeyWhitelist, Job, JobFeedback, Validator
 
 
 @pytest.fixture
@@ -71,6 +72,25 @@ def another_user_job_docker(db, another_user, connected_validator, signature):
         args=["my", "args"],
         env={"MY_ENV": "my value"},
         use_gpu=True,
+        signature=signature.model_dump(),
+        download_time_limit=3,
+        execution_time_limit=3,
+        streaming_start_time_limit=3,
+        upload_time_limit=3,
+    )
+
+
+@pytest.fixture
+def trusted_job_docker(db, user, connected_validator, signature):
+    return Job.objects.create(
+        user=user,
+        validator=connected_validator,
+        target_validator_hotkey=connected_validator.ss58_address,
+        docker_image="hello-world",
+        args=["my", "args"],
+        env={"MY_ENV": "my value"},
+        use_gpu=True,
+        on_trusted_miner=True,
         signature=signature.model_dump(),
         download_time_limit=3,
         execution_time_limit=3,
@@ -390,26 +410,129 @@ def test_job_feedback__already_exists(authenticated_api_client, mock_signature_f
 
 
 @pytest.mark.django_db
-def test_cheated_job_viewset(authenticated_api_client, job_docker):
-    # Test marking a job as cheated
-    response = authenticated_api_client.post("/api/v1/cheated-job/", {"job_uuid": str(job_docker.uuid)}, format="json")
-    assert response.status_code == 200
-    assert response.data == {"message": "Job reported as cheated"}
+def test_cheated_job_viewset(authenticated_api_client, job_docker, trusted_job_docker, mock_signature_from_request):
+    cheat_payload = {
+        "job_uuid": str(job_docker.uuid),
+        "trusted_job_uuid": str(trusted_job_docker.uuid),
+        "details": {
+            "reason": "hash_mismatch",
+        },
+    }
 
-    # Verify the job has been marked as cheated in the database
+    frozen_timestamp = datetime(2024, 1, 1, tzinfo=UTC)
+
+    with patch("django.utils.timezone.now", return_value=frozen_timestamp):
+        with patch("project.core.models.Job.report_cheated") as report_mock:
+            response = authenticated_api_client.post("/api/v1/cheated-job/", cheat_payload, format="json")
+
+    assert response.data == {"message": "Job reported as cheated"}
+    assert response.status_code == 201
+
+    report_mock.assert_called_once()
+
+    report = CheatedJobReport.objects.get(job=job_docker)
+    assert CheatedJobReport.objects.count() == 1
+    assert report.created_at == frozen_timestamp
+    assert report.details == cheat_payload["details"]
+    assert report.trusted_job == trusted_job_docker
+
     job_docker.refresh_from_db()
     assert job_docker.cheated is True
 
-    # Test reporting an already cheated job
-    response = authenticated_api_client.post("/api/v1/cheated-job/", {"job_uuid": str(job_docker.uuid)}, format="json")
-    assert response.status_code == 200
-    assert response.data == {"message": "Job already marked as cheated"}
+    later_timestamp = datetime(2024, 1, 1, 0, 0, 10, tzinfo=UTC)
+    with patch("django.utils.timezone.now", return_value=later_timestamp):
+        response = authenticated_api_client.post("/api/v1/cheated-job/", cheat_payload, format="json")
+    assert response.status_code == 400
+    assert response.data == {"error": "Cheat report already exists for this job"}
+    assert CheatedJobReport.objects.count() == 1
+    report.refresh_from_db()
+    assert report.created_at == frozen_timestamp
 
-    # Test reporting a non-existing job
     response = authenticated_api_client.post(
-        "/api/v1/cheated-job/", {"job_uuid": "00000000-0000-0000-0000-000000000000"}, format="json"
+        "/api/v1/cheated-job/",
+        {
+            "job_uuid": "00000000-0000-0000-0000-000000000000",
+            "trusted_job_uuid": str(trusted_job_docker.uuid),
+        },
+        format="json",
     )
     assert response.status_code == 404
+    assert response.data == {"error": "Job not found"}
+
+
+@pytest.mark.django_db
+def test_cheated_job_viewset_nonexistent_trusted_job(authenticated_api_client, job_docker):
+    response = authenticated_api_client.post(
+        "/api/v1/cheated-job/",
+        {
+            "job_uuid": str(job_docker.uuid),
+            "trusted_job_uuid": "00000000-0000-0000-0000-000000000000",
+        },
+        format="json",
+    )
+    assert response.status_code == 404
+    assert response.data == {"error": "Trusted job not found"}
+
+
+@pytest.mark.django_db
+def test_cheated_job_viewset_optional_fields_empty_payload(
+    authenticated_api_client, job_docker, trusted_job_docker, mock_signature_from_request
+):
+    frozen_timestamp = datetime(2024, 2, 1, tzinfo=UTC)
+    with patch("django.utils.timezone.now", return_value=frozen_timestamp):
+        with patch("project.core.models.Job.report_cheated") as report_mock:
+            response = authenticated_api_client.post(
+                "/api/v1/cheated-job/",
+                {
+                    "job_uuid": str(job_docker.uuid),
+                    "trusted_job_uuid": str(trusted_job_docker.uuid),
+                },
+                format="json",
+            )
+
+    assert response.data == {"message": "Job reported as cheated"}
+    assert response.status_code == 201
+    report_mock.assert_called_once()
+
+    report = CheatedJobReport.objects.get(job=job_docker)
+    assert CheatedJobReport.objects.count() == 1
+    assert report.created_at == frozen_timestamp
+    assert report.details is None
+    assert report.trusted_job == trusted_job_docker
+
+
+@pytest.mark.django_db
+def test_cheated_job_viewset_trusted_job_not_on_trusted_miner(
+    authenticated_api_client, job_docker, user, connected_validator, signature
+):
+    # Create a job that is NOT on a trusted miner
+    non_trusted_job = Job.objects.create(
+        user=user,
+        validator=connected_validator,
+        target_validator_hotkey=connected_validator.ss58_address,
+        docker_image="hello-world",
+        args=[],
+        env={},
+        use_gpu=False,
+        on_trusted_miner=False,
+        signature=signature.model_dump(),
+        download_time_limit=3,
+        execution_time_limit=3,
+        streaming_start_time_limit=3,
+        upload_time_limit=3,
+    )
+
+    response = authenticated_api_client.post(
+        "/api/v1/cheated-job/",
+        {
+            "job_uuid": str(job_docker.uuid),
+            "trusted_job_uuid": str(non_trusted_job.uuid),
+        },
+        format="json",
+    )
+
+    assert response.status_code == 404
+    assert response.data == {"error": "Trusted job not found"}
 
 
 @pytest.mark.django_db

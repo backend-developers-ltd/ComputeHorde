@@ -7,6 +7,7 @@ import subprocess
 from datetime import timedelta
 from pathlib import Path
 from time import monotonic
+from typing import Any
 from unittest import mock
 
 import bittensor
@@ -157,11 +158,15 @@ def get_dummy_signature() -> Signature:
     )
 
 
-def get_dummy_job_cheated_request_v0(uuid: str) -> V0JobCheated:
+def get_dummy_job_cheated_request_v0(
+    uuid: str, trusted_job_uuid: str, details: dict[str, Any]
+) -> V0JobCheated:
     return V0JobCheated(
         type="job.cheated",
         job_uuid=uuid,
         signature=get_dummy_signature(),
+        trusted_job_uuid=trusted_job_uuid,
+        details=details,
     )
 
 
