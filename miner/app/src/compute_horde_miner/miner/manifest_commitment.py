@@ -92,7 +92,7 @@ def has_manifest_changed(
     return current_manifest != chain_manifest
 
 
-async def commit_manifest_to_subtensor(
+def commit_manifest_to_subtensor(
     manifest: dict[ExecutorClass, int],
     wallet: bittensor.wallet,
     subtensor: bittensor.subtensor,

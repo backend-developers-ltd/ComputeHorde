@@ -151,7 +151,7 @@ def commit_manifest_to_chain():
         # Check if manifest has changed
         if has_manifest_changed(manifest, chain_commitment):
             logger.info("Manifest has changed, committing to chain")
-            success = async_to_sync(commit_manifest_to_subtensor)(
+            success = commit_manifest_to_subtensor(
                 manifest, wallet, subtensor, settings.BITTENSOR_NETUID
             )
             if success:
