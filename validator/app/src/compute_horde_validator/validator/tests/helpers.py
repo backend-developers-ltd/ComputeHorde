@@ -27,7 +27,7 @@ from compute_horde.protocol_messages import (
 from compute_horde.utils import ValidatorInfo
 from compute_horde_core.signature import Signature
 from django.conf import settings
-from pydantic import TypeAdapter
+from pydantic import JsonValue, TypeAdapter
 
 from compute_horde_validator.validator.models import SystemEvent
 from compute_horde_validator.validator.organic_jobs.miner_client import MinerClient
@@ -157,11 +157,16 @@ def get_dummy_signature() -> Signature:
     )
 
 
-def get_dummy_job_cheated_request_v0(uuid: str) -> V0JobCheated:
+def get_dummy_job_cheated_request_v0(
+    uuid: str,
+    *,
+    details: JsonValue | None = None,
+) -> V0JobCheated:
     return V0JobCheated(
         type="job.cheated",
         job_uuid=uuid,
         signature=get_dummy_signature(),
+        details=details,
     )
 
 

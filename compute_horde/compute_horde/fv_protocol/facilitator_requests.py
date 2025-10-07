@@ -32,9 +32,14 @@ class V0JobCheated(SignedRequest, BaseModel, extra="forbid"):
     message_type: Literal["V0JobCheated"] = "V0JobCheated"
 
     job_uuid: str
+    details: JsonValue | None = None
 
     def get_signed_payload(self) -> JsonValue:
-        return json.dumps({"job_uuid": self.job_uuid})
+        payload: dict[str, JsonValue] = {"job_uuid": self.job_uuid}
+        if self.details is not None:
+            payload["details"] = self.details
+
+        return json.dumps(payload, sort_keys=True)
 
 
 def to_json_array(data) -> list[JsonValue]:

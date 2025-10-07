@@ -28,6 +28,7 @@ from django.urls import reverse
 from django.utils.timezone import now
 from django_prometheus.models import ExportModelOperationsMixin
 from django_pydantic_field import SchemaField
+from pydantic import JsonValue
 from structlog import get_logger
 from structlog.contextvars import bound_contextvars
 
@@ -204,11 +205,20 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
                     status=protocol_consts.JobStatus.SENT.value,
                 )
 
-    def report_cheated(self, signature: Signature) -> None:
-        """
-        Notify validator of cheated job.
-        """
-        payload = V0JobCheated(job_uuid=str(self.uuid), signature=signature).model_dump()
+    def report_cheated(
+        self,
+        signature: Signature,
+        *,
+        details: JsonValue | None = None,
+    ) -> None:
+        """Notify validator that the job was cheated."""
+
+        payload_model = V0JobCheated(
+            job_uuid=str(self.uuid),
+            signature=signature,
+            details=details,
+        )
+        payload = payload_model.model_dump(exclude_none=True)
         log.debug("sending cheated report", payload=payload)
         self.send_to_validator(payload)
 
@@ -298,6 +308,16 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
         send = async_to_sync(channel_layer.send)
         for channel_name in channels_names:
             send(channel_name, payload)
+
+
+class CheatedJobReport(models.Model):
+    job = models.OneToOneField(Job, on_delete=models.CASCADE, related_name="cheated_report")
+    details = models.JSONField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self) -> str:
+        return f"CheatedJobReport(job_id={self.job_id})"
 
 
 class JobStatus(ExportModelOperationsMixin("job_status"), models.Model):
