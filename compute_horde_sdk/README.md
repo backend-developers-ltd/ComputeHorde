@@ -211,8 +211,22 @@ This is done by **executing a copy** of a job on a **trusted miner** and compari
 Flag `on_trusted_miner=True` tells [`create_job`](https://sdk.computehorde.io/master/api/client.html#compute_horde_sdk.v1.ComputeHordeClient.create_job) 
 to run the duplicate job on the **ComputeHorde validator’s trusted miner** instead of regular ComputeHorde miners.
 
-**If results differ, report the cheating miner** using 
-[`report_cheated_job()`](https://sdk.computehorde.io/master/api/client.html#compute_horde_sdk.v1.ComputeHordeClient.report_cheated_job) method. 
+**If results differ, report the cheating miner** using
+[`report_cheated_job()`](https://sdk.computehorde.io/master/api/client.html#compute_horde_sdk.v1.ComputeHordeClient.report_cheated_job),
+providing the UUID of the trusted job used for comparison. Optionally include additional details in a JSON dictionary.
+
+```python
+await client.report_cheated_job(
+    job_uuid,
+    trusted_job_uuid,
+    details={
+        "expected_hash": trusted_hash,
+        "actual_hash": cheated_hash,
+        "reason": "hash_mismatch",
+    },
+)
+```
+
 The details of the punishment are described in [ComputeHorde's README](https://github.com/backend-developers-ltd/ComputeHorde#formula-calculated-per-validator-in-peak-cycles). 
 
 Cross-validation is a crucial mechanism to **ensure honest mining and maintain ComputeHorde’s reliability**.
