@@ -437,6 +437,11 @@ CONSTANCE_CONFIG = {
         "Additional extension of the allowed block range when validating spendings (upper bound)",
         int,
     ),
+    "DYNAMIC_USE_MANIFEST_COMMITMENTS": (
+        False,
+        "Read manifests from Bittensor knowledge commitments instead of WebSocket connections to miners",
+        bool,
+    ),
 }
 
 # Content Security Policy

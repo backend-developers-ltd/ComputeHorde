@@ -5,8 +5,11 @@ import logging
 import operator
 from functools import reduce
 
+from compute_horde.manifest_utils import parse_commitment_string
 from compute_horde.miner_client.organic import OrganicMinerClient
 from compute_horde_core.executor_class import ExecutorClass
+from constance import config
+from django.conf import settings as django_settings
 from django.db import transaction
 from django.db.models import Min, Q
 
@@ -150,20 +153,78 @@ def event_loop():
         return loop
 
 
+def fetch_manifests_from_commitments(
+    hotkeys: list[ss58_address],
+) -> dict[tuple[ss58_address, ExecutorClass], int]:
+    """
+    Fetch manifests from Bittensor knowledge commitments.
+
+    Only includes results for miners that have commitments on chain.
+    """
+    subtensor_instance = supertensor().subtensor()
+    netuid = django_settings.BITTENSOR_NETUID
+
+    result = {}
+    for hotkey in hotkeys:
+        try:
+            # Get commitment from chain
+            commitment = subtensor_instance.get_commitment(
+                netuid=netuid,
+                hotkey=hotkey,
+            )
+
+            if commitment:
+                # Parse commitment string to manifest dict
+                manifest = parse_commitment_string(commitment)
+
+                # Add all executor classes from manifest to result
+                for executor_class, count in manifest.items():
+                    result[(hotkey, executor_class)] = count
+
+                logger.debug(f"Fetched commitment for {hotkey}: {commitment}")
+            else:
+                logger.debug(f"No commitment found for {hotkey}")
+
+        except Exception as e:
+            logger.warning(f"Failed to get commitment for {hotkey}: {e}")
+            continue
+
+    logger.info(f"Fetched {len(result)} manifest entries from {len(hotkeys)} hotkeys via commitments")
+    return result
+
+
 def sync_manifests():
     block = supertensor().get_current_block()
     neurons = supertensor().get_shielded_neurons()
     max_executors_per_class = get_miner_max_executors_per_class_sync()
-    miners = [
-        (
-            n.hotkey,
-            getattr(n.axon_info, "shield_address", str(n.axon_info.ip)),
-            n.axon_info.port,
-        )
-        for n in neurons
-        if n.axon_info.port
-    ]
-    new_manifests = event_loop().run_until_complete(fetch_manifests_from_miners(miners))
+
+    # Check if we should read from knowledge commitments or via WebSocket
+    if config.DYNAMIC_USE_MANIFEST_COMMITMENTS:
+        logger.info("Fetching manifests from Bittensor knowledge commitments")
+        hotkeys = [n.hotkey for n in neurons]
+        new_manifests = fetch_manifests_from_commitments(hotkeys)
+        # For commitments, we don't have miner addresses, so we create a minimal list
+        miners = [
+            (
+                n.hotkey,
+                getattr(n.axon_info, "shield_address", str(n.axon_info.ip)),
+                n.axon_info.port,
+            )
+            for n in neurons
+            if n.axon_info.port
+        ]
+    else:
+        logger.info("Fetching manifests from miners via WebSocket")
+        miners = [
+            (
+                n.hotkey,
+                getattr(n.axon_info, "shield_address", str(n.axon_info.ip)),
+                n.axon_info.port,
+            )
+            for n in neurons
+            if n.axon_info.port
+        ]
+        new_manifests = event_loop().run_until_complete(fetch_manifests_from_miners(miners))
     with transaction.atomic():
         with Lock(LockType.ALLOWANCE_BLOCK_INJECTION, 10.0):
             # This will throw an error if the lock cannot be obtained in 10.0s and that's correct

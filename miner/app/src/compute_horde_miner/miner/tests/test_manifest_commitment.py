@@ -1,10 +1,10 @@
 import pytest
 from unittest.mock import Mock, patch
 
+from compute_horde.manifest_utils import MAX_COMMITMENT_LENGTH
 from compute_horde_core.executor_class import ExecutorClass
 
 from compute_horde_miner.miner.manifest_commitment import (
-    MAX_COMMITMENT_LENGTH,
     commit_manifest_to_subtensor,
     format_manifest_commitment,
     has_manifest_changed,
