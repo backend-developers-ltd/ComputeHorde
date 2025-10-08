@@ -144,6 +144,7 @@ async def run_regular_flow_test(validator_key: str, job_uuid: str, streaming: bo
                 "executor_class": DEFAULT_EXECUTOR_CLASS,
                 "docker_image": "it's teeeeests again",
                 "docker_run_cmd": [],
+                "env": {"SOME_ENV_VAR": "some value"},
                 "docker_run_options_preset": "none",
                 "volume": {"volume_type": "inline", "contents": "nonsense"},
                 "output_upload": {

@@ -296,6 +296,7 @@ async def drive_organic_job(
         docker_image=job_request.docker_image,
         docker_run_options_preset="nvidia_all" if job_request.use_gpu else "none",
         docker_run_cmd=job_request.get_args(),
+        env=job_request.env if isinstance(job_request.env, dict) else {},
         total_job_timeout=job_request.timeout
         if isinstance(job_request, AdminJobRequest)
         else OrganicJobDetails.total_job_timeout,
