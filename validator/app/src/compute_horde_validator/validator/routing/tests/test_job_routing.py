@@ -37,9 +37,11 @@ JOB_REQUEST = V2JobRequest(
     upload_time_limit=1,
 )
 
-
 # Ensure collateral threshold defaults to 0 for these tests unless explicitly overridden
-pytestmark = pytest.mark.override_config(DYNAMIC_MINIMUM_COLLATERAL_AMOUNT_WEI=0)
+pytestmark = [
+    pytest.mark.override_config(DYNAMIC_MINIMUM_COLLATERAL_AMOUNT_WEI=0),
+    pytest.mark.usefixtures("disable_miner_shuffling"),
+]
 
 
 def clone_job(**updates) -> V2JobRequest:
