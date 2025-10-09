@@ -1,5 +1,6 @@
 import time
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Any, cast
 
 import turbobt
@@ -27,6 +28,15 @@ from .manifests import get_manifest_drops, get_manifests
 from .supertensor import CannotGetCurrentBlock, SuperTensor, SuperTensorError, supertensor
 
 logger = get_task_logger(__name__)
+
+
+@dataclass(slots=True)
+class BlockComputationContext:
+    neurons: list[turbobt.Neuron] | None = None
+    validators: list[ValidatorModel] | None = None
+    stake_shares: dict[ss58_address, float] | None = None
+    manifests: dict[tuple[ss58_address, ExecutorClass], int] | None = None
+    drops: dict[tuple[ss58_address, ExecutorClass], int] | None = None
 
 
 def find_missing_blocks(current_block: int) -> list[int]:
@@ -136,6 +146,46 @@ def process_block_allowance(
     """
     Only call this once the block is already minted
     """
+    block_contexts: dict[int, BlockComputationContext] = {}
+
+    def get_context(block_num: int) -> BlockComputationContext:
+        return block_contexts.setdefault(block_num, BlockComputationContext())
+
+    def get_neurons(block_num: int) -> list[turbobt.Neuron]:
+        ctx = get_context(block_num)
+        if ctx.neurons is None:
+            ctx.neurons = supertensor_.list_neurons(block_num)
+        return ctx.neurons
+
+    def get_validators(block_num: int) -> list[ValidatorModel]:
+        ctx = get_context(block_num)
+        if ctx.validators is None:
+            ctx.validators = supertensor_.list_validators(block_num)
+        return ctx.validators
+
+    def get_stake_shares(block_num: int) -> dict[ss58_address, float]:
+        ctx = get_context(block_num)
+        if ctx.stake_shares is None:
+            validators = get_validators(block_num)
+            ctx.stake_shares = {v.hotkey: get_stake_share(validators, v) for v in validators}
+        return ctx.stake_shares
+
+    def get_manifests_for_block(
+        block_num: int, *, hotkeys: list[ss58_address]
+    ) -> dict[tuple[ss58_address, ExecutorClass], int]:
+        ctx = get_context(block_num)
+        if ctx.manifests is None:
+            ctx.manifests = get_manifests(block_num, hotkeys)
+        return ctx.manifests
+
+    def get_drops_for_block(
+        block_num: int, *, hotkeys: list[ss58_address]
+    ) -> dict[tuple[ss58_address, ExecutorClass], int]:
+        ctx = get_context(block_num)
+        if ctx.drops is None:
+            ctx.drops = get_manifest_drops(block_num, hotkeys)
+        return ctx.drops
+
     with transaction.atomic():
         block_obj = Block.objects.create(
             block_number=block_number,
@@ -143,7 +193,7 @@ def process_block_allowance(
         )
 
         dynamic_multiplier = cast(float, config.DYNAMIC_BLOCK_ALLOWANCE_MULTIPLIER)
-        neurons = supertensor_.list_neurons(block_number)
+        neurons = get_neurons(block_number)
         save_neurons(neurons, block_number)
 
         finalized_blocks = []
@@ -181,23 +231,27 @@ def process_block_allowance(
         for finalized_block in finalized_blocks:
             assert finalized_block.end_timestamp is not None
 
-            neurons = supertensor_.list_neurons(finalized_block.block_number)
+            neurons = get_neurons(finalized_block.block_number)
 
-            validators = supertensor_.list_validators(finalized_block.block_number)
+            validators = get_validators(finalized_block.block_number)
 
             hotkeys_from_metagraph = [neuron.hotkey for neuron in neurons]
 
             with Lock(LockType.ALLOWANCE_BLOCK_INJECTION, 10.0):
                 # This will throw an error if the lock cannot be obtained in 10.0s and that's correct
-                manifests = get_manifests(finalized_block.block_number, hotkeys_from_metagraph)
-                drops = get_manifest_drops(finalized_block.block_number, hotkeys_from_metagraph)
+                manifests = get_manifests_for_block(
+                    finalized_block.block_number, hotkeys=hotkeys_from_metagraph
+                )
+                drops = get_drops_for_block(
+                    finalized_block.block_number, hotkeys=hotkeys_from_metagraph
+                )
                 new_block_allowances = []
 
                 block_duration = (
                     finalized_block.end_timestamp - finalized_block.creation_timestamp
                 ).total_seconds()
 
-                stake_shares = {v.hotkey: get_stake_share(validators, v) for v in validators}
+                stake_shares = get_stake_shares(finalized_block.block_number)
 
                 result[finalized_block.block_number] = (
                     stake_shares,
