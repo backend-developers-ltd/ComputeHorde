@@ -23,12 +23,13 @@ from compute_horde.fv_protocol.validator_requests import (
 )
 from django.utils import timezone
 
+from compute_horde_validator.validator.allowance.default import allowance
 from compute_horde_validator.validator.allowance.tests.mockchain import set_block_number
+from compute_horde_validator.validator.allowance.types import MetagraphData
 from compute_horde_validator.validator.allowance.utils import blocks, manifests
 from compute_horde_validator.validator.allowance.utils.supertensor import supertensor
 from compute_horde_validator.validator.models import (
     Cycle,
-    MetagraphSnapshot,
     Miner,
     MinerBlacklist,
     MinerManifest,
@@ -65,12 +66,28 @@ async def async_patch_all():
             )
 
     with await sync_to_async(set_block_number)(1006):
+        hotkeys = await sync_to_async(list)(Miner.objects.values_list("hotkey", flat=True))
+        metagraph = MetagraphData.model_construct(
+            block=1006,
+            block_hash="hash_1006",
+            total_stake=[],
+            uids=[],
+            hotkeys=hotkeys,
+            serving_hotkeys=hotkeys,
+        )
+
+        allowance_instance = allowance()
+
+        def fake_get_metagraph(block: int | None = None) -> MetagraphData:
+            return metagraph
+
         with (
             patch(
                 "compute_horde_validator.validator.organic_jobs.facilitator_client.verify_request_or_fail",
                 return_value=True,
             ),
             patch("turbobt.Bittensor"),
+            patch.object(allowance_instance, "get_metagraph", new=fake_get_metagraph),
         ):
             yield
 
@@ -95,16 +112,6 @@ async def setup_db(n: int = 1):
             executor_class=DEFAULT_EXECUTOR_CLASS,
             online_executor_count=5,
         )
-    await MetagraphSnapshot.objects.acreate(
-        id=MetagraphSnapshot.SnapshotType.LATEST,
-        block=1,
-        alpha_stake=[],
-        tao_stake=[],
-        stake=[],
-        uids=[],
-        hotkeys=[],
-        serving_hotkeys=[],
-    )
 
 
 async def reap_tasks(*tasks: asyncio.Task):
