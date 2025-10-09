@@ -36,6 +36,10 @@ class DjangoCache(BaseCache):
         pickled_data = pickle.dumps(timestamp)
         cache.set(key, pickled_data, self.cache_timeout)
 
+    def put_block_hash(self, block_number: int, block_hash: str):
+        key = self._get_key("block_hash", block_number)
+        cache.set(key, block_hash, self.cache_timeout)
+
     def get_neurons(self, block_number: int) -> list[turbobt.Neuron] | None:
         key = self._get_key("neurons", block_number)
         pickled_data = cache.get(key)
@@ -61,6 +65,11 @@ class DjangoCache(BaseCache):
         except Exception:
             logger.error("Error deserializing block timestamp:", exc_info=True)
             return None
+
+    def get_block_hash(self, block_number: int) -> str | None:
+        key = self._get_key("block_hash", block_number)
+        result: str | None = cache.get(key)
+        return result
 
     def put_subnet_state(self, block_number: int, state: turbobt.subnet.SubnetState):
         key = self._get_key("subnet_state", block_number)

@@ -1,15 +1,12 @@
 import logging
 import shlex
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime
 from decimal import Decimal
-from enum import IntEnum
 from typing import Self
 
-from asgiref.sync import sync_to_async
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.subtensor import get_cycle_containing_block
-from compute_horde.utils import MIN_VALIDATOR_STAKE
 from compute_horde_core.output_upload import OutputUpload, ZipAndHttpPutUpload
 from compute_horde_core.volume import Volume, ZipUrlVolume
 from django.conf import settings
@@ -151,71 +148,6 @@ class MinerQueryset(models.QuerySet["Miner"]):
         return self.annotate(
             is_blacklisted=Exists(active_blacklist.filter(miner=OuterRef("id"))),
         ).filter(is_blacklisted=False)
-
-
-class MetagraphSnapshot(models.Model):
-    """
-    Snapshot of the metagraph at a specific block.
-    """
-
-    block = models.BigIntegerField()
-    updated_at = models.DateTimeField(auto_now_add=True)
-
-    alpha_stake = ArrayField(models.FloatField())
-    tao_stake = ArrayField(models.FloatField())
-    stake = ArrayField(models.FloatField())
-
-    uids = ArrayField(models.IntegerField())
-    hotkeys = ArrayField(models.CharField(max_length=255))
-    coldkeys = ArrayField(models.CharField(max_length=255), null=True, blank=True)
-
-    # current active miners
-    serving_hotkeys = ArrayField(models.CharField(max_length=255))
-
-    class SnapshotType(IntEnum):
-        LATEST = 0
-        CYCLE_START = 1
-
-    @classmethod
-    def get_latest(cls) -> "MetagraphSnapshot":
-        metagraph = MetagraphSnapshot.objects.get(id=cls.SnapshotType.LATEST)
-        if metagraph.updated_at < now() - timedelta(minutes=1):
-            msg = f"Tried to fetch stale metagraph last updated at: {metagraph.updated_at}"
-            logger.error(msg)
-            SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).create(
-                type=SystemEvent.EventType.METAGRAPH_SYNCING,
-                subtype=SystemEvent.EventSubType.GENERIC_ERROR,
-                long_description=msg,
-                data={"block": metagraph.block},
-            )
-            raise Exception(msg)
-        return metagraph
-
-    @classmethod
-    async def aget_latest(cls) -> "MetagraphSnapshot":
-        return await sync_to_async(cls.get_latest)()
-
-    @classmethod
-    def get_cycle_start(cls) -> "MetagraphSnapshot":
-        return MetagraphSnapshot.objects.get(id=cls.SnapshotType.CYCLE_START)
-
-    @classmethod
-    async def aget_cycle_start(cls) -> "MetagraphSnapshot":
-        return await sync_to_async(cls.get_cycle_start)()
-
-    def get_serving_hotkeys(self) -> list[str]:
-        """
-        Get the list of serving hotkeys.
-        :return: List of serving hotkeys.
-        """
-        return self.serving_hotkeys or []
-
-    def get_total_validator_stake(self) -> float:
-        """
-        Get the total stake for all hotkeys.
-        :return: The total stake.
-        """
-        return sum([s for s in self.stake if s > MIN_VALIDATOR_STAKE])
 
 
 # contains all neurons not only miners

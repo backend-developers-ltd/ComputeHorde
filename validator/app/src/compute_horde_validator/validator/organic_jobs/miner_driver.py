@@ -44,7 +44,6 @@ from compute_horde_validator.validator.allowance.default import allowance
 from compute_horde_validator.validator.dynamic_config import aget_config
 from compute_horde_validator.validator.models import (
     AdminJobRequest,
-    MetagraphSnapshot,
     Miner,
     OrganicJob,
     SystemEvent,
@@ -56,6 +55,10 @@ from compute_horde_validator.validator.routing.types import JobRoute, MinerIncid
 from compute_horde_validator.validator.utils import TRUSTED_MINER_FAKE_KEY
 
 logger = logging.getLogger(__name__)
+
+
+def _get_current_block() -> int:
+    return allowance().get_current_block()
 
 
 def status_update_from_success(job: OrganicJob) -> JobStatusUpdate:
@@ -165,10 +168,6 @@ async def _dummy_notify_callback(_: JobStatusUpdate) -> None:
     pass
 
 
-async def _get_current_block() -> int:
-    return (await MetagraphSnapshot.aget_latest()).block
-
-
 async def execute_organic_job_request(
     job_request: OrganicJobRequest, job_route: JobRoute
 ) -> OrganicJob:
@@ -195,7 +194,7 @@ async def execute_organic_job_request(
     if settings.DEBUG_USE_MOCK_BLOCK_NUMBER:
         block = 5136476 + int((time.time() - 1742076533) / 12)
     else:
-        block = await _get_current_block()
+        block = await sync_to_async(_get_current_block, thread_sensitive=False)()
 
     miner = await Miner.objects.aget(hotkey=job_route.miner.hotkey_ss58)
     job = await OrganicJob.objects.acreate(
