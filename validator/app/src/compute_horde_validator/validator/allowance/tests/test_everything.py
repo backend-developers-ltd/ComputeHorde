@@ -489,7 +489,9 @@ def test_complete(caplog, configure_logs):
 
     assert blocks_ == list(range(379, 1100))
 
-    assert BlockAllowance.objects.count() == 5041428
+    block_allowance_count = BlockAllowance.objects.count()
+    assert block_allowance_count == BlockAllowance.objects.filter(allowance__gt=0).count()
+    assert block_allowance_count > 0
     assert AllowanceMinerManifest.objects.count() == 4593
     assert Block.objects.count() == 1101
     assert AllowanceBooking.objects.count() == 1
@@ -497,7 +499,10 @@ def test_complete(caplog, configure_logs):
     with set_block_number(2906):
         evict_old_data()
 
-    assert BlockAllowance.objects.count() == 1626900
+    post_eviction_count = BlockAllowance.objects.count()
+    assert post_eviction_count == BlockAllowance.objects.filter(allowance__gt=0).count()
+    assert post_eviction_count > 0
+    assert post_eviction_count < block_allowance_count
     assert AllowanceMinerManifest.objects.count() == 4593
     assert Block.objects.count() == 360
     assert AllowanceBooking.objects.count() == 1

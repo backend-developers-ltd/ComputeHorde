@@ -214,16 +214,24 @@ def process_block_allowance(
                 for neuron in neurons:
                     for validator in validators:
                         for executor_class in ExecutorClass:
+                            manifest_count = manifests.get((neuron.hotkey, executor_class), 0.0)
+                            if manifest_count <= 0:
+                                continue
                             validator_stake_share = stake_shares.get(validator.hotkey, 0.0)
+                            if validator_stake_share <= 0:
+                                continue
+                            allowance_value = (
+                                manifest_count
+                                * validator_stake_share
+                                * block_duration
+                                * dynamic_multiplier
+                            )
+                            if allowance_value <= 0:
+                                continue
                             new_block_allowances.append(
                                 BlockAllowance(
                                     block=finalized_block,
-                                    allowance=(
-                                        manifests.get((neuron.hotkey, executor_class), 0.0)
-                                        * validator_stake_share
-                                        * block_duration
-                                        * dynamic_multiplier
-                                    ),
+                                    allowance=allowance_value,
                                     miner_ss58=neuron.hotkey,
                                     validator_ss58=validator.hotkey,
                                     executor_class=executor_class,
