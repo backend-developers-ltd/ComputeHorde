@@ -42,6 +42,7 @@ dependencies = [
     "requests>=2.32.3",
     "turbobt @ git+https://github.com/bactensor/turbobt.git@close_websocket_transport",
     "aiohttp>=3.12.0",
+    "numpy>=2.0",
 ]
 
 [tool.uv.sources]

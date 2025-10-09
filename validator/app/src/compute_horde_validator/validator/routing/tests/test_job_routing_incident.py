@@ -289,15 +289,6 @@ async def reliability_env(
             [1002],
             "Better per-executor reliability wins",
         ),
-        (
-            [
-                MinerScenario("rel_miner_tie_a", allowance=50.0, executors=3, incidents=1),
-                MinerScenario("rel_miner_tie_b", allowance=60.0, executors=3, incidents=1),
-            ],
-            "rel_miner_tie_a",
-            [1003],
-            "Tie on reliability => original allowance order kept",
-        ),
     ],
 )
 async def test_reliability_sorting(
@@ -306,6 +297,7 @@ async def test_reliability_sorting(
     res_blocks: list[int],
     reason: str,
     monkeypatch,
+    disable_miner_shuffling,
 ):
     job_route = await reliability_env(
         miners=miners,

@@ -26,13 +26,13 @@ from compute_horde_validator.validator.collateral.default import collateral
 from compute_horde_validator.validator.models import Miner, MinerIncident
 from compute_horde_validator.validator.receipts.default import receipts
 from compute_horde_validator.validator.routing.base import RoutingBase
-from compute_horde_validator.validator.routing.settings import MINER_RELIABILITY_WINDOW
 from compute_horde_validator.validator.routing.types import (
     AllMinersBusy,
     JobRoute,
     MinerIncidentType,
     NotEnoughCollateralException,
 )
+from compute_horde_validator.validator.routing.utils import weighted_shuffle
 from compute_horde_validator.validator.utils import TRUSTED_MINER_FAKE_KEY
 
 logger = logging.getLogger(__name__)
@@ -163,17 +163,26 @@ def _pick_miner_for_job_v2(request: V2JobRequest) -> JobRoute:
     miners = {miner.hotkey_ss58: miner for miner in allowance().miners()}
     manifests = allowance().get_manifests()
 
-    per_executor_scores = _get_miners_reliability_score(
-        MINER_RELIABILITY_WINDOW, executor_class, manifests
+    reliability_score_per_hotkey = _get_miners_reliability_score(
+        reliability_window=timedelta(hours=float(config.DYNAMIC_ROUTING_RELIABILITY_WINDOW_HOURS)),
+        executor_class=executor_class,
+        manifests=manifests,
     )
 
-    def miner_sort_key(miner_tuple: tuple[str, float]) -> float:
-        # for same reliability, keep original available_allowance order (stable sort)
-        miner_hotkey, _available_allowance = miner_tuple
-        return per_executor_scores.get(miner_hotkey, 0)
+    suitable_hotkeys = [hotkey for hotkey, _ in suitable_miners]
+    hotkey_weights = [reliability_score_per_hotkey.get(hk, 0) for hk in suitable_hotkeys]
 
-    # Sort suitable miners by per-executor reliability (higher is better)
-    suitable_miners.sort(key=miner_sort_key, reverse=True)
+    # Default score of 0 - meaning no wrongdoings if we have no data.
+    # Note on score values:
+    # - any score lower than the cutoff, no matter how low, is only slightly worse than the cutoff value.
+    # - similarly, any amount over 0 is only slightly better than 0.
+    prioritized_hotkeys = weighted_shuffle(
+        items=suitable_hotkeys,
+        weights=hotkey_weights,
+        # With steepness >5 there is a strong cutoff at ~center*2, hence center~=cutoff/2
+        center=float(config.DYNAMIC_ROUTING_RELIABILITY_SOFT_CUTOFF) / 2,
+        steepness=float(config.DYNAMIC_ROUTING_RELIABILITY_SEPARATION),
+    )
 
     # Get receipts instance once to avoid bound method issues with async_to_sync
     receipts_instance = receipts()
@@ -185,7 +194,7 @@ def _pick_miner_for_job_v2(request: V2JobRequest) -> JobRoute:
     busy_executors = async_to_sync(get_busy_executor_count)(executor_class, timezone.now())
 
     # Iterate and try to reserve a miner
-    for miner_hotkey, _ in suitable_miners:
+    for miner_hotkey in prioritized_hotkeys:
         ongoing_jobs = busy_executors.get(miner_hotkey, 0)
 
         executor_dict = manifests.get(miner_hotkey, {})

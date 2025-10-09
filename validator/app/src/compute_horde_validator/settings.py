@@ -101,7 +101,6 @@ PROMETHEUS_LATENCY_BUCKETS = (
     float("inf"),
 )
 
-
 MIDDLEWARE = [
     #  'django_prometheus.middleware.PrometheusBeforeMiddleware',
     "django.middleware.security.SecurityMiddleware",
@@ -113,7 +112,6 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     #  'django_prometheus.middleware.PrometheusAfterMiddleware',
 ]
-
 
 if DEBUG_TOOLBAR := env.bool("DEBUG_TOOLBAR", default=False):
     INTERNAL_IPS = [
@@ -437,6 +435,25 @@ CONSTANCE_CONFIG = {
         "Additional extension of the allowed block range when validating spendings (upper bound)",
         int,
     ),
+    "DYNAMIC_ROUTING_RELIABILITY_WINDOW_HOURS": (
+        24,
+        "Any misbehavior within this rolling window counts towards decreasing the reliability score.",
+        float,
+    ),
+    "DYNAMIC_ROUTING_RELIABILITY_SOFT_CUTOFF": (
+        -50,
+        "MUST be < 0."
+        "Miners with reliability scores near and below this are **very unlikely** to receive jobs, unless all other "
+        "miners are busy at the time. ",
+        float,
+    ),
+    "DYNAMIC_ROUTING_RELIABILITY_SEPARATION": (
+        5,
+        "Preferably >=5. "
+        "Determines how strongly miners closer to perfect reliability are preferred over those closer to the cutoff. "
+        "Translates to the steepness parameter of the shuffling function. See its documentation for details. ",
+        float,
+    ),
 }
 
 # Content Security Policy
@@ -461,7 +478,6 @@ if CSP_ENABLED := env.bool("CSP_ENABLED", default=False):
 
     CSP_BLOCK_ALL_MIXED_CONTENT = env.bool("CSP_BLOCK_ALL_MIXED_CONTENT", default=False)
     CSP_EXCLUDE_URL_PREFIXES = env.tuple("CSP_EXCLUDE_URL_PREFIXES", default=tuple())
-
 
 ROOT_URLCONF = "compute_horde_validator.urls"
 
@@ -505,11 +521,9 @@ DEFAULT_DB_ALIAS = (
 )
 DATABASES[DEFAULT_DB_ALIAS] = DATABASES["default"]
 
-
 if new_name := env.str("DEBUG_OVERRIDE_DATABASE_NAME", default=None):
     DATABASES["default"]["NAME"] = new_name
     DATABASES[DEFAULT_DB_ALIAS]["NAME"] = new_name
-
 
 AUTH_PASSWORD_VALIDATORS = [
     {
@@ -827,7 +841,6 @@ CONFIG_CONTRACT_ADDRESS = env.str(
     "CONFIG_CONTRACT_ADDRESS", default="0x6034a34677b7c715EA97ED25Ee6B2A8DcB7c641E"
 )
 USE_CONTRACT_CONFIG = env.bool("USE_CONTRACT_CONFIG", default=True)
-
 
 # synthetic jobs are evenly distributed through the cycle, however
 # we start them from some offset because scheduling takes some time
