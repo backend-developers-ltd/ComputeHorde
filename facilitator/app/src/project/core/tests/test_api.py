@@ -1,5 +1,6 @@
 import json
 import time
+from datetime import UTC, datetime
 from http import HTTPStatus
 from unittest.mock import patch
 
@@ -12,7 +13,9 @@ from django.contrib.auth.models import User
 from rest_framework.exceptions import ErrorDetail
 from rest_framework.test import APIClient
 
-from project.core.models import HotkeyWhitelist, Job, JobFeedback, Validator
+from project.core.models import CheatedJobReport, HotkeyWhitelist, Job, JobFeedback, Validator
+
+UTC = UTC
 
 
 @pytest.fixture
@@ -391,25 +394,76 @@ def test_job_feedback__already_exists(authenticated_api_client, mock_signature_f
 
 @pytest.mark.django_db
 def test_cheated_job_viewset(authenticated_api_client, job_docker):
-    # Test marking a job as cheated
-    response = authenticated_api_client.post("/api/v1/cheated-job/", {"job_uuid": str(job_docker.uuid)}, format="json")
+    cheat_payload = {
+        "job_uuid": str(job_docker.uuid),
+        "details": {
+            "trusted_job_uuid": "11111111-2222-3333-4444-555555555555",
+            "reason": "hash_mismatch",
+        },
+    }
+
+    frozen_timestamp = datetime(2024, 1, 1, tzinfo=UTC)
+
+    with patch("django.utils.timezone.now", return_value=frozen_timestamp):
+        with patch("project.core.models.Job.report_cheated") as report_mock:
+            response = authenticated_api_client.post("/api/v1/cheated-job/", cheat_payload, format="json")
+
     assert response.status_code == 200
     assert response.data == {"message": "Job reported as cheated"}
 
-    # Verify the job has been marked as cheated in the database
+    report_mock.assert_called_once()
+    _, kwargs = report_mock.call_args
+    assert kwargs == {
+        "details": cheat_payload["details"],
+    }
+
+    report = CheatedJobReport.objects.get(job=job_docker)
+    assert CheatedJobReport.objects.count() == 1
+    assert report.created_at == frozen_timestamp
+    assert report.details == cheat_payload["details"]
+
     job_docker.refresh_from_db()
     assert job_docker.cheated is True
 
-    # Test reporting an already cheated job
-    response = authenticated_api_client.post("/api/v1/cheated-job/", {"job_uuid": str(job_docker.uuid)}, format="json")
+    later_timestamp = datetime(2024, 1, 1, 0, 0, 10, tzinfo=UTC)
+    with patch("django.utils.timezone.now", return_value=later_timestamp):
+        response = authenticated_api_client.post("/api/v1/cheated-job/", cheat_payload, format="json")
     assert response.status_code == 200
     assert response.data == {"message": "Job already marked as cheated"}
+    assert CheatedJobReport.objects.count() == 1
+    report.refresh_from_db()
+    assert report.created_at == frozen_timestamp
 
-    # Test reporting a non-existing job
     response = authenticated_api_client.post(
-        "/api/v1/cheated-job/", {"job_uuid": "00000000-0000-0000-0000-000000000000"}, format="json"
+        "/api/v1/cheated-job/",
+        {
+            "job_uuid": "00000000-0000-0000-0000-000000000000",
+        },
+        format="json",
     )
     assert response.status_code == 404
+
+
+@pytest.mark.django_db
+def test_cheated_job_viewset_optional_fields_empty_payload(authenticated_api_client, job_docker):
+    frozen_timestamp = datetime(2024, 2, 1, tzinfo=UTC)
+    with patch("django.utils.timezone.now", return_value=frozen_timestamp):
+        with patch("project.core.models.Job.report_cheated") as report_mock:
+            response = authenticated_api_client.post(
+                "/api/v1/cheated-job/",
+                {"job_uuid": str(job_docker.uuid)},
+                format="json",
+            )
+
+    assert response.status_code == 200
+    report_mock.assert_called_once()
+    _, kwargs = report_mock.call_args
+    assert kwargs == {"details": None}
+
+    report = CheatedJobReport.objects.get(job=job_docker)
+    assert CheatedJobReport.objects.count() == 1
+    assert report.created_at == frozen_timestamp
+    assert report.details is None
 
 
 @pytest.mark.django_db

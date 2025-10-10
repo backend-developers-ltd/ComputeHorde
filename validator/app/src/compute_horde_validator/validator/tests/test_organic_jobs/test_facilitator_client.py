@@ -313,7 +313,14 @@ async def test_facilitator_client__cheated_job():
     await setup_db()
     facilitator_client = FacilitatorClient(get_keypair(), "ws://127.0.0.1:1233/")
     job_uuid = str(uuid.uuid4())
-    cheated_job_request = get_dummy_job_cheated_request_v0(job_uuid)
+    report_details = {
+        "trusted_job_uuid": str(uuid.uuid4()),
+        "reason": "hash_mismatch",
+    }
+    cheated_job_request = get_dummy_job_cheated_request_v0(
+        job_uuid,
+        details=report_details,
+    )
 
     async with async_patch_all():
         miner = await Miner.objects.afirst()
