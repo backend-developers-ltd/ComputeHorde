@@ -431,82 +431,83 @@ class PrecachingSuperTensor(SuperTensor):
             self.start_producer()
 
     def worker(self, ind: int):
-        while True:
-            asyncio.set_event_loop(asyncio.new_event_loop())
-            super_tensor = SuperTensor(
+        def new_worker_supertensor() -> SuperTensor:
+            return SuperTensor(
                 network=self.network,
                 archive_network=self.archive_network,
                 netuid=self.netuid,
                 wallet=self._wallet,
                 shield_metagraph_options=self._shield_metagraph_options,
             )
+
+        asyncio.set_event_loop(asyncio.new_event_loop())
+        super_tensor = new_worker_supertensor()
+
+        while True:
             try:
-                while True:
-                    task: TaskType
-                    block_number: int
-                    if self.closing:
-                        logger.debug(f"Worker {ind} quitting")
-                        return
-                    task, block_number = self.task_queue.get()
-                    logger.debug(f"Worker {ind} processing task {task} for block {block_number}")
-                    if task == TaskType.THE_END:
-                        logger.debug(f"Worker {ind} quitting")
-                        return
-                    elif task == TaskType.NEURONS:
-                        if self.cache.get_neurons(block_number) is not None:
-                            logger.debug(
-                                f"Worker {ind} skipping task {task} for block {block_number} (cached)"
-                            )
-                            continue
-                        self.cache.put_neurons(
-                            block_number, super_tensor.list_neurons(block_number)
+                if self.closing:
+                    logger.debug(f"Worker {ind} quitting")
+                    break
+                task, block_number = self.task_queue.get()
+                logger.debug(f"Worker {ind} processing task {task} for block {block_number}")
+                if task == TaskType.THE_END:
+                    logger.debug(f"Worker {ind} quitting")
+                    break
+                elif task == TaskType.NEURONS:
+                    if self.cache.get_neurons(block_number) is not None:
+                        logger.debug(
+                            f"Worker {ind} skipping task {task} for block {block_number} (cached)"
                         )
-                    elif task == TaskType.BLOCK_TIMESTAMP:
-                        if self.cache.get_block_timestamp(block_number) is not None:
-                            logger.debug(
-                                f"Worker {ind} skipping task {task} for block {block_number} (cached)"
-                            )
-                            continue
-                        self.cache.put_block_timestamp(
-                            block_number, super_tensor.get_block_timestamp(block_number)
+                        continue
+                    self.cache.put_neurons(block_number, super_tensor.list_neurons(block_number))
+                elif task == TaskType.BLOCK_TIMESTAMP:
+                    if self.cache.get_block_timestamp(block_number) is not None:
+                        logger.debug(
+                            f"Worker {ind} skipping task {task} for block {block_number} (cached)"
                         )
-                    elif task == TaskType.BLOCK_HASH:
-                        if self.cache.get_block_hash(block_number) is not None:
-                            logger.debug(
-                                f"Worker {ind} skipping task {task} for block {block_number} (cached)"
-                            )
-                            continue
-                        self.cache.put_block_hash(
-                            block_number, super_tensor.get_block_hash(block_number)
+                        continue
+                    self.cache.put_block_timestamp(
+                        block_number, super_tensor.get_block_timestamp(block_number)
+                    )
+                elif task == TaskType.BLOCK_HASH:
+                    if self.cache.get_block_hash(block_number) is not None:
+                        logger.debug(
+                            f"Worker {ind} skipping task {task} for block {block_number} (cached)"
                         )
-                    elif task == TaskType.SUBNET_STATE:
-                        if self.cache.get_subnet_state(block_number) is not None:
-                            logger.debug(
-                                f"Worker {ind} skipping task {task} for block {block_number} (cached)"
-                            )
-                            continue
-                        self.cache.put_subnet_state(
-                            block_number, super_tensor.get_subnet_state(block_number)
+                        continue
+                    self.cache.put_block_hash(block_number, super_tensor.get_block_hash(block_number))
+                elif task == TaskType.SUBNET_STATE:
+                    if self.cache.get_subnet_state(block_number) is not None:
+                        logger.debug(
+                            f"Worker {ind} skipping task {task} for block {block_number} (cached)"
                         )
-                    elif task == TaskType.VALIDATORS:
-                        if self.cache.get_validators(block_number) is not None:
-                            logger.debug(
-                                f"Worker {ind} skipping task {task} for block {block_number} (cached)"
-                            )
-                            continue
-                        self.cache.put_validators(
-                            block_number, super_tensor.list_validators(block_number)
+                        continue
+                    self.cache.put_subnet_state(
+                        block_number, super_tensor.get_subnet_state(block_number)
+                    )
+                elif task == TaskType.VALIDATORS:
+                    if self.cache.get_validators(block_number) is not None:
+                        logger.debug(
+                            f"Worker {ind} skipping task {task} for block {block_number} (cached)"
                         )
-                    else:
-                        assert_never(task)
-                    logger.debug(f"Worker {ind} finished task {task} for block {block_number}")
+                        continue
+                    self.cache.put_validators(block_number, super_tensor.list_validators(block_number))
+                else:
+                    assert_never(task)
+                logger.debug(f"Worker {ind} finished task {task} for block {block_number}")
             except ArchiveSubtensorNotConfigured:
-                pass
+                logger.debug(f"Worker {ind} encountered ArchiveSubtensorNotConfigured; retrying")
+                time.sleep(1)
+                super_tensor.close()
+                asyncio.set_event_loop(asyncio.new_event_loop())
+                super_tensor = new_worker_supertensor()
             except Exception as e:
                 logger.error(f"Error in worker ({ind=}) thread: {e}", exc_info=True)
                 time.sleep(1)
-            finally:
                 super_tensor.close()
+                asyncio.set_event_loop(asyncio.new_event_loop())
+                super_tensor = new_worker_supertensor()
+        super_tensor.close()
 
     def start_workers(self):
         for ind in range(N_THREADS):
