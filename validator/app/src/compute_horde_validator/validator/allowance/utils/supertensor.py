@@ -19,6 +19,7 @@ import websockets
 from bt_ddos_shield.shield_metagraph import ShieldMetagraphOptions
 from bt_ddos_shield.turbobt import ShieldedBittensor
 from compute_horde.blockchain.block_cache import get_current_block
+from compute_horde.utils import MIN_VALIDATOR_STAKE, VALIDATORS_LIMIT
 
 from compute_horde_validator.validator.allowance.types import MetagraphData, ValidatorModel
 
@@ -29,7 +30,6 @@ bittensor_context: contextvars.ContextVar[turbobt.Bittensor] = contextvars.Conte
 subnet_context: contextvars.ContextVar[turbobt.subnet.SubnetReference] = contextvars.ContextVar(
     "subnet"
 )
-
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +57,6 @@ RETRY_ON_TIMEOUT = tenacity.retry(
     stop=tenacity.stop_after_attempt(3),
     wait=tenacity.wait_exponential(multiplier=0.1, min=0.1, max=0.8),
 )
-
 
 T = TypeVar("T")
 P = TypeVar("P")
@@ -207,20 +206,25 @@ class SuperTensor(BaseSuperTensor):
             return result
 
     def list_validators(self, block_number: int) -> list[ValidatorModel]:
-        neurons = self.list_neurons(block_number)
-        subnet_state = self.get_subnet_state(block_number)
-        validators = [n for n in neurons if n.stake >= 1000]
-        total_stake = subnet_state.get("total_stake", [])
-        return [
-            ValidatorModel(
-                uid=n.uid,
-                hotkey=n.hotkey,
-                effective_stake=total_stake[n.uid]
-                if n.uid < len(total_stake) and total_stake[n.uid] is not None
-                else 0.0,
-            )
-            for n in validators
+        # Pull relevant neuron data from subnet state
+        # We have to use subnet state because it has the correct total stake that includes up-to-date root stake etc.
+        state = self.get_subnet_state(block_number)
+        uids = range(len(state.get("hotkeys", [])))
+        hotkeys = state.get("hotkeys", [])
+        total_stake = [s / 1_000_000_000 for s in state.get("total_stake", [])]
+
+        # Filter out neurons with a stake lower than MIN_VALIDATOR_STAKE
+        maybe_validators = [
+            ValidatorModel(uid=uid, hotkey=hotkey, effective_stake=total_stake)
+            for uid, hotkey, total_stake in zip(uids, hotkeys, total_stake)
+            if total_stake >= MIN_VALIDATOR_STAKE
         ]
+
+        # We accept up to VALIDATORS_LIMIT validators, preferring the ones with the highest stake
+        maybe_validators.sort(key=lambda v: v.effective_stake, reverse=True)
+        validators = maybe_validators[:VALIDATORS_LIMIT]
+
+        return validators
 
     def _build_metagraph_data(self, block_number: int) -> MetagraphData:
         block_hash = self.get_block_hash(block_number)
