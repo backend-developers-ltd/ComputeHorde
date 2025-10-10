@@ -496,6 +496,7 @@ class OrganicJobDetails:
     job_timing: TimingDetails | None = None
     docker_run_options_preset: DockerRunOptionsPreset = "nvidia_all"
     docker_run_cmd: list[str] = field(default_factory=list)
+    env: dict[str, str] = field(default_factory=dict)
     total_job_timeout: int = 300  # Deprecated, use job_timing instead.
     volume: Volume | None = None
     output: OutputUpload | None = None
@@ -610,6 +611,7 @@ async def execute_organic_job_on_miner(
                     docker_image=job_details.docker_image,
                     docker_run_options_preset=job_details.docker_run_options_preset,
                     docker_run_cmd=job_details.docker_run_cmd,
+                    env=job_details.env,
                     volume=None,  # Was sent in the initial request
                     output_upload=job_details.output,
                     artifacts_dir=job_details.artifacts_dir,

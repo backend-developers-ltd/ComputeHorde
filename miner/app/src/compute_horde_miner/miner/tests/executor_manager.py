@@ -56,6 +56,7 @@ async def fake_executor(token, streaming=False):
         "message_type": "V0JobRequest",
         "executor_class": DEFAULT_EXECUTOR_CLASS,
         "docker_image": "it's teeeeests again",
+        "env": {"SOME_ENV_VAR": "some value"},
         "raw_script": None,
         "docker_run_options_preset": "none",
         "docker_run_cmd": [],
