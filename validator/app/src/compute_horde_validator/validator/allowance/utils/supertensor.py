@@ -1,12 +1,15 @@
 import abc
 import asyncio
+import concurrent.futures
 import contextvars
 import datetime
 import enum
 import functools
 import logging
+import queue
 import threading
 import time
+import typing
 from collections import deque
 from collections.abc import Awaitable, Callable
 from queue import Queue
@@ -16,6 +19,7 @@ import bittensor_wallet
 import tenacity
 import turbobt
 import websockets
+from asgiref.sync import async_to_sync
 from bt_ddos_shield.shield_metagraph import ShieldMetagraphOptions
 from bt_ddos_shield.turbobt import ShieldedBittensor
 from compute_horde.blockchain.block_cache import get_current_block
@@ -23,6 +27,12 @@ from compute_horde.blockchain.block_cache import get_current_block
 from compute_horde_validator.validator.allowance.types import MetagraphData, ValidatorModel
 
 DEFAULT_TIMEOUT = 30.0
+
+# Type variables
+T = TypeVar("T")
+P = TypeVar("P")
+
+
 
 # Context variables for bittensor and subnet
 bittensor_context: contextvars.ContextVar[turbobt.Bittensor] = contextvars.ContextVar("bittensor")
@@ -59,18 +69,34 @@ RETRY_ON_TIMEOUT = tenacity.retry(
 )
 
 
-T = TypeVar("T")
-P = TypeVar("P")
-
-
 def make_sync(func: Callable[..., Awaitable[T]]) -> Callable[..., T]:
     @functools.wraps(func)
     def wrapper(s: "SuperTensor", *args, **kwargs) -> T:
+        # Guard against direct async usage - enforce sync_to_async pattern
         try:
-            return s.loop.run_until_complete(
-                asyncio.wait_for(func(s, *args, **kwargs), timeout=DEFAULT_TIMEOUT)
+            asyncio.get_running_loop()
+            raise RuntimeError(
+                f"SuperTensor.{func.__name__}() cannot be called from async contexts. "
+                f"Use sync_to_async(supertensor.{func.__name__})() instead."
             )
+        except RuntimeError as e:
+            if "cannot be called from async contexts" in str(e):
+                raise  # Re-raise our guard error
+            # No running loop - this is expected for sync contexts
+            pass
+        
+        # Dispatch coroutine to dedicated background loop
+        if s.loop is None:
+            raise RuntimeError("SuperTensor background loop not initialized")
+        
+        coro = func(s, *args, **kwargs)
+        future = asyncio.run_coroutine_threadsafe(coro, s.loop)
+        
+        try:
+            return future.result(timeout=DEFAULT_TIMEOUT)
         except TimeoutError as ex:
+            raise SuperTensorTimeout from ex
+        except concurrent.futures.TimeoutError as ex:
             raise SuperTensorTimeout from ex
 
     return wrapper
@@ -176,9 +202,40 @@ class SuperTensor(BaseSuperTensor):
             self.archive_bittensor = None
             self.archive_subnet = None
 
-        self.loop = asyncio.get_event_loop()
-
         self._neuron_list_cache: deque[tuple[int, list[turbobt.Neuron]]] = deque(maxlen=15)
+        
+        # Set up dedicated background event loop
+        self.loop: asyncio.AbstractEventLoop | None = None
+        self._background_thread: threading.Thread | None = None
+        self._loop_ready = threading.Event()
+        self._setup_background_loop()
+
+    def _setup_background_loop(self) -> None:
+        """Set up dedicated background event loop for all async operations."""
+        def loop_runner() -> None:
+            # Create new event loop for this thread
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            self.loop = loop
+            
+            # Signal that loop is ready
+            self._loop_ready.set()
+            
+            try:
+                # Run the loop until shutdown
+                loop.run_forever()
+            finally:
+                loop.close()
+        
+        self._background_thread = threading.Thread(
+            target=loop_runner, 
+            daemon=True, 
+            name=f"SuperTensor-{id(self)}"
+        )
+        self._background_thread.start()
+        
+        # Wait for loop to be ready
+        self._loop_ready.wait()
 
     def oldest_reachable_block(self) -> float | int:
         if self.archive_bittensor is not None:
@@ -310,9 +367,39 @@ class SuperTensor(BaseSuperTensor):
         return current_block - 5
 
     def close(self):
-        self.loop.run_until_complete(self.bittensor.close())
-        if self.archive_bittensor is not None:
-            self.loop.run_until_complete(self.archive_bittensor.close())
+        """Properly shut down SuperTensor and its background event loop."""
+        if self.loop is None or self._background_thread is None:
+            return  # Already closed or never initialized
+            
+        # Schedule resource cleanup on the background loop
+        async def _close_resources():
+            await self.bittensor.close()
+            if self.archive_bittensor is not None:
+                await self.archive_bittensor.close()
+        
+        # Schedule the cleanup
+        future = asyncio.run_coroutine_threadsafe(_close_resources(), self.loop)
+        
+        try:
+            # Wait for cleanup to complete with timeout
+            future.result(timeout=DEFAULT_TIMEOUT)
+        except (TimeoutError, concurrent.futures.TimeoutError):
+            logger.warning("SuperTensor resource cleanup timed out")
+        except Exception as e:
+            logger.error(f"Error during SuperTensor resource cleanup: {e}")
+        
+        # Stop the background loop
+        self.loop.call_soon_threadsafe(self.loop.stop)
+        
+        # Wait for background thread to finish
+        if self._background_thread.is_alive():
+            self._background_thread.join(timeout=5.0)
+            if self._background_thread.is_alive():
+                logger.warning("SuperTensor background thread did not shut down cleanly")
+        
+        # Clean up references
+        self.loop = None
+        self._background_thread = None
 
 
 N_THREADS = 10
