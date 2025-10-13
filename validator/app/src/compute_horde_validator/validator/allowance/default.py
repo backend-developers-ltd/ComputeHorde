@@ -3,7 +3,7 @@
 from compute_horde_core.executor_class import ExecutorClass
 
 from .base import AllowanceBase
-from .types import Miner, Neuron, block_ids, reservation_id, ss58_address
+from .types import MetagraphData, Miner, Neuron, block_ids, reservation_id, ss58_address
 from .utils import blocks, booking, manifests, metagraph
 from .utils.spending import (
     InMemorySpendingBookkeeper,
@@ -45,6 +45,9 @@ class Allowance(AllowanceBase):
 
     def get_manifests(self) -> dict[ss58_address, dict[ExecutorClass, int]]:
         return manifests.get_current_manifests()
+
+    def get_metagraph(self, block: int | None = None) -> MetagraphData:
+        return supertensor().get_metagraph(block)
 
     def miners(self) -> list[Miner]:
         return metagraph.miners()
