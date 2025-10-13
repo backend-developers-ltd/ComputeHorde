@@ -54,6 +54,7 @@ class SystemEvent(models.Model):
         COMPUTE_TIME_ALLOWANCE = "COMPUTE_TIME_ALLOWANCE"
         METAGRAPH_SYNCING = "METAGRAPH_SYNCING"
         COLLATERAL_SYNCING = "COLLATERAL_SYNCING"
+        JOB_ROUTING = "JOB_ROUTING"
 
     class EventSubType(models.TextChoices):
         SUCCESS = "SUCCESS"
@@ -118,6 +119,8 @@ class SystemEvent(models.Model):
         BLOCK_ALREADY_INSERTED_PROBABLY_BLOCK_CACHE_JITTER_IGNORE_ME_FOR_NOW = (
             "BLOCK_ALREADY_INSERTED_PROBABLY_BLOCK_CACHE_JITTER_IGNORE_ME_FOR_NOW"
         )
+        JOB_ROUTING_SUCCESS = "JOB_ROUTING_SUCCESS"
+        JOB_ROUTING_FAILURE = "JOB_ROUTING_FAILURE"
 
     type = models.CharField(max_length=255, choices=EventType.choices)
     subtype = models.CharField(max_length=255, choices=EventSubType.choices)

@@ -23,7 +23,7 @@ from compute_horde_validator.validator.allowance.types import (
     Miner as AllowanceMiner,
 )
 from compute_horde_validator.validator.collateral.default import collateral
-from compute_horde_validator.validator.models import Miner, MinerIncident
+from compute_horde_validator.validator.models import Miner, MinerIncident, SystemEvent
 from compute_horde_validator.validator.receipts.default import receipts
 from compute_horde_validator.validator.routing.base import RoutingBase
 from compute_horde_validator.validator.routing.types import (
@@ -176,7 +176,7 @@ def _pick_miner_for_job_v2(request: V2JobRequest) -> JobRoute:
     # Note on score values:
     # - any score lower than the cutoff, no matter how low, is only slightly worse than the cutoff value.
     # - similarly, any amount over 0 is only slightly better than 0.
-    prioritized_hotkeys = weighted_shuffle(
+    prioritized_hotkeys, probs = weighted_shuffle(
         items=suitable_hotkeys,
         weights=hotkey_weights,
         # With steepness >5 there is a strong cutoff at ~center*2, hence center~=cutoff/2
@@ -193,6 +193,23 @@ def _pick_miner_for_job_v2(request: V2JobRequest) -> JobRoute:
 
     busy_executors = async_to_sync(get_busy_executor_count)(executor_class, timezone.now())
 
+    system_event = SystemEvent(
+        type=SystemEvent.EventType.JOB_ROUTING,
+        long_description=f"Job {request.uuid} routing report",
+        data={
+            "job_uuid": request.uuid,
+            "executor_class": executor_class.value,
+            "current_block": current_block,
+            "executor_seconds": executor_seconds,
+            "collateral_threshold": collateral_threshold,
+            "reliability_scores": reliability_score_per_hotkey,
+            "pick_probabilities": dict(zip(suitable_hotkeys, probs)),
+            "manifests": manifests,
+            "busy_executors": busy_executors,
+            "skipped_miners": {},  # Hotkey: reason; Filled in later
+        },
+    )
+
     # Iterate and try to reserve a miner
     for miner_hotkey in prioritized_hotkeys:
         ongoing_jobs = busy_executors.get(miner_hotkey, 0)
@@ -205,6 +222,7 @@ def _pick_miner_for_job_v2(request: V2JobRequest) -> JobRoute:
                 f"Skipping miner {miner_hotkey} with {executor_count} executors "
                 f"{ongoing_jobs} ongoing jobs at [{current_block}]"
             )
+            system_event.data["skipped_miners"][miner_hotkey] = "busy"
             continue
 
         logger.info(
@@ -231,6 +249,9 @@ def _pick_miner_for_job_v2(request: V2JobRequest) -> JobRoute:
             logger.info(
                 f"Successfully reserved miner {miner_hotkey} for job {request.uuid} with reservation ID {reservation_id}"
             )
+            system_event.subtype = SystemEvent.EventSubType.JOB_ROUTING_SUCCESS
+            system_event.data["picked_miner"] = miner_hotkey
+            system_event.save()
             return JobRoute(
                 miner=miner,
                 allowance_blocks=blocks,
@@ -242,10 +263,13 @@ def _pick_miner_for_job_v2(request: V2JobRequest) -> JobRoute:
             logger.debug(
                 f"Failed to reserve miner {miner_hotkey} for job {request.uuid}, trying next one."
             )
+            system_event.data["skipped_miners"][miner_hotkey] = "cannot reserve allowance"
             continue  # Try the next miner in the list
 
     # If the loop completes without returning, all suitable miners failed to be reserved
     logger.warning(f"All suitable miners were busy or failed to reserve for job {request.uuid}.")
+    system_event.subtype = SystemEvent.EventSubType.JOB_ROUTING_FAILURE
+    system_event.save()
     raise AllMinersBusy("Could not reserve any of the suitable miners.")
 
 

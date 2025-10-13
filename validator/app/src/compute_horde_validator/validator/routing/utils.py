@@ -25,7 +25,7 @@ def sigmoid(x: NDArray[np.floating[Any]], k: float, c: float) -> NDArray[np.floa
 
 def weighted_shuffle(
     items: list[T], weights: list[float], center: float, steepness: float
-) -> list[T]:
+) -> tuple[list[T], list[float]]:
     """
     Shuffles items by weighted random selection based on provided weights.
     Returns items in a random order, but higher weighted items are biased **towards the beginning**.
@@ -38,12 +38,16 @@ def weighted_shuffle(
         center: Center point of the sigmoid. See the visualization above.
         steepness: Sigmoid steepness parameter. See the visualization above.
 
+    Returns:
+        tuple: A tuple containing:
+            - list[T]: Shuffled items list
+            - list[float]: Corresponding probability values for each shuffled item
     """
     if len(items) != len(weights):
         raise ValueError("Items and weights must have the same length")
 
     if len(items) == 0:
-        return []
+        return [], []
 
     weights_arr = np.array(weights, dtype=float)
 
@@ -62,4 +66,4 @@ def weighted_shuffle(
     # Weighted shuffle!
     indices = np.arange(len(items))
     shuffled_indices = np.random.choice(indices, size=len(items), replace=False, p=probs)
-    return [items[i] for i in shuffled_indices]
+    return [items[i] for i in shuffled_indices], [probs[i] for i in shuffled_indices]

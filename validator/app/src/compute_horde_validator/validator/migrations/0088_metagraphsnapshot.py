@@ -5,25 +5,67 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('validator', '0087_alter_systemevent_type'),
+        ("validator", "0087_alter_systemevent_type"),
     ]
 
     operations = [
         migrations.CreateModel(
-            name='MetagraphSnapshot',
+            name="MetagraphSnapshot",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('block', models.BigIntegerField()),
-                ('updated_at', models.DateTimeField(auto_now_add=True)),
-                ('alpha_stake', django.contrib.postgres.fields.ArrayField(base_field=models.FloatField(), size=None)),
-                ('tao_stake', django.contrib.postgres.fields.ArrayField(base_field=models.FloatField(), size=None)),
-                ('stake', django.contrib.postgres.fields.ArrayField(base_field=models.FloatField(), size=None)),
-                ('uids', django.contrib.postgres.fields.ArrayField(base_field=models.IntegerField(), size=None)),
-                ('hotkeys', django.contrib.postgres.fields.ArrayField(base_field=models.CharField(max_length=255), size=None)),
-                ('coldkeys', django.contrib.postgres.fields.ArrayField(base_field=models.CharField(max_length=255), blank=True, null=True, size=None)),
-                ('serving_hotkeys', django.contrib.postgres.fields.ArrayField(base_field=models.CharField(max_length=255), size=None)),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True, primary_key=True, serialize=False, verbose_name="ID"
+                    ),
+                ),
+                ("block", models.BigIntegerField()),
+                ("updated_at", models.DateTimeField(auto_now_add=True)),
+                (
+                    "alpha_stake",
+                    django.contrib.postgres.fields.ArrayField(
+                        base_field=models.FloatField(), size=None
+                    ),
+                ),
+                (
+                    "tao_stake",
+                    django.contrib.postgres.fields.ArrayField(
+                        base_field=models.FloatField(), size=None
+                    ),
+                ),
+                (
+                    "stake",
+                    django.contrib.postgres.fields.ArrayField(
+                        base_field=models.FloatField(), size=None
+                    ),
+                ),
+                (
+                    "uids",
+                    django.contrib.postgres.fields.ArrayField(
+                        base_field=models.IntegerField(), size=None
+                    ),
+                ),
+                (
+                    "hotkeys",
+                    django.contrib.postgres.fields.ArrayField(
+                        base_field=models.CharField(max_length=255), size=None
+                    ),
+                ),
+                (
+                    "coldkeys",
+                    django.contrib.postgres.fields.ArrayField(
+                        base_field=models.CharField(max_length=255),
+                        blank=True,
+                        null=True,
+                        size=None,
+                    ),
+                ),
+                (
+                    "serving_hotkeys",
+                    django.contrib.postgres.fields.ArrayField(
+                        base_field=models.CharField(max_length=255), size=None
+                    ),
+                ),
             ],
         ),
     ]
