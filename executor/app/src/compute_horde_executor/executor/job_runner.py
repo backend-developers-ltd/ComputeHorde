@@ -455,7 +455,11 @@ class DefaultJobRunner(BaseJobRunner):
         assert self.initial_job_request is not None, (
             "Initial job request must be set. Call prepare_initial() first."
         )
-        return self.full_job_request.docker_image
+        image = self.full_job_request.docker_image
+        # aiodocker pulls all tags by default, so we need to specify the tag explicitly
+        if ":" not in image:
+            image += ":latest"
+        return image
 
     async def get_docker_run_args(self) -> dict[str, Any]:
         assert self.full_job_request is not None, (
