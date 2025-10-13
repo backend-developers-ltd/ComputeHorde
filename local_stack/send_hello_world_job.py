@@ -145,11 +145,13 @@ async def main() -> None:
         var in os.environ for var in ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"]
     )
 
+    env_name = "Chester Tester"
     compute_horde_job_spec = ComputeHordeJobSpec(
         executor_class=ExecutorClass.always_on__llm__a6000,
         job_namespace="SN123.0",
         docker_image="alpine:latest",
-        args=["sh", "-c", "echo 'Hello, World!' > /artifacts/stuff"],
+        args=["sh", "-c", 'echo "Hello, $NAME!" | tee -a /artifacts/stuff'],
+        env={"NAME": env_name},
         artifacts_dir="/artifacts",
         download_time_limit_sec=5,
         execution_time_limit_sec=10,
@@ -165,10 +167,8 @@ async def main() -> None:
         presigned_post, presigned_put = get_presigned_urls(bucket_name, post_object_key, put_object_key)
 
         # Update job spec for CI to include S3 uploads.
-        compute_horde_job_spec.args = [
-            "sh", "-c",
-            f"echo 'Hello, World!' | tee -a /artifacts/stuff /output/{post_object_key} /output/{put_object_key}"
-        ]
+        # Command already contains pipe to tee, just add new paths.
+        compute_horde_job_spec.args[-1] += f" /output/{post_object_key} /output/{put_object_key}"
         compute_horde_job_spec.output_volumes = {
             f"/output/{post_object_key}": HTTPOutputVolume(
                 http_method="POST",
@@ -186,7 +186,7 @@ async def main() -> None:
     await job.wait(timeout=10 * 60)
 
     # Validate job completion and output.
-    expected_artifacts = {'/artifacts/stuff': b'Hello, World!\n'}
+    expected_artifacts = {'/artifacts/stuff': f'Hello, {env_name}!\n'.encode('utf-8')}
     if job.status != "completed" or job.result.artifacts != expected_artifacts:
         raise RuntimeError(f"Job failed: status={job.status}, artifacts={job.result.artifacts}")
 
