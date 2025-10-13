@@ -297,6 +297,7 @@ class BaseJobRunner(ABC):
             docker_kwargs["HostConfig"]["Binds"].append(
                 f"{self.artifacts_mount_dir.as_posix()}/:{self.full_job_request.artifacts_dir}"
             )
+        docker_kwargs["Env"] = [f"{k}={v}" for k, v in self.full_job_request.env.items()]
 
         await self.before_start_job()
         async with docker_container_wrapper(
