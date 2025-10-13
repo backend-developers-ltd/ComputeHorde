@@ -45,7 +45,7 @@ def test_weighted_shuffle_edge_cases(scores, center, steepness):
     """
     items = list(scores.keys())
     weights = [scores[item] for item in items]
-    result = weighted_shuffle(items, weights, center, steepness)
+    result, probs = weighted_shuffle(items, weights, center, steepness)
     assert set(result) == set(scores.keys())
 
 
@@ -59,7 +59,7 @@ def mean_shuffled_indices(
     items = list(range(len(weights)))
 
     for _ in range(iterations):
-        shuffled = weighted_shuffle(
+        shuffled, probs = weighted_shuffle(
             items=items, weights=weights, center=center, steepness=steepness
         )
         for index_after_shuffling, item in enumerate(shuffled):
