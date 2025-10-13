@@ -248,7 +248,7 @@ def test_complete(caplog, configure_logs):
             )
 
     with set_block_number(1004):
-        assert "deregging_miner_247" in [n.hotkey for n in allowance().neurons(block=1004)]
+        assert "deregging_miner_247" in [n.hotkey_ss58 for n in allowance().neurons(block=1004)]
         assert "deregging_miner_247" in [
             el[0]
             for el in allowance().find_miners_with_allowance(
@@ -282,7 +282,7 @@ def test_complete(caplog, configure_logs):
 
     with set_block_number(1010):
         blocks.process_block_allowance_with_reporting(1010, supertensor_=supertensor(), live=True)
-        assert "deregging_miner_247" not in [n.hotkey for n in allowance().neurons(block=1010)]
+        assert "deregging_miner_247" not in [n.hotkey_ss58 for n in allowance().neurons(block=1010)]
         assert "deregging_miner_247" not in [
             el[0]
             for el in allowance().find_miners_with_allowance(

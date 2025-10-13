@@ -1,8 +1,10 @@
 import asyncio
 import functools
+import time
 from collections.abc import Callable
 from typing import ParamSpec, TypeVar
 
+import turbobt
 from asgiref.sync import async_to_sync, sync_to_async
 from bt_ddos_shield.turbobt import ShieldedBittensor
 from celery.utils.log import get_task_logger
@@ -68,6 +70,36 @@ async def get_single_manifest(
         )
         logger.warning(msg)
         return hotkey, None
+
+
+async def _get_metagraph_for_sync(bittensor: turbobt.Bittensor, block_number=None):
+    try:
+        start_ts = time.time()
+        subnet = bittensor.subnet(settings.BITTENSOR_NETUID)
+
+        async with bittensor.block(block_number) as block:
+            neurons, subnet_state = await asyncio.gather(subnet.list_neurons(), subnet.get_state())
+
+        duration = time.time() - start_ts
+        msg = f"Metagraph fetched: {len(neurons)} neurons @ block {block.number} in {duration:.2f} seconds"
+        logger.info(msg)
+        await SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).acreate(
+            type=SystemEvent.EventType.METAGRAPH_SYNCING,
+            subtype=SystemEvent.EventSubType.SUCCESS,
+            long_description=msg,
+            data={"duration": duration},
+        )
+        return neurons, subnet_state, block
+    except Exception as e:
+        msg = f"Failed to fetch neurons: {e}"
+        logger.warning(msg)
+        await SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).acreate(
+            type=SystemEvent.EventType.METAGRAPH_SYNCING,
+            subtype=SystemEvent.EventSubType.SUBTENSOR_CONNECTIVITY_ERROR,
+            long_description=msg,
+            data={},
+        )
+    return None, None, None
 
 
 P = ParamSpec("P")

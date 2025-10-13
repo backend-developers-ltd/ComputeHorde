@@ -53,7 +53,7 @@ def scan_blocks_and_calculate_allowance(
 
                 cm: contextlib.AbstractContextManager[SuperTensor]
                 if backfilling_supertensor is None:
-                    cm = PrecachingSuperTensor(cache=DjangoCache(), enable_workers=True)
+                    cm = PrecachingSuperTensor(cache=DjangoCache())
                 else:
                     cm = contextlib.nullcontext(backfilling_supertensor)
                 with cm as backfilling_supertensor:
