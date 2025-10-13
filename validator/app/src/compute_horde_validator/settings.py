@@ -436,19 +436,19 @@ CONSTANCE_CONFIG = {
         int,
     ),
     "DYNAMIC_ROUTING_RELIABILITY_WINDOW_HOURS": (
-        24,
+        24.0,
         "Any misbehavior within this rolling window counts towards decreasing the reliability score.",
         float,
     ),
     "DYNAMIC_ROUTING_RELIABILITY_SOFT_CUTOFF": (
-        -50,
+        -50.0,
         "MUST be < 0."
         "Miners with reliability scores near and below this are **very unlikely** to receive jobs, unless all other "
         "miners are busy at the time. ",
         float,
     ),
     "DYNAMIC_ROUTING_RELIABILITY_SEPARATION": (
-        5,
+        5.0,
         "Preferably >=5. "
         "Determines how strongly miners closer to perfect reliability are preferred over those closer to the cutoff. "
         "Translates to the steepness parameter of the shuffling function. See its documentation for details. ",
