@@ -85,7 +85,7 @@ counts: dict[str, int] = await receipts().get_busy_executor_count(
 
 - **explicit**: when all `debug_miner_*` are passed to `run_receipts_transfer`
 - **debug_settings**: when `settings.DEBUG_FETCH_RECEIPTS_FROM_MINERS` is non-empty
-- **metagraph**: default; miners are taken from the allowance module's `get_metagraph()`
+- **metagraph**: default; miners are taken from `MetagraphSnapshot`
 
 ## Configuration
 
@@ -107,5 +107,6 @@ counts: dict[str, int] = await receipts().get_busy_executor_count(
 - `receipttransfer_transfer_errors_total{exc_type}` — per-exception count of transfer errors
 - `receipttransfer_transfer_duration` — histogram of total loop duration
 - `receipttransfer_catchup_pages_left` — gauge of pages left to catch up
+
 
 

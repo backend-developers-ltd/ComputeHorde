@@ -20,7 +20,7 @@ from bt_ddos_shield.shield_metagraph import ShieldMetagraphOptions
 from bt_ddos_shield.turbobt import ShieldedBittensor
 from compute_horde.blockchain.block_cache import get_current_block
 
-from compute_horde_validator.validator.allowance.types import MetagraphData, ValidatorModel
+from compute_horde_validator.validator.allowance.types import ValidatorModel
 
 DEFAULT_TIMEOUT = 30.0
 
@@ -106,13 +106,7 @@ class BaseSuperTensor(abc.ABC):
     def list_validators(self, block_number: int) -> list[turbobt.Neuron]: ...
 
     @abc.abstractmethod
-    def get_metagraph(self, block_number: int | None = None) -> MetagraphData: ...
-
-    @abc.abstractmethod
     def get_block_timestamp(self, block_number: int) -> datetime.datetime: ...
-
-    @abc.abstractmethod
-    def get_block_hash(self, block_number: int) -> str: ...
 
     @abc.abstractmethod
     def get_shielded_neurons(self) -> list[turbobt.Neuron]: ...
@@ -222,34 +216,6 @@ class SuperTensor(BaseSuperTensor):
             for n in validators
         ]
 
-    def _build_metagraph_data(self, block_number: int) -> MetagraphData:
-        block_hash = self.get_block_hash(block_number)
-        turbobt_neurons = self.list_neurons(block_number)
-        subnet_state = self.get_subnet_state(block_number)
-        total_stake = list(subnet_state.get("total_stake", []))
-        uids = [neuron.uid for neuron in turbobt_neurons]
-        hotkeys = [neuron.hotkey for neuron in turbobt_neurons]
-        serving_hotkeys = [
-            neuron.hotkey
-            for neuron in turbobt_neurons
-            if neuron.axon_info and str(neuron.axon_info.ip) != "0.0.0.0"
-        ]
-
-        return MetagraphData.model_construct(
-            block=block_number,
-            block_hash=block_hash,
-            total_stake=total_stake,
-            uids=uids,
-            hotkeys=hotkeys,
-            serving_hotkeys=serving_hotkeys,
-        )
-
-    @RETRY_ON_TIMEOUT
-    def get_metagraph(self, block_number: int | None = None) -> MetagraphData:
-        if block_number is None:
-            block_number = self.get_current_block()
-        return self._build_metagraph_data(block_number)
-
     @archive_fallback
     @make_sync
     async def _get_block_timestamp(self, block_num) -> datetime.datetime:
@@ -274,17 +240,6 @@ class SuperTensor(BaseSuperTensor):
     @RETRY_ON_TIMEOUT
     def get_subnet_state(self, block_number: int) -> turbobt.subnet.SubnetState:
         return self._get_subnet_state(block_number)
-
-    @archive_fallback
-    @make_sync
-    async def _get_block_hash(self, block_number: int) -> str:
-        bittensor = bittensor_context.get()
-        async with bittensor.block(block_number) as block:
-            return str(block.hash)
-
-    @RETRY_ON_TIMEOUT
-    def get_block_hash(self, block_number: int) -> str:
-        return self._get_block_hash(block_number)
 
     @RETRY_ON_TIMEOUT
     @make_sync
@@ -322,7 +277,6 @@ CACHE_AHEAD = 10
 class TaskType(enum.Enum):
     NEURONS = "NEURONS"
     BLOCK_TIMESTAMP = "BLOCK_TIMESTAMP"
-    BLOCK_HASH = "BLOCK_HASH"
     SUBNET_STATE = "SUBNET_STATE"
     VALIDATORS = "VALIDATORS"
     THE_END = "THE_END"
@@ -336,16 +290,10 @@ class BaseCache(abc.ABC):
     def put_block_timestamp(self, block_number: int, timestamp: datetime.datetime): ...
 
     @abc.abstractmethod
-    def put_block_hash(self, block_number: int, block_hash: str): ...
-
-    @abc.abstractmethod
     def get_neurons(self, block_number: int) -> list[turbobt.Neuron] | None: ...
 
     @abc.abstractmethod
     def get_block_timestamp(self, block_number: int) -> datetime.datetime | None: ...
-
-    @abc.abstractmethod
-    def get_block_hash(self, block_number: int) -> str | None: ...
 
     @abc.abstractmethod
     def put_subnet_state(self, block_number: int, state: turbobt.subnet.SubnetState): ...
@@ -364,7 +312,6 @@ class InMemoryCache(BaseCache):
     def __init__(self):
         self._neuron_cache: dict[int, list[turbobt.Neuron]] = {}
         self._block_timestamp_cache: dict[int, datetime.datetime] = {}
-        self._block_hash_cache: dict[int, str] = {}
         self._subnet_state_cache: dict[int, turbobt.subnet.SubnetState] = {}
         self._validators_cache: dict[int, list[ValidatorModel]] = {}
 
@@ -374,17 +321,11 @@ class InMemoryCache(BaseCache):
     def put_block_timestamp(self, block_number: int, timestamp: datetime.datetime):
         self._block_timestamp_cache[block_number] = timestamp
 
-    def put_block_hash(self, block_number: int, block_hash: str):
-        self._block_hash_cache[block_number] = block_hash
-
     def get_neurons(self, block_number: int) -> list[turbobt.Neuron] | None:
         return self._neuron_cache.get(block_number)
 
     def get_block_timestamp(self, block_number: int) -> datetime.datetime | None:
         return self._block_timestamp_cache.get(block_number)
-
-    def get_block_hash(self, block_number: int) -> str | None:
-        return self._block_hash_cache.get(block_number)
 
     def put_subnet_state(self, block_number: int, state: turbobt.subnet.SubnetState):
         self._subnet_state_cache[block_number] = state
@@ -413,7 +354,6 @@ class PrecachingSuperTensor(SuperTensor):
         *args,
         cache: BaseCache | None = None,
         throw_on_cache_miss: bool = False,
-        enable_workers: bool = True,
         **kwargs,
     ):
         self.closing = False
@@ -421,14 +361,12 @@ class PrecachingSuperTensor(SuperTensor):
             cache = InMemoryCache()
         self.cache = cache
         self.throw_on_cache_miss = throw_on_cache_miss
-        self.enable_workers = enable_workers
         super().__init__(*args, **kwargs)
         self.task_queue: Queue[tuple[TaskType, int]] = Queue()
         self.highest_block_requested: int | None = None
         self.highest_block_submitted: int | None = None
-        if self.enable_workers:
-            self.start_workers()
-            self.start_producer()
+        self.start_workers()
+        self.start_producer()
 
     def worker(self, ind: int):
         while True:
@@ -469,15 +407,6 @@ class PrecachingSuperTensor(SuperTensor):
                             continue
                         self.cache.put_block_timestamp(
                             block_number, super_tensor.get_block_timestamp(block_number)
-                        )
-                    elif task == TaskType.BLOCK_HASH:
-                        if self.cache.get_block_hash(block_number) is not None:
-                            logger.debug(
-                                f"Worker {ind} skipping task {task} for block {block_number} (cached)"
-                            )
-                            continue
-                        self.cache.put_block_hash(
-                            block_number, super_tensor.get_block_hash(block_number)
                         )
                     elif task == TaskType.SUBNET_STATE:
                         if self.cache.get_subnet_state(block_number) is not None:
@@ -532,7 +461,6 @@ class PrecachingSuperTensor(SuperTensor):
                 logger.debug(f"Submitting tasks for block {block_to_submit}")
                 self.task_queue.put((TaskType.NEURONS, block_to_submit))
                 self.task_queue.put((TaskType.BLOCK_TIMESTAMP, block_to_submit))
-                self.task_queue.put((TaskType.BLOCK_HASH, block_to_submit))
                 self.task_queue.put((TaskType.SUBNET_STATE, block_to_submit))
                 self.task_queue.put((TaskType.VALIDATORS, block_to_submit))
                 self.highest_block_submitted = block_to_submit
@@ -577,20 +505,6 @@ class PrecachingSuperTensor(SuperTensor):
             return super()._get_block_timestamp(block_number)
 
     @RETRY_ON_TIMEOUT
-    def get_block_hash(self, block_number: int) -> str:
-        self.set_starting_block(block_number)
-        block_hash = self.cache.get_block_hash(block_number)
-        if block_hash is not None:
-            return block_hash
-        elif self.throw_on_cache_miss:
-            raise PrecachingSuperTensorCacheMiss(f"Cache miss for block {block_number}")
-        else:
-            logger.debug(f"Cache miss for block {block_number}")
-            block_hash = super().get_block_hash(block_number)
-            self.cache.put_block_hash(block_number, block_hash)
-            return block_hash
-
-    @RETRY_ON_TIMEOUT
     def get_subnet_state(self, block_number: int) -> turbobt.subnet.SubnetState:
         self.set_starting_block(block_number)
         state = self.cache.get_subnet_state(block_number)
@@ -621,9 +535,8 @@ class PrecachingSuperTensor(SuperTensor):
 
     def close(self):
         self.closing = True
-        if self.enable_workers:
-            for _ in range(N_THREADS):
-                self.task_queue.put((TaskType.THE_END, 0))
+        for _ in range(N_THREADS):
+            self.task_queue.put((TaskType.THE_END, 0))
         super().close()
 
     def __enter__(self):
@@ -637,13 +550,7 @@ _supertensor_instance: SuperTensor | None = None
 
 
 def supertensor() -> SuperTensor:
-    # Return a singleton PrecachingSuperTensor that serves cached allowance data and backfills on misses.
     global _supertensor_instance
     if _supertensor_instance is None:
-        from .supertensor_django_cache import DjangoCache
-
-        _supertensor_instance = PrecachingSuperTensor(
-            cache=DjangoCache(),
-            enable_workers=False,  # Consumer mode - read from cache only
-        )
+        _supertensor_instance = SuperTensor()
     return _supertensor_instance

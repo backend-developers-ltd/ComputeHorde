@@ -31,7 +31,7 @@ TASK_QUEUE_MAP = {
     "compute_horde_validator.validator.tasks.send_events_to_facilitator": DEFAULT_QUEUE,
     "compute_horde_validator.validator.tasks.fetch_dynamic_config": DEFAULT_QUEUE,
     # Metagraph Sync
-    "compute_horde_validator.validator.miner_sync.sync_miners": "metagraph",
+    "compute_horde_validator.validator.tasks.sync_metagraph": "metagraph",
     "compute_horde_validator.validator.allowance.tasks.report_allowance_to_system_events": "metagraph",
     "compute_horde_validator.validator.allowance.tasks.sync_manifests": "metagraph",
     "compute_horde_validator.validator.allowance.tasks.scan_blocks_and_calculate_allowance": "metagraph",
