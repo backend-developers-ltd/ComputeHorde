@@ -5,8 +5,10 @@ import datetime
 import enum
 import functools
 import logging
+import queue
 import threading
 import time
+import typing
 from collections import deque
 from collections.abc import Awaitable, Callable
 from queue import Queue
@@ -16,6 +18,7 @@ import bittensor_wallet
 import tenacity
 import turbobt
 import websockets
+from asgiref.sync import async_to_sync
 from bt_ddos_shield.shield_metagraph import ShieldMetagraphOptions
 from bt_ddos_shield.turbobt import ShieldedBittensor
 from compute_horde.blockchain.block_cache import get_current_block
@@ -23,6 +26,35 @@ from compute_horde.blockchain.block_cache import get_current_block
 from compute_horde_validator.validator.allowance.types import ValidatorModel
 
 DEFAULT_TIMEOUT = 30.0
+
+# Type variables
+T = TypeVar("T")
+P = TypeVar("P")
+
+
+def _run_coroutine_blocking(coro_factory: Callable[[], Awaitable[T]]) -> T:
+    result_box: queue.Queue[tuple[bool, T | BaseException]] = queue.Queue()
+
+    ctx = contextvars.copy_context()
+
+    def runner() -> None:
+        try:
+            ret = ctx.run(
+                lambda: asyncio.run(asyncio.wait_for(coro_factory(), DEFAULT_TIMEOUT))
+            )
+            result_box.put((True, ret))
+        except BaseException as exc:
+            result_box.put((False, exc))
+
+    thread = threading.Thread(target=runner, daemon=True)
+    thread.start()
+    thread.join()
+    
+    ok, payload = result_box.get()
+    if ok:
+        return typing.cast(T, payload)
+    raise typing.cast(BaseException, payload)
+
 
 # Context variables for bittensor and subnet
 bittensor_context: contextvars.ContextVar[turbobt.Bittensor] = contextvars.ContextVar("bittensor")
@@ -59,17 +91,28 @@ RETRY_ON_TIMEOUT = tenacity.retry(
 )
 
 
-T = TypeVar("T")
-P = TypeVar("P")
-
-
 def make_sync(func: Callable[..., Awaitable[T]]) -> Callable[..., T]:
     @functools.wraps(func)
     def wrapper(s: "SuperTensor", *args, **kwargs) -> T:
+        # First, detect if we're in a running event loop
+        has_running_loop = False
         try:
-            return s.loop.run_until_complete(
-                asyncio.wait_for(func(s, *args, **kwargs), timeout=DEFAULT_TIMEOUT)
-            )
+            asyncio.get_running_loop()
+            has_running_loop = True
+        except RuntimeError:
+            has_running_loop = False
+
+        try:
+            if has_running_loop:
+                return _run_coroutine_blocking(
+                    functools.partial(func, s, *args, **kwargs)
+                )
+            else:
+                async def async_wrapper() -> T:
+                    return await asyncio.wait_for(func(s, *args, **kwargs), timeout=DEFAULT_TIMEOUT)
+                
+                sync_wrapper: Callable[[], T] = async_to_sync(async_wrapper)
+                return sync_wrapper()
         except TimeoutError as ex:
             raise SuperTensorTimeout from ex
 
@@ -170,8 +213,6 @@ class SuperTensor(BaseSuperTensor):
             self.archive_bittensor = None
             self.archive_subnet = None
 
-        self.loop = asyncio.get_event_loop()
-
         self._neuron_list_cache: deque[tuple[int, list[turbobt.Neuron]]] = deque(maxlen=15)
 
     def oldest_reachable_block(self) -> float | int:
@@ -265,9 +306,16 @@ class SuperTensor(BaseSuperTensor):
         return current_block - 5
 
     def close(self):
-        self.loop.run_until_complete(self.bittensor.close())
-        if self.archive_bittensor is not None:
-            self.loop.run_until_complete(self.archive_bittensor.close())
+        async def _close_resources():
+            await self.bittensor.close()
+            if self.archive_bittensor is not None:
+                await self.archive_bittensor.close()
+
+        try:
+            asyncio.get_running_loop()
+            _run_coroutine_blocking(lambda: _close_resources())
+        except RuntimeError:
+            async_to_sync(_close_resources)()
 
 
 N_THREADS = 10
