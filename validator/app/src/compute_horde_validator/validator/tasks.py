@@ -1058,7 +1058,8 @@ def slash_collateral_task(job_uuid: str) -> None:
             logger.error(f"Failed to slash collateral for job {job_uuid}: {e}")
         else:
             job.slashed = True
-            job.save()
+            job.slashed_at = now()
+            job.save(update_fields=["slashed", "slashed_at"])
 
 
 async def _get_latest_manifests(miners: list[Miner]) -> dict[str, dict[ExecutorClass, int]]:
