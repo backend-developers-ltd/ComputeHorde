@@ -246,11 +246,13 @@ def _pick_miner_for_job_v2(request: V2JobRequest) -> JobRoute:
             )
 
             miner = miners[miner_hotkey]
-            Miner.objects.get_or_create(
-                address=miner.address,
-                ip_version=miner.ip_version,
-                port=miner.port,
+            Miner.objects.update_or_create(
                 hotkey=miner.hotkey_ss58,
+                defaults={
+                    "address": miner.address,
+                    "ip_version": miner.ip_version,
+                    "port": miner.port,
+                },
             )
             logger.info(
                 f"Successfully reserved miner {miner_hotkey} for job {request.uuid} with reservation ID {reservation_id}"
