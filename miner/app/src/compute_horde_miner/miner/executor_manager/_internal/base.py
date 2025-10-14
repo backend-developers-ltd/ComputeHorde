@@ -60,6 +60,16 @@ class ExecutorClassPool:
         self._pool_cleanup_task = asyncio.create_task(self._pool_cleanup_loop())
         self._reservation_futures: dict[str, asyncio.Future[None]] = {}
 
+    def _state_snapshot(self) -> str:
+        if not self._executors:
+            return "[]"
+        now = dt.datetime.now()
+        parts = [
+            f"{reserved_executor.token}:{(now - reserved_executor.start_time).total_seconds():.1f}s/{reserved_executor.timeout}"
+            for reserved_executor in self._executors
+        ]
+        return f"[{', '.join(parts)}]"
+
     def _reservation_future(self, token: str) -> asyncio.Future[None]:
         if token not in self._reservation_futures:
             self._reservation_futures[token] = asyncio.Future()
@@ -73,6 +83,13 @@ class ExecutorClassPool:
         return self._reservation_futures[token]
 
     async def reserve_executor(self, token: str, timeout: float) -> object:
+        logger.debug(
+            "Attempting to reserve executor for token=%s class=%s availability=%s/%s",
+            token,
+            self.executor_class,
+            self.get_availability(),
+            self._count,
+        )
         if self.get_availability() == 0:
             logger.debug(
                 "No executor available, forcing pool cleanup, current list is:\n %s",
@@ -83,9 +100,13 @@ class ExecutorClassPool:
 
         async with self._reservation_lock:
             if self.get_availability() == 0:
-                logger.debug(
-                    "No executor available, current list is:\n %s",
-                    "\n".join(str(r) for r in self._executors),
+                logger.warning(
+                    "Executor pool busy for class=%s token=%s capacity=%s busy=%s snapshot=%s",
+                    self.executor_class,
+                    token,
+                    self._count,
+                    len(self._executors),
+                    self._state_snapshot(),
                 )
                 self._reservation_future(token).set_exception(AllExecutorsBusy())
                 raise AllExecutorsBusy()
@@ -105,7 +126,14 @@ class ExecutorClassPool:
             # TODO: TIMEOUTS - this should depend on various time limits - job, executor spinup etc. with some margin.
             reserved_executor = ReservedExecutor(executor, MAX_EXECUTOR_TIMEOUT, token)
             self._executors.append(reserved_executor)
-            logger.debug("Added %s", reserved_executor)
+            logger.debug(
+                "Reserved executor for token=%s class=%s; busy=%s/%s snapshot=%s",
+                token,
+                self.executor_class,
+                len(self._executors),
+                self._count,
+                self._state_snapshot(),
+            )
             return executor
 
     def set_count(self, executor_count):
@@ -141,15 +169,31 @@ class ExecutorClassPool:
             *[check_executor(reserved_executor) for reserved_executor in self._executors]
         )
 
-        executors_to_drop = set(
-            reserved_executor for reserved_executor, should_drop in results if should_drop
-        )
+        executors_to_drop = {
+            reserved_executor for reserved_executor, should_drop, _ in results if should_drop
+        }
+
+        if executors_to_drop:
+            logger.info(
+                "Dropping %s executor(s) from pool class=%s snapshot_before=%s",
+                len(executors_to_drop),
+                self.executor_class,
+                self._state_snapshot(),
+            )
 
         self._executors = [
             reserved_executor
             for reserved_executor in self._executors
             if reserved_executor not in executors_to_drop
         ]
+
+        if executors_to_drop:
+            logger.debug(
+                "Pool class=%s cleaned up tokens=%s snapshot_after=%s",
+                self.executor_class,
+                [reserved_executor.token for reserved_executor in executors_to_drop],
+                self._state_snapshot(),
+            )
 
     async def wait_for_executor_reservation(self, token: str) -> None:
         await self._reservation_future(token)
