@@ -1,5 +1,6 @@
 import json
 import typing
+from datetime import datetime
 from typing import Annotated, Literal, TypeAlias
 
 import pydantic
@@ -32,9 +33,18 @@ class V0JobCheated(SignedRequest, BaseModel, extra="forbid"):
     message_type: Literal["V0JobCheated"] = "V0JobCheated"
 
     job_uuid: str
+    cheated_timestamp: datetime = pydantic.Field(default_factory=datetime.utcnow)
+    cheated_message: str = "unknown"
+    cheated_details: JsonValue = pydantic.Field(default_factory=lambda: {})
 
     def get_signed_payload(self) -> JsonValue:
-        return json.dumps({"job_uuid": self.job_uuid})
+        payload = {
+            "job_uuid": self.job_uuid,
+            "cheated_timestamp": self.cheated_timestamp.isoformat(),
+            "cheated_message": self.cheated_message,
+            "cheated_details": self.cheated_details,
+        }
+        return json.dumps(payload, sort_keys=True)
 
 
 def to_json_array(data) -> list[JsonValue]:
