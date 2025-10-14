@@ -119,6 +119,20 @@ class MinerValidatorConsumer(BaseConsumer[ValidatorToMinerMessage], ValidatorInt
             return
 
         self.pending_jobs = await AcceptedJob.get_for_validator(self.validator)
+        if self.pending_jobs:
+            now = timezone.now()
+            logger.info(
+                "Validator %s reconnected with %s pending job(s): %s",
+                self.validator_key,
+                len(self.pending_jobs),
+                {
+                    job_uuid: (
+                        job.status,
+                        (now - job.updated_at).total_seconds(),
+                    )
+                    for job_uuid, job in self.pending_jobs.items()
+                },
+            )
         for job in self.pending_jobs.values():
             if job.status != AcceptedJob.Status.WAITING_FOR_PAYLOAD:
                 # TODO: this actually works only for temporary connection issue between validator and miner;
@@ -326,6 +340,13 @@ class MinerValidatorConsumer(BaseConsumer[ValidatorToMinerMessage], ValidatorInt
         assert_never(msg)
 
     async def handle_initial_job_request(self, msg: V0InitialJobRequest):
+        logger.info(
+            "Received initial job request %s from validator %s (executor_class=%s, organic=%s)",
+            msg.job_uuid,
+            self.validator_key,
+            msg.executor_class,
+            msg.job_started_receipt_payload.is_organic,
+        )
         validator_blacklisted = await ValidatorBlacklist.objects.filter(
             validator=self.validator
         ).aexists()
@@ -382,18 +403,33 @@ class MinerValidatorConsumer(BaseConsumer[ValidatorToMinerMessage], ValidatorInt
             # If there is no executor, the above future throws an appropriate exception,
             # so we will never proceed further down.
             await self.send(V0AcceptJobRequest(job_uuid=msg.job_uuid).model_dump_json())
+            logger.info(
+                "Job %s accepted; pending_jobs=%s", msg.job_uuid, list(self.pending_jobs.keys())
+            )
 
             # Then, wait for the executor to actually start up.
             executor = await executor_spinup
             executor_address = await current.executor_manager.get_executor_public_address(executor)
             job.executor_address = executor_address
             await job.asave()
+            logger.debug(
+                "Executor %s for job %s started with address %s",
+                executor_token,
+                msg.job_uuid,
+                executor_address,
+            )
 
         except AllExecutorsBusy:
             await self.group_discard(executor_token)
             job.status = AcceptedJob.Status.REJECTED
             await job.asave()
             self.pending_jobs.pop(msg.job_uuid)
+            logger.warning(
+                "Declining job %s for validator %s: executors busy (pending_jobs=%s)",
+                msg.job_uuid,
+                self.validator_key,
+                list(self.pending_jobs.keys()),
+            )
             now = msg.job_started_receipt_payload.timestamp
             queryset = (
                 JobStartedReceipt.objects.annotate(
@@ -453,7 +489,9 @@ class MinerValidatorConsumer(BaseConsumer[ValidatorToMinerMessage], ValidatorInt
             except (asyncio.CancelledError, Exception):
                 # As we're awaiting this task for the second time, just silence the exceptions as
                 # they have been already thrown during the previous await.
-                pass
+                logger.debug(
+                    "Executor spinup task for job %s cleaned up after cancellation", msg.job_uuid
+                )
 
     async def handle_job_request(self, msg: V0JobRequest):
         job = self.pending_jobs.get(msg.job_uuid)
@@ -475,6 +513,12 @@ class MinerValidatorConsumer(BaseConsumer[ValidatorToMinerMessage], ValidatorInt
         job.status = AcceptedJob.Status.RUNNING
         job.full_job_details = msg.model_dump()
         await job.asave()
+        logger.info(
+            "Job %s marked RUNNING (volume=%s, pending_jobs=%s)",
+            msg.job_uuid,
+            bool(msg.volume),
+            list(self.pending_jobs.keys()),
+        )
 
     async def handle_job_started_receipt(self, payload: JobStartedReceiptPayload, signature: str):
         logger.info(
@@ -500,6 +544,9 @@ class MinerValidatorConsumer(BaseConsumer[ValidatorToMinerMessage], ValidatorInt
             ttl=payload.ttl,
         )
         (await current_store()).store([receipt.to_receipt()])
+        logger.debug(
+            "Stored job started receipt for job %s (ttl=%s)", payload.job_uuid, payload.ttl
+        )
 
     async def handle_job_accepted_receipt(self, msg: V0JobAcceptedReceiptRequest):
         logger.info(
@@ -526,6 +573,7 @@ class MinerValidatorConsumer(BaseConsumer[ValidatorToMinerMessage], ValidatorInt
         )
 
         (await current_store()).store([created_receipt.to_receipt()])
+        logger.debug("Stored job accepted receipt for job %s", msg.payload.job_uuid)
 
     async def handle_job_finished_receipt(self, msg: V0JobFinishedReceiptRequest):
         logger.info(
@@ -560,6 +608,11 @@ class MinerValidatorConsumer(BaseConsumer[ValidatorToMinerMessage], ValidatorInt
         )
 
         (await current_store()).store([created_receipt.to_receipt()])
+        logger.debug(
+            "Stored job finished receipt for job %s (score=%s)",
+            msg.payload.job_uuid,
+            msg.payload.score,
+        )
 
     async def handle_main_hotkey_request(self, msg: V0MainHotkeyMessage):
         logger.info(f"Received main hotkey request from validator {self.validator_key}")
@@ -586,7 +639,12 @@ class MinerValidatorConsumer(BaseConsumer[ValidatorToMinerMessage], ValidatorInt
         assert job_uuid == msg.job_uuid
         self.pending_jobs[job_uuid] = job
         await self.send(msg.model_copy(update={"executor_token": None}).model_dump_json())
-        logger.debug(f"Readiness for job {job_uuid} reported to validator {self.validator_key}")
+        logger.info(
+            "Executor %s ready for job %s; pending_jobs now %s",
+            msg.executor_token,
+            job_uuid,
+            list(self.pending_jobs.keys()),
+        )
 
     async def _streaming_job_ready(self, msg: V0StreamingJobReadyRequest):
         if self.check_missing_token(msg):
@@ -613,11 +671,21 @@ class MinerValidatorConsumer(BaseConsumer[ValidatorToMinerMessage], ValidatorInt
 
     async def _executor_finished(self, msg: V0JobFinishedRequest):
         await self.send(msg.model_dump_json())
-        logger.debug(f"Finished job {msg.job_uuid} reported to validator {self.validator_key}")
+        logger.info(
+            "Finished job %s reported to validator %s; pending_jobs before pop=%s",
+            msg.job_uuid,
+            self.validator_key,
+            list(self.pending_jobs.keys()),
+        )
         job = self.pending_jobs.pop(msg.job_uuid)
         await job.arefresh_from_db()
         job.result_reported_to_validator = timezone.now()
         await job.asave()
+        logger.debug(
+            "Job %s marked reported to validator at %s",
+            msg.job_uuid,
+            job.result_reported_to_validator,
+        )
 
     async def _executor_specs(self, msg: V0MachineSpecsRequest):
         await self.send(msg.model_dump_json())
@@ -632,6 +700,11 @@ class MinerValidatorConsumer(BaseConsumer[ValidatorToMinerMessage], ValidatorInt
         await job.arefresh_from_db()
         job.result_reported_to_validator = timezone.now()
         await job.asave()
+        logger.info(
+            "Job %s rejected by executor; pending_jobs now %s",
+            msg.job_uuid,
+            list(self.pending_jobs.keys()),
+        )
 
     async def _job_failed(self, msg: V0JobFailedRequest):
         await self.send(msg.model_dump_json())
@@ -640,6 +713,12 @@ class MinerValidatorConsumer(BaseConsumer[ValidatorToMinerMessage], ValidatorInt
         await job.arefresh_from_db()
         job.result_reported_to_validator = timezone.now()
         await job.asave()
+        logger.info(
+            "Job %s marked failed; reason=%s pending_jobs=%s",
+            msg.job_uuid,
+            msg.reason,
+            list(self.pending_jobs.keys()),
+        )
 
     async def _horde_failed(self, msg: V0HordeFailedRequest):
         await self.send(msg.model_dump_json())
@@ -650,6 +729,12 @@ class MinerValidatorConsumer(BaseConsumer[ValidatorToMinerMessage], ValidatorInt
         await job.arefresh_from_db()
         job.result_reported_to_validator = timezone.now()
         await job.asave()
+        logger.warning(
+            "Horde failure for job %s reported (%s); pending_jobs=%s",
+            msg.job_uuid,
+            msg.reason,
+            list(self.pending_jobs.keys()),
+        )
 
     async def _volumes_ready(self, msg: V0VolumesReadyRequest):
         await self.send(msg.model_dump_json())
