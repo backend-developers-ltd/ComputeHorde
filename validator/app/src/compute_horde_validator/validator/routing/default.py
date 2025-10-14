@@ -26,6 +26,7 @@ from compute_horde_validator.validator.collateral.default import collateral
 from compute_horde_validator.validator.models import Miner, MinerIncident, SystemEvent
 from compute_horde_validator.validator.receipts.default import receipts
 from compute_horde_validator.validator.routing.base import RoutingBase
+from compute_horde_validator.validator.routing.metrics import VALIDATOR_MINER_INCIDENT_REPORTED
 from compute_horde_validator.validator.routing.types import (
     AllMinersBusy,
     JobRoute,
@@ -62,6 +63,11 @@ class Routing(RoutingBase):
             job_uuid=job_uuid,
             executor_class=executor_class.value,
         )
+        VALIDATOR_MINER_INCIDENT_REPORTED.labels(
+            incident_type=type.value,
+            miner_hotkey=hotkey_ss58address,
+            executor_class=executor_class.value,
+        ).inc()
 
 
 _routing_instance: Routing | None = None
