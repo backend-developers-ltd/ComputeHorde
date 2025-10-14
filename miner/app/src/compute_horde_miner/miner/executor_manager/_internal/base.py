@@ -154,19 +154,50 @@ class ExecutorClassPool:
             await asyncio.sleep(self.POOL_CLEANUP_PERIOD)
 
     async def _pool_cleanup(self):
-        async def check_executor(reserved_executor):
-            status = await self.manager.wait_for_executor(reserved_executor.executor, 1)
+        executors_snapshot = list(self._executors)
+
+        async def check_executor(reserved_executor: ReservedExecutor):
+            try:
+                status = await self.manager.wait_for_executor(reserved_executor.executor, 1)
+            except Exception as exc:
+                logger.error(
+                    "Failed to poll executor %s in pool class=%s; dropping reservation.",
+                    reserved_executor,
+                    self.executor_class,
+                    exc_info=exc,
+                )
+                try:
+                    await self.manager.kill_executor(reserved_executor.executor)
+                except Exception as kill_exc:  # pragma: no cover
+                    logger.error(
+                        "Failed to kill executor after poll error %s in class=%s",
+                        reserved_executor,
+                        self.executor_class,
+                        exc_info=kill_exc,
+                    )
+                return reserved_executor, True, "error"
+
             if status is not None:
-                logger.debug("%s finished", reserved_executor)
-                return reserved_executor, True
-            elif reserved_executor.is_expired():
-                logger.debug("%s timed out, killing it.", reserved_executor)
-                await self.manager.kill_executor(reserved_executor.executor)
-                return reserved_executor, True
-            return reserved_executor, False
+                logger.debug("%s finished with status=%s", reserved_executor, status)
+                return reserved_executor, True, "finished"
+
+            if reserved_executor.is_expired():
+                logger.warning("%s timed out, killing it.", reserved_executor)
+                try:
+                    await self.manager.kill_executor(reserved_executor.executor)
+                except Exception as kill_exc:  # pragma: no cover
+                    logger.error(
+                        "Failed to kill expired executor %s in class=%s",
+                        reserved_executor,
+                        self.executor_class,
+                        exc_info=kill_exc,
+                    )
+                return reserved_executor, True, "expired"
+
+            return reserved_executor, False, "active"
 
         results = await asyncio.gather(
-            *[check_executor(reserved_executor) for reserved_executor in self._executors]
+            *[check_executor(reserved_executor) for reserved_executor in executors_snapshot]
         )
 
         executors_to_drop = {
