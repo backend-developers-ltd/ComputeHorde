@@ -40,6 +40,7 @@ from compute_horde.protocol_consts import (
 from compute_horde.protocol_messages import FailureContext
 from compute_horde_core.signature import SignedRequest, verify_signature
 from django.conf import settings
+from django.utils.timezone import now
 from pydantic import BaseModel
 
 from compute_horde_validator.validator.allowance.types import NotEnoughAllowanceException
@@ -368,7 +369,8 @@ class FacilitatorClient:
             return
 
         job.cheated = True
-        await job.asave()
+        job.cheat_reported_at = now()
+        await job.asave(update_fields=["cheated", "cheat_reported_at"])
 
         blacklist_time = await aget_config("DYNAMIC_JOB_CHEATED_BLACKLIST_TIME_SECONDS")
         await blacklist.blacklist_miner(

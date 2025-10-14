@@ -396,7 +396,9 @@ class OrganicJob(JobBase):
     upload_results = models.JSONField(blank=True, default=dict)
     namespace = models.CharField(max_length=100, blank=True, null=True)
     cheated = models.BooleanField(default=False)
+    cheat_reported_at = models.DateTimeField(null=True)
     slashed = models.BooleanField(default=False)
+    slashed_at = models.DateTimeField(null=True)
     block = models.BigIntegerField(
         null=True, help_text="Block number on which this job is scheduled"
     )
