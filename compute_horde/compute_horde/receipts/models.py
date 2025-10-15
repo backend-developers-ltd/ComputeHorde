@@ -43,7 +43,7 @@ class AbstractReceipt(models.Model):
         return f"job_uuid: {self.job_uuid}"
 
 
-class JobStartedReceiptQuerySet(models.QuerySet["JobStartedReceipt"]):
+class ReceiptQuerySet(models.QuerySet):
     def valid_at(self, dt: datetime.datetime):
         return self.annotate(
             valid_until=models.ExpressionWrapper(
@@ -61,7 +61,7 @@ class JobStartedReceipt(AbstractReceipt):
     is_organic = models.BooleanField()
     ttl = models.IntegerField()
 
-    objects = JobStartedReceiptQuerySet.as_manager()  # type: ignore
+    objects = ReceiptQuerySet.as_manager()  # type: ignore
 
     def to_receipt(self) -> Receipt:
         if self.miner_signature is None:
@@ -117,6 +117,8 @@ class JobStartedReceipt(AbstractReceipt):
 class JobAcceptedReceipt(AbstractReceipt):
     time_accepted = models.DateTimeField()
     ttl = models.IntegerField()
+
+    objects = ReceiptQuerySet.as_manager()  # type: ignore
 
     def to_receipt(self) -> Receipt:
         if self.miner_signature is None:

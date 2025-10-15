@@ -325,6 +325,75 @@ def test_get_finished_jobs_for_block_range_returns_only_in_range(settings):
     assert item.paid_with_blocks == in_block_numbers
 
 
+@pytest.mark.asyncio
+@pytest.mark.django_db(transaction=True)
+async def test_get_busy_executor_count_includes_job_accepted_receipts(settings):
+    now = timezone.now()
+    executor_class = ExecutorClass.always_on__gpu_24gb
+    miner_hotkey = "miner_hotkey_busy_tally"
+    validator_hotkey = settings.BITTENSOR_WALLET().get_hotkey().ss58_address
+
+    # Job with started receipt still valid.
+    await JobStartedReceipt.objects.acreate(
+        job_uuid=str(uuid.uuid4()),
+        miner_hotkey=miner_hotkey,
+        validator_hotkey=validator_hotkey,
+        validator_signature="sig",
+        timestamp=now - datetime.timedelta(seconds=30),
+        executor_class=str(executor_class),
+        is_organic=True,
+        ttl=120,
+    )
+
+    # Job where the started receipt expired but the accepted receipt is still valid.
+    accepted_only_uuid = str(uuid.uuid4())
+    await JobStartedReceipt.objects.acreate(
+        job_uuid=accepted_only_uuid,
+        miner_hotkey=miner_hotkey,
+        validator_hotkey=validator_hotkey,
+        validator_signature="sig",
+        timestamp=now - datetime.timedelta(minutes=5),
+        executor_class=str(executor_class),
+        is_organic=True,
+        ttl=60,
+    )
+    await JobAcceptedReceipt.objects.acreate(
+        job_uuid=accepted_only_uuid,
+        miner_hotkey=miner_hotkey,
+        validator_hotkey=validator_hotkey,
+        validator_signature="sig",
+        timestamp=now - datetime.timedelta(seconds=20),
+        time_accepted=now - datetime.timedelta(seconds=25),
+        ttl=180,
+    )
+
+    # Job that has both receipts valid should only be counted once.
+    both_valid_uuid = str(uuid.uuid4())
+    await JobStartedReceipt.objects.acreate(
+        job_uuid=both_valid_uuid,
+        miner_hotkey=miner_hotkey,
+        validator_hotkey=validator_hotkey,
+        validator_signature="sig",
+        timestamp=now - datetime.timedelta(seconds=40),
+        executor_class=str(executor_class),
+        is_organic=True,
+        ttl=180,
+    )
+    await JobAcceptedReceipt.objects.acreate(
+        job_uuid=both_valid_uuid,
+        miner_hotkey=miner_hotkey,
+        validator_hotkey=validator_hotkey,
+        validator_signature="sig",
+        timestamp=now - datetime.timedelta(seconds=10),
+        time_accepted=now - datetime.timedelta(seconds=15),
+        ttl=180,
+    )
+
+    counts = await receipts().get_busy_executor_count(executor_class, now)
+
+    assert counts == {miner_hotkey: 3}
+
+
 @pytest.mark.django_db(transaction=True)
 def test_get_completed_job_receipts_for_block_range_filters_by_executor_class(settings):
     start_block = 300
