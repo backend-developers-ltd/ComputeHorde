@@ -43,7 +43,7 @@ class AbstractReceipt(models.Model):
         return f"job_uuid: {self.job_uuid}"
 
 
-class ReceiptQuerySet(models.QuerySet):
+class ReceiptQuerySet(models.QuerySet[AbstractReceipt]):
     def valid_at(self, dt: datetime.datetime):
         return self.annotate(
             valid_until=models.ExpressionWrapper(
