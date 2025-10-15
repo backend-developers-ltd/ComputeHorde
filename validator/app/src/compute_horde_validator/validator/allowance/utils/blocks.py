@@ -249,6 +249,7 @@ def process_block_allowance_with_reporting(
     supertensor_: SuperTensor,
     live=False,
     blocks_behind: int = 0,
+    raise_on_error: bool = False,
 ):
     """
     Only call this once the block is already minted
@@ -285,11 +286,13 @@ def process_block_allowance_with_reporting(
                 "error": str(e),
             },
         )
+        if raise_on_error:
+            raise
     else:
         duration = end - start
         msg = f"Block allowance processing for block {block_number} took {duration:0.2f} seconds"
         if blocks_behind:
-            msg += f" ({blocks_behind} blocks behind)"
+            msg += f" ({blocks_behind} blocks from head)"
         else:
             msg += " (blocks up to date)"
         logger.info(msg)
