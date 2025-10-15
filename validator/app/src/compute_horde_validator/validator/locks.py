@@ -12,6 +12,7 @@ class LockType(enum.Enum):
     ALLOWANCE_FETCHING = 5
     ALLOWANCE_EVICTING = 6
     DYNAMIC_CONFIG_FETCH = 7
+    ALLOWANCE_ARCHIVE_FETCHING = 8
 
 
 class Locked(Exception):
