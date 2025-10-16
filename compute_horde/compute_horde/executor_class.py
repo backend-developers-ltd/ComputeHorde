@@ -38,6 +38,12 @@ EXECUTOR_CLASS = {
         gpu_vram_gb=48,
         spin_up_time=30,  # FIXME: temporary value for debugging
     ),
+    ExecutorClass.always_on__gpu_a100_80gb: ExecutorClassSpec(
+        description="always on, NVIDIA A100 GPU, 80GB variant",
+        has_gpu=True,
+        gpu_vram_gb=80,
+        spin_up_time=10,
+    ),
 }
 
 # This is the upper TTL for executors, after which executor pool kills an executor.

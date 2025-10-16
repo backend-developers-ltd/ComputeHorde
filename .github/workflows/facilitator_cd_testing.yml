@@ -29,7 +29,7 @@ jobs:
           echo "${{ secrets.FACILITATOR_TESTING_DEPLOY_SSH_KEY }}" > "$DEPLOY_KEY_FILE"
           chmod 600 "$DEPLOY_KEY_FILE"
 
-          git remote add deploy ${{ secrets.FACILITATOR_TESTING_DEPLOY_POORMANS_URL }}
+          git remote add deploy ${{ vars.FACILITATOR_TESTING_DEPLOY_POORMANS_URL }}
           GIT_SSH_COMMAND="ssh -i $DEPLOY_KEY_FILE -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null" \
             git push deploy HEAD:master -f
 
