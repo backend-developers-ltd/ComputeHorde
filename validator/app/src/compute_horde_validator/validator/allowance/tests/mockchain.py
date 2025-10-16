@@ -68,12 +68,14 @@ EXECUTOR_CLASSES = [
     ExecutorClass.spin_up_4min__gpu_24gb,
     ExecutorClass.always_on__gpu_24gb,
     ExecutorClass.always_on__llm__a6000,
+    ExecutorClass.always_on__test,
 ]
 
 EXECUTOR_CAP = {
     ExecutorClass.spin_up_4min__gpu_24gb: 10,
     ExecutorClass.always_on__gpu_24gb: 5,
     ExecutorClass.always_on__llm__a6000: 3,
+    ExecutorClass.always_on__test: 1,
 }
 
 

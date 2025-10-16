@@ -38,6 +38,11 @@ EXECUTOR_CLASS = {
         gpu_vram_gb=48,
         spin_up_time=30,  # FIXME: temporary value for debugging
     ),
+    ExecutorClass.always_on__test: ExecutorClassSpec(
+        description="always on, generic machine for subnet testing",
+        has_gpu=False,
+        spin_up_time=3,
+    ),
 }
 
 # This is the upper TTL for executors, after which executor pool kills an executor.

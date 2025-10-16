@@ -62,7 +62,8 @@ class DefaultScoringEngine(ScoringEngine):
         normalized_scores: dict[str, float] = {}
 
         for executor_class, executor_scores in scores_by_executor.items():
-            weight = executor_class_weights.get(executor_class, 1.0)
+            # no weight by default to avoid accidental score assignment to new executor classes
+            weight = executor_class_weights.get(executor_class, 0.0)
 
             final_executor_scores = self._apply_dancing(
                 executor_scores,
