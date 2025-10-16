@@ -209,7 +209,7 @@ def _pick_miner_for_job_v2(request: V2JobRequest) -> JobRoute:
             "executor_seconds": executor_seconds,
             "collateral_threshold": collateral_threshold,
             "reliability_scores": reliability_score_per_hotkey,
-            "pick_probabilities": dict(zip(suitable_hotkeys, probs)),
+            "pick_probabilities": dict(zip(prioritized_hotkeys, probs)),
             "manifests": manifests,
             "busy_executors": busy_executors,
             "skipped_miners": {},  # Hotkey: reason; Filled in later
