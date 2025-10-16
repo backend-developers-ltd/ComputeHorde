@@ -57,7 +57,7 @@ def test_trigger_run_admin_job__should_trigger_job(bittensor):
 
     assert OrganicJob.objects.count() == 1
     job = OrganicJob.objects.filter(job_uuid=job_request.uuid).first()
-    assert "Timed out waiting for initial response" in job.comment
+    assert "initial_response_timed_out" in job.comment
     assert job.status == OrganicJob.Status.FAILED
 
 

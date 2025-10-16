@@ -18,9 +18,11 @@ from compute_horde.fv_protocol.validator_requests import (
 )
 from compute_horde.job_errors import HordeError
 from compute_horde.miner_client.organic import (
+    MinerConnectionFailed,
     MinerRejectedJob,
     MinerReportedHordeFailed,
     MinerReportedJobFailed,
+    MinerTimedOut,
     OrganicJobDetails,
     execute_organic_job_on_miner,
 )
@@ -447,6 +449,19 @@ async def drive_organic_job(
             long_description=failure.msg.message,
         )
         status_update = status_update_from_miner_horde_failure(job, failure)
+        await notify_callback(status_update)
+
+    except (MinerConnectionFailed, MinerTimedOut) as e:
+        comment = str(e)
+        logger.warning(comment)
+        job.status = OrganicJob.Status.FAILED
+        job.comment = comment
+        await job.asave()
+        event_subtype = _horde_event_subtype_map.get(
+            e.reason, SystemEvent.EventSubType.GENERIC_ERROR
+        )
+        await save_event(subtype=event_subtype, long_description=comment)
+        status_update = status_update_from_horde_error(job, e)
         await notify_callback(status_update)
 
     except Exception as e:
