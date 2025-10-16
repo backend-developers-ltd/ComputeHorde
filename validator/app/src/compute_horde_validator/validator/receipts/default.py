@@ -8,6 +8,7 @@ from dataclasses import dataclass
 
 import aiohttp
 from compute_horde.receipts.models import (
+    JobAcceptedReceipt,
     JobFinishedReceipt,
     JobStartedReceipt,
 )
@@ -275,15 +276,48 @@ class Receipts(ReceiptsBase):
             job_uuid=OuterRef("job_uuid"), timestamp__lte=at_time
         )
 
-        ongoing = starts_qs.annotate(has_finished=Exists(finishes)).filter(has_finished=False)
+        ongoing_started = starts_qs.annotate(has_finished=Exists(finishes)).filter(
+            has_finished=False
+        )
 
-        rows = [
-            row
-            async for row in ongoing.values("miner_hotkey")
+        started_counts = {
+            row["miner_hotkey"]: int(row["n"])
+            async for row in ongoing_started.values("miner_hotkey")
             .annotate(n=Count("id"))
             .values("miner_hotkey", "n")
-        ]
-        return {row["miner_hotkey"]: int(row["n"]) for row in rows}
+        }
+
+        valid_started_exists = JobStartedReceipt.objects.valid_at(at_time).filter(
+            executor_class=str(executor_class),
+            job_uuid=OuterRef("job_uuid"),
+        )
+
+        accepted_qs = (
+            JobAcceptedReceipt.objects.valid_at(at_time)
+            .filter(
+                Exists(
+                    JobStartedReceipt.objects.filter(
+                        job_uuid=OuterRef("job_uuid"),
+                        executor_class=str(executor_class),
+                    )
+                )
+            )
+            .filter(~Exists(finishes))
+            .filter(~Exists(valid_started_exists))
+        )
+
+        accepted_counts = {
+            row["miner_hotkey"]: int(row["n"])
+            async for row in accepted_qs.values("miner_hotkey")
+            .annotate(n=Count("id"))
+            .values("miner_hotkey", "n")
+        }
+
+        busy_counts: dict[str, int] = dict(started_counts)
+        for miner_hotkey, count in accepted_counts.items():
+            busy_counts[miner_hotkey] = busy_counts.get(miner_hotkey, 0) + count
+
+        return busy_counts
 
     async def _catch_up(
         self,
