@@ -141,6 +141,7 @@ CONSTANCE_CONFIG = {
         "Whether this validator is serving jobs and setting weights",
         bool,
     ),
+    "DYNAMIC_DUMMY": (0, "Dummy config for the purpose of testing", int),
     "DYNAMIC_MANIFEST_SCORE_MULTIPLIER": (
         1.05,
         "The bonus rate for miners changing their horde size",
