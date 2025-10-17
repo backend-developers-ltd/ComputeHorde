@@ -104,6 +104,11 @@ class MinerExecutorConsumer(BaseConsumer[ExecutorToMinerMessage], ExecutorInterf
         if isinstance(msg, V0ExecutorReadyRequest):
             self.job.status = AcceptedJob.Status.WAITING_FOR_PAYLOAD
             await self.job.asave()
+            logger.info(
+                "Executor %s reported ready for job %s",
+                self.executor_token,
+                self.job.job_uuid,
+            )
             await self.send_executor_ready(self.executor_token, msg)
             return
 
@@ -125,6 +130,12 @@ class MinerExecutorConsumer(BaseConsumer[ExecutorToMinerMessage], ExecutorInterf
         if isinstance(msg, V0StreamingJobReadyRequest):
             # Job status is RUNNING
             msg.ip = self.get_executor_ip()
+            logger.info(
+                "Executor %s reported streaming ready for job %s (ip=%s)",
+                self.executor_token,
+                self.job.job_uuid,
+                msg.ip,
+            )
             await self.send_streaming_job_ready(self.executor_token, msg)
             return
 
@@ -157,6 +168,12 @@ class MinerExecutorConsumer(BaseConsumer[ExecutorToMinerMessage], ExecutorInterf
             self.job.stdout = msg.docker_process_stdout
             self.job.artifacts = msg.artifacts or {}
             await self.job.asave()
+            logger.info(
+                "Executor %s finished job %s (artifacts=%s)",
+                self.executor_token,
+                self.job.job_uuid,
+                bool(self.job.artifacts),
+            )
             await self.send_executor_finished(self.executor_token, msg)
             return
 
@@ -171,6 +188,13 @@ class MinerExecutorConsumer(BaseConsumer[ExecutorToMinerMessage], ExecutorInterf
             self.job.error_type = msg.reason
             self.job.error_detail = msg.message
             await self.job.asave()
+            logger.warning(
+                "Executor %s reported job %s failed at stage=%s reason=%s",
+                self.executor_token,
+                self.job.job_uuid,
+                msg.stage,
+                msg.reason,
+            )
             await self.send_job_failed(self.executor_token, msg)
             return
 
@@ -179,6 +203,12 @@ class MinerExecutorConsumer(BaseConsumer[ExecutorToMinerMessage], ExecutorInterf
             self.job.error_type = msg.reason
             self.job.error_detail = msg.message
             await self.job.asave()
+            logger.warning(
+                "Executor %s reported horde failure for job %s reason=%s",
+                self.executor_token,
+                self.job.job_uuid,
+                msg.reason,
+            )
             await self.send_horde_failed(self.executor_token, msg)
             return
 
@@ -201,7 +231,13 @@ class MinerExecutorConsumer(BaseConsumer[ExecutorToMinerMessage], ExecutorInterf
         await self.send(msg.model_dump_json())
 
     async def disconnect(self, close_code) -> None:
-        logger.info(f"Executor {self.executor_token} disconnected with code {close_code}")
+        last_status = self._maybe_job.status if self._maybe_job else None
+        logger.info(
+            "Executor %s disconnected with code %s (last_status=%s)",
+            self.executor_token,
+            close_code,
+            last_status,
+        )
 
         # Check if we have a job and it's still running.
         if self._maybe_job and AcceptedJob.Status(self._maybe_job.status).is_active():

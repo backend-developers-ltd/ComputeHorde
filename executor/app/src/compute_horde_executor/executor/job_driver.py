@@ -64,14 +64,22 @@ class JobDriver:
 
             except JobError as e:
                 logger.error(str(e), exc_info=True)
-                await self.send_job_failed(e.message, e.reason, e.context)
+                try:
+                    async with asyncio.timeout(5):
+                        await self.send_job_failed(e.message, e.reason, e.context)
+                except TimeoutError:
+                    logger.error("Timed out sending job failed message")
 
             except Exception as e:
                 sentry_sdk.capture_exception(e)
                 e = HordeError.wrap_unhandled(e)
                 e.add_context({"stage": self.current_stage})
                 logger.exception(str(e), exc_info=True)
-                await self.send_horde_failed(e.message, e.reason, e.context)
+                try:
+                    async with asyncio.timeout(5):
+                        await self.send_horde_failed(e.message, e.reason, e.context)
+                except TimeoutError:
+                    logger.error("Timed out sending horde failed message")
 
             finally:
                 try:

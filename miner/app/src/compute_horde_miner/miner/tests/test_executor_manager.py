@@ -152,6 +152,32 @@ async def test_executor_class_pool(dummy_manager):
     "compute_horde_miner.miner.executor_manager._internal.base.ExecutorClassPool.POOL_CLEANUP_PERIOD",
     0.1,
 )
+async def test_pool_cleanup_handles_wait_errors(dummy_manager):
+    pool = await dummy_manager.get_executor_class_pool(ExecutorClass.always_on__gpu_24gb)
+    await pool.reserve_executor("token-error", 2)
+    assert pool.get_availability() == 1
+
+    original_wait = dummy_manager.wait_for_executor
+
+    async def failing_wait(executor, timeout):
+        raise RuntimeError("boom")
+
+    dummy_manager.wait_for_executor = failing_wait  # type: ignore[assignment]
+
+    try:
+        # Allow time for the cleanup loop to observe the failure and drop the executor
+        await asyncio.sleep(0.5)
+        assert pool.get_availability() == 2
+    finally:
+        # Restore original implementation to avoid side effects on later tests
+        dummy_manager.wait_for_executor = original_wait  # type: ignore[assignment]
+
+
+@pytest.mark.asyncio
+@patch(
+    "compute_horde_miner.miner.executor_manager._internal.base.ExecutorClassPool.POOL_CLEANUP_PERIOD",
+    0.1,
+)
 async def test_manager_reserve_executor_class(dummy_manager):
     await dummy_manager.reserve_executor_class("token1", ExecutorClass.always_on__gpu_24gb, 10)
     assert (
