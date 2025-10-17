@@ -4,7 +4,7 @@ from compute_horde.subtensor import get_cycle_containing_block
 from django.conf import settings
 from django.core.management.base import BaseCommand
 
-from compute_horde_validator.validator.allowance.default import allowance
+from compute_horde_validator.validator.models import MetagraphSnapshot
 from compute_horde_validator.validator.scoring.calculations import (
     calculate_allowance_paid_job_scores,
 )
@@ -40,7 +40,7 @@ class Command(BaseCommand):
             logging.getLogger().setLevel(logging.DEBUG)
 
         if start_block is None or end_block is None:
-            metagraph = allowance().get_metagraph()
+            metagraph = MetagraphSnapshot.get_latest()
             current_cycle = get_cycle_containing_block(
                 block=metagraph.block, netuid=settings.BITTENSOR_NETUID
             )

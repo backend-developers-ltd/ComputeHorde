@@ -19,6 +19,7 @@ from compute_horde.dynamic_config import fetch_dynamic_configs_from_contract, sy
 from compute_horde.fv_protocol.facilitator_requests import OrganicJobRequest
 from compute_horde.miner_client.organic import OrganicMinerClient
 from compute_horde.smart_contracts.map_contract import get_dynamic_config_types_from_settings
+from compute_horde.subtensor import get_cycle_containing_block
 from compute_horde.utils import turbobt_get_validators
 from compute_horde_core.executor_class import ExecutorClass
 from constance import config
@@ -63,16 +64,13 @@ from compute_horde_validator.validator.synthetic_jobs.utils import (
     create_and_run_synthetic_job_batch,
 )
 
-from . import (
-    eviction,
-    miner_sync,  # noqa
-)
+from . import eviction
 from .allowance import tasks as allowance_tasks  # noqa
-from .allowance.default import allowance
-from .clean_me_up import bittensor_client, get_single_manifest
+from .clean_me_up import _get_metagraph_for_sync, bittensor_client, get_single_manifest
 from .collateral import tasks as collateral_tasks  # noqa
 from .dynamic_config import aget_config
-from .models import AdminJobRequest, MinerManifest
+from .models import AdminJobRequest, MetagraphSnapshot, MinerManifest
+from .scoring import tasks as scoring_tasks  # noqa
 
 if False:
     import torch  # noqa
@@ -445,6 +443,163 @@ def send_events_to_facilitator():
             ).update(sent=True)
         else:
             logger.error(f"Failed to send system events to facilitator: {response}")
+
+
+def save_metagraph_snapshot(
+    neurons: list[turbobt.Neuron],
+    subnet_state: turbobt.subnet.SubnetState,
+    block: turbobt.Block,
+    snapshot_type: MetagraphSnapshot.SnapshotType = MetagraphSnapshot.SnapshotType.LATEST,
+) -> None:
+    MetagraphSnapshot.objects.update_or_create(
+        id=snapshot_type,  # current metagraph snapshot
+        defaults={
+            "block": block.number,
+            "updated_at": now(),
+            "alpha_stake": subnet_state["alpha_stake"],
+            "tao_stake": subnet_state["tao_stake"],
+            "stake": subnet_state["total_stake"],
+            "uids": [neuron.uid for neuron in neurons],
+            "hotkeys": [neuron.hotkey for neuron in neurons],
+            "coldkeys": [neuron.coldkey for neuron in neurons],
+            "serving_hotkeys": [
+                neuron.hotkey
+                for neuron in neurons
+                if neuron.axon_info and str(neuron.axon_info.ip) != "0.0.0.0"
+            ],
+        },
+    )
+
+
+@app.task
+@bittensor_client
+def sync_metagraph(bittensor: turbobt.Bittensor) -> None:
+    neurons, subnet_state, block = async_to_sync(_get_metagraph_for_sync)(bittensor)
+
+    if not block:
+        return
+
+    # save current cycle start metagraph snapshot
+    current_cycle = get_cycle_containing_block(block=block.number, netuid=settings.BITTENSOR_NETUID)
+
+    # check metagraph sync lag
+    previous_block = None
+    try:
+        previous_metagraph = MetagraphSnapshot.get_latest()
+        if previous_metagraph:
+            previous_block = previous_metagraph.block
+    except Exception as e:
+        logger.warning(f"Failed to fetch previous metagraph snapshot block: {e}")
+    blocks_diff = block.number - previous_block if previous_block else None
+    if blocks_diff is not None and blocks_diff != 1:
+        if blocks_diff == 0:
+            return
+        else:
+            msg = f"Metagraph is {blocks_diff} blocks lagging - previous: {previous_block}, current: {block.number}"
+            logger.warning(msg)
+            SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).create(
+                type=SystemEvent.EventType.METAGRAPH_SYNCING,
+                subtype=SystemEvent.EventSubType.WARNING,
+                long_description=msg,
+                data={
+                    "blocks_diff": blocks_diff,
+                    "previous_block": previous_block,
+                    "block": block.number,
+                },
+            )
+
+    save_metagraph_snapshot(neurons, subnet_state, block)
+
+    # sync neurons
+    current_hotkeys = [neuron.hotkey for neuron in neurons]
+    miners = list(Miner.objects.filter(hotkey__in=current_hotkeys).all())
+    existing_hotkeys = {m.hotkey for m in miners}
+    new_hotkeys = set(current_hotkeys) - existing_hotkeys
+    if len(new_hotkeys) > 0:
+        new_miners = []
+        hotkey_to_neuron = {neuron.hotkey: neuron for neuron in neurons}
+        for hotkey in new_hotkeys:
+            neuron = hotkey_to_neuron.get(hotkey)
+            coldkey = neuron.coldkey if neuron else None
+            new_miners.append(Miner(hotkey=hotkey, coldkey=coldkey))
+        new_miners = Miner.objects.bulk_create(new_miners)
+        miners.extend(new_miners)
+        logger.info(f"Created new neurons: {new_hotkeys}")
+
+    # update axon info of neurons
+    miners_to_update = []
+    hotkey_to_neuron = {
+        neuron.hotkey: neuron
+        for neuron in neurons
+        if neuron.axon_info and str(neuron.axon_info.ip) != "0.0.0.0"
+    }
+    for miner in miners:
+        neuron = hotkey_to_neuron.get(miner.hotkey)
+        if (
+            neuron
+            and neuron.axon_info
+            and (
+                miner.uid != neuron.uid
+                or miner.address
+                != getattr(
+                    neuron.axon_info,
+                    "shield_address",
+                    str(neuron.axon_info.ip),
+                )
+                or miner.port != neuron.axon_info.port
+                or miner.ip_version != neuron.axon_info.ip.version
+                or miner.coldkey != neuron.coldkey
+            )
+        ):
+            miner.uid = neuron.uid
+            miner.address = getattr(
+                neuron.axon_info,
+                "shield_address",
+                str(neuron.axon_info.ip),
+            )
+            miner.port = neuron.axon_info.port
+            miner.ip_version = neuron.axon_info.ip.version
+            miner.coldkey = neuron.coldkey
+            miners_to_update.append(miner)
+
+    if miners_to_update:
+        Miner.objects.bulk_update(
+            miners_to_update, fields=["uid", "address", "port", "ip_version", "coldkey"]
+        )
+        logger.info(f"Updated axon infos and null coldkeys for {len(miners_to_update)} miners")
+
+    data = {
+        "block": block.number,
+        "new_neurons": len(new_hotkeys),
+        "updated_axon_infos": len(miners_to_update),
+    }
+    SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).create(
+        type=SystemEvent.EventType.VALIDATOR_MINERS_REFRESH,
+        subtype=SystemEvent.EventSubType.SUCCESS,
+        data=data,
+    )
+
+    # update cycle start metagraph snapshot if cycle has changed
+    cycle_start_metagraph = None
+    try:
+        cycle_start_metagraph = MetagraphSnapshot.get_cycle_start()
+    except Exception as e:
+        logger.warning(f"Failed to fetch cycle start metagraph snapshot: {e}")
+    if cycle_start_metagraph is None or cycle_start_metagraph.block != current_cycle.start:
+        neurons, subnet_state, block = async_to_sync(_get_metagraph_for_sync)(
+            bittensor,
+            block_number=current_cycle.start,
+        )
+
+        if not block:
+            return
+
+        save_metagraph_snapshot(
+            neurons,
+            subnet_state,
+            block,
+            snapshot_type=MetagraphSnapshot.SnapshotType.CYCLE_START,
+        )
 
 
 async def get_manifests_from_miners(
@@ -952,19 +1107,25 @@ async def _poll_miner_manifests() -> None:
     """
     Poll miners connected to this validator for their manifests and update the database.
     """
-    metagraph = await sync_to_async(allowance().get_metagraph, thread_sensitive=False)()
+    try:
+        metagraph = await MetagraphSnapshot.objects.aget(id=MetagraphSnapshot.SnapshotType.LATEST)
+        serving_hotkeys = metagraph.get_serving_hotkeys()
 
-    if not metagraph.serving_hotkeys:
-        logger.info("No serving miners in metagraph, skipping manifest polling")
+        if not serving_hotkeys:
+            logger.info("No serving miners in metagraph, skipping manifest polling")
+            return
+
+        miners = [m async for m in Miner.objects.filter(hotkey__in=serving_hotkeys)]
+
+        if not miners:
+            logger.info("No serving miners found in database, skipping manifest polling")
+            return
+
+        logger.info(f"Polling manifests from {len(miners)} serving miners")
+
+    except MetagraphSnapshot.DoesNotExist:
+        logger.warning("No metagraph snapshot found, skipping manifest polling")
         return
-
-    miners = [m async for m in Miner.objects.filter(hotkey__in=metagraph.serving_hotkeys)]
-
-    if not miners:
-        logger.info("No serving miners found in database, skipping manifest polling")
-        return
-
-    logger.info(f"Polling manifests from {len(miners)} serving miners")
 
     manifests_dict = await get_manifests_from_miners(miners, timeout=30)
 

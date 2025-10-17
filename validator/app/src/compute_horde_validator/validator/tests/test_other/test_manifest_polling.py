@@ -2,7 +2,7 @@ import logging
 from contextlib import asynccontextmanager
 from datetime import timedelta
 from typing import TypedDict
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 from compute_horde.miner_client.organic import OrganicMinerClient
@@ -10,8 +10,11 @@ from compute_horde.protocol_messages import V0ExecutorManifestRequest
 from compute_horde_core.executor_class import ExecutorClass
 from django.utils import timezone
 
-from compute_horde_validator.validator.allowance.types import MetagraphData
-from compute_horde_validator.validator.models import Miner, MinerManifest
+from compute_horde_validator.validator.models import (
+    MetagraphSnapshot,
+    Miner,
+    MinerManifest,
+)
 from compute_horde_validator.validator.tasks import (
     _get_latest_manifests,
     _poll_miner_manifests,
@@ -114,29 +117,6 @@ def common_test_setup():
         yield
 
 
-def _metagraph_data(serving_hotkeys: list[str], block: int = 100) -> MetagraphData:
-    return MetagraphData.model_construct(
-        block=block,
-        block_hash=f"hash_{block}",
-        total_stake=[],
-        uids=[],
-        hotkeys=[],
-        serving_hotkeys=serving_hotkeys,
-    )
-
-
-def patch_allowance_metagraph(monkeypatch, serving_hotkeys: list[str]) -> MetagraphData:
-    """Helper to patch allowance metagraph with serving hotkeys."""
-    metagraph = _metagraph_data(serving_hotkeys)
-    allowance_mock = MagicMock()
-    allowance_mock.get_metagraph = MagicMock(return_value=metagraph)
-    monkeypatch.setattr(
-        "compute_horde_validator.validator.tasks.allowance",
-        MagicMock(return_value=allowance_mock),
-    )
-    return metagraph
-
-
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_get_manifests_from_miners():
@@ -200,7 +180,7 @@ async def test_get_manifests_from_miners():
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_poll_miner_manifests_with_partial_failures(monkeypatch):
+async def test_poll_miner_manifests_with_partial_failures():
     """
     Test _poll_miner_manifests with some miners failing to respond.
     """
@@ -208,7 +188,16 @@ async def test_poll_miner_manifests_with_partial_failures(monkeypatch):
     miner2 = await Miner.objects.acreate(hotkey="test_miner_2", address="192.168.1.2", port=8080)
     miner3 = await Miner.objects.acreate(hotkey="test_miner_3", address="192.168.1.3", port=8080)
 
-    patch_allowance_metagraph(monkeypatch, ["test_miner_1", "test_miner_2", "test_miner_3"])
+    await MetagraphSnapshot.objects.acreate(
+        id=MetagraphSnapshot.SnapshotType.LATEST,
+        block=100,
+        alpha_stake=[100.0, 100.0, 100.0],
+        tao_stake=[100.0, 100.0, 100.0],
+        stake=[100.0, 100.0, 100.0],
+        uids=[1, 2, 3],
+        hotkeys=["test_miner_1", "test_miner_2", "test_miner_3"],
+        serving_hotkeys=["test_miner_1", "test_miner_2", "test_miner_3"],
+    )
 
     transport_map = {}
 
@@ -238,13 +227,22 @@ async def test_poll_miner_manifests_with_partial_failures(monkeypatch):
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_poll_miner_manifests_multiple_calls(monkeypatch):
+async def test_poll_miner_manifests_multiple_calls():
     """
     Test that multiple calls fetch the latest manifest from the miner each time.
     """
     miner = await Miner.objects.acreate(hotkey="test_miner_1", address="192.168.1.1", port=8080)
 
-    patch_allowance_metagraph(monkeypatch, ["test_miner_1"])
+    await MetagraphSnapshot.objects.acreate(
+        id=MetagraphSnapshot.SnapshotType.LATEST,
+        block=100,
+        alpha_stake=[100.0],
+        tao_stake=[100.0],
+        stake=[100.0],
+        uids=[1],
+        hotkeys=["test_miner_1"],
+        serving_hotkeys=["test_miner_1"],
+    )
 
     manifest_v1 = {
         ExecutorClass.always_on__gpu_24gb: 1,
@@ -293,9 +291,7 @@ async def test_poll_miner_manifests_multiple_calls(monkeypatch):
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_poll_miner_manifests_with_partial_transport_failures(
-    monkeypatch,
-):
+async def test_poll_miner_manifests_with_partial_transport_failures():
     """
     Test _poll_miner_manifests when some miners don't respond via transport.
     """
@@ -317,7 +313,16 @@ async def test_poll_miner_manifests_with_partial_transport_failures(
         online_executor_count=1,
     )
 
-    patch_allowance_metagraph(monkeypatch, ["test_miner_1", "test_miner_2"])
+    await MetagraphSnapshot.objects.acreate(
+        id=MetagraphSnapshot.SnapshotType.LATEST,
+        block=100,
+        alpha_stake=[100.0, 100.0],
+        tao_stake=[100.0, 100.0],
+        stake=[100.0, 100.0],
+        uids=[1, 2],
+        hotkeys=["test_miner_1", "test_miner_2"],
+        serving_hotkeys=["test_miner_1", "test_miner_2"],
+    )
 
     transport_map = {}
 
@@ -350,7 +355,7 @@ async def test_poll_miner_manifests_with_partial_transport_failures(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_poll_miner_manifests_no_duplicate_offline_records(monkeypatch):
+async def test_poll_miner_manifests_no_duplicate_offline_records():
     """
     Test that when miners don't respond, only one record per executor class is created.
     """
@@ -381,7 +386,16 @@ async def test_poll_miner_manifests_no_duplicate_offline_records(monkeypatch):
         created_at=timezone.now() - timedelta(minutes=1),
     )
 
-    patch_allowance_metagraph(monkeypatch, ["test_miner_1"])
+    await MetagraphSnapshot.objects.acreate(
+        id=MetagraphSnapshot.SnapshotType.LATEST,
+        block=100,
+        alpha_stake=[100.0],
+        tao_stake=[100.0],
+        stake=[100.0],
+        uids=[1],
+        hotkeys=["test_miner_1"],
+        serving_hotkeys=["test_miner_1"],
+    )
 
     transport_map = {}
     initial_count = await MinerManifest.objects.filter(miner=miner).acount()

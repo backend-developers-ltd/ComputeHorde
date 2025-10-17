@@ -7,8 +7,7 @@ from compute_horde.utils import BAC_VALIDATOR_SS58_ADDRESS, ValidatorInfo
 from compute_horde_core.executor_class import ExecutorClass
 from django.conf import settings
 
-from compute_horde_validator.validator.allowance.default import allowance
-from compute_horde_validator.validator.models import MinerManifest
+from compute_horde_validator.validator.models import MetagraphSnapshot, MinerManifest
 from compute_horde_validator.validator.synthetic_jobs.utils import get_validator_infos
 
 logger = logging.getLogger(__name__)
@@ -29,7 +28,7 @@ async def filter_valid_excuse_receipts(
         return []
 
     if active_validators is None:
-        metagraph = allowance().get_metagraph()
+        metagraph = await MetagraphSnapshot.aget_latest()
         active_validators = get_validator_infos(metagraph)
 
     allowed_validators = {
