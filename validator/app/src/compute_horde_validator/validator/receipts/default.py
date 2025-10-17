@@ -122,10 +122,17 @@ class Receipts(ReceiptsBase):
             logger.info("Will fetch receipts from metagraph snapshot miners")
 
             async def miners():
-                metagraph = await sync_to_async(allowance().get_metagraph, thread_sensitive=False)()
-                serving_hotkeys = metagraph.serving_hotkeys
-                serving_miners = [m async for m in Miner.objects.filter(hotkey__in=serving_hotkeys)]
-                return [(m.hotkey, m.address, m.port) for m in serving_miners]
+                def load_miners() -> list[MinerInfo]:
+                    metagraph = allowance().get_metagraph()
+                    serving_hotkeys = metagraph.serving_hotkeys
+                    return [
+                        (hotkey, address, port)
+                        for hotkey, address, port in Miner.objects.filter(
+                            hotkey__in=serving_hotkeys
+                        ).values_list("hotkey", "address", "port")
+                    ]
+
+                return await sync_to_async(load_miners)()
 
         # IMPORTANT: This encompasses at least the current and the previous cycle.
         cutoff = timezone.now() - datetime.timedelta(hours=5)
