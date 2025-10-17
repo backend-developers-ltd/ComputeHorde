@@ -79,6 +79,8 @@ async def filter_valid_excuse_receipts(
             validation_failures.append("receipt expired")
         if not receipt.verify_validator_signature(throw=False):
             validation_failures.append("validator signature invalid")
+        if receipt.payload.job_uuid in seen_receipts:
+            validation_failures.append("duplicate receipt")
 
         if validation_failures:
             logger.error(
