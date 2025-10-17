@@ -288,7 +288,7 @@ CONSTANCE_CONFIG = {
         str,
     ),
     "DYNAMIC_EXECUTOR_CLASS_WEIGHTS": (
-        "spin_up-4min.gpu-24gb=99,always_on.llm.a6000=1",
+        "spin_up-4min.gpu-24gb=99,always_on.llm.a6000=1,always_on.test=0",
         (
             "Weights of executor classes that are used to normalize miners scores. "
             "Executor classes not mentioned here are not taken into account when scoring. "

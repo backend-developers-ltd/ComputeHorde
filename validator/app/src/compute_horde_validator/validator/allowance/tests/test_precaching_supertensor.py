@@ -93,6 +93,9 @@ def test_precaching_supertensor_smoke_test():
         keep_trying_until_success_or_timeout(
             functools.partial(precaching_supertensor.get_block_timestamp, 1001)
         )
+        keep_trying_until_success_or_timeout(
+            functools.partial(precaching_supertensor.list_neurons, 1001)
+        )
         precaching_supertensor.list_neurons(1001)
 
         with pytest.raises(supertensor.PrecachingSuperTensorCacheMiss):
