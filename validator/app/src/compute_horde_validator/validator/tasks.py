@@ -73,6 +73,7 @@ from .clean_me_up import bittensor_client, get_single_manifest
 from .collateral import tasks as collateral_tasks  # noqa
 from .dynamic_config import aget_config
 from .models import AdminJobRequest, MinerManifest
+from .scoring import tasks as scoring_tasks  # noqa
 
 if False:
     import torch  # noqa
