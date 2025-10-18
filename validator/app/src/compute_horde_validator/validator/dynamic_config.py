@@ -11,7 +11,7 @@ from compute_horde_validator.validator.models import SystemEvent
 
 
 async def aget_config(key: str) -> Any:
-    return await sync_to_async(lambda: getattr(config, key))()
+    return await sync_to_async(lambda: getattr(config, key), thread_sensitive=False)()
 
 
 async def aget_weights_version() -> int:
