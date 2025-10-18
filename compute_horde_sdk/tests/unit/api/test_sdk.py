@@ -193,6 +193,32 @@ async def test_job_e2e(apiver_module, httpx_mock, keypair, async_sleep_mock):
 
 
 @pytest.mark.asyncio
+async def test_report_cheated_job(apiver_module, compute_horde_client, httpx_mock):
+    httpx_mock.add_response(url=f"{TEST_FACILITATOR_URL}/api/v1/cheated-job/", text="ok")
+
+    trusted_job_uuid = "8c8d1f5e-5d1c-4c35-8e47-0e913a2d51aa"
+    details = {
+        "reason": "hash_mismatch",
+    }
+
+    response = await compute_horde_client.report_cheated_job(
+        TEST_JOB_UUID,
+        trusted_job_uuid,
+        details=details,
+    )
+
+    assert response == "ok"
+
+    request = httpx_mock.get_request()
+    assert json.loads(request.content) == {
+        "job_uuid": TEST_JOB_UUID,
+        "trusted_job_uuid": trusted_job_uuid,
+        "details": details,
+    }
+    assert_signature(request)
+
+
+@pytest.mark.asyncio
 async def test_get_jobs(apiver_module, compute_horde_client, httpx_mock):
     job1_uuid = "7b522daa-e807-4094-8d96-99b9a863f960"
     job1_status = "accepted"

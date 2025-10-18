@@ -1,8 +1,7 @@
-import json
-
 import django_filters
 from compute_horde_core.output_upload import SingleFileUpload
 from django.core.exceptions import ObjectDoesNotExist
+from django.db import transaction
 from django.db.models import QuerySet
 from django_filters import fields
 from django_filters.rest_framework import DjangoFilterBackend
@@ -18,7 +17,7 @@ from structlog import get_logger
 
 from .authentication import JWTAuthentication
 from .middleware.signature_middleware import require_signature
-from .models import Job, JobCreationDisabledError, JobFeedback, JobStatus
+from .models import CheatedJobReport, Job, JobCreationDisabledError, JobFeedback, JobStatus
 from .schemas import MuliVolumeAllowedVolume
 
 logger = get_logger(__name__)
@@ -159,6 +158,12 @@ class DockerJobSerializer(JobSerializer):
         )
 
 
+class CheatedJobReportSerializer(serializers.Serializer):
+    job_uuid = serializers.UUIDField()
+    trusted_job_uuid = serializers.UUIDField()
+    details = serializers.JSONField(required=False, allow_null=True)
+
+
 class JobFeedbackSerializer(serializers.ModelSerializer):
     result_correctness = serializers.FloatField(min_value=0, max_value=1)
     expected_duration = serializers.FloatField(min_value=0, required=False)
@@ -239,17 +244,65 @@ class DockerJobViewset(BaseCreateJobViewSet):
 
 # should fetch job and mark it as cheated
 class CheatedJobViewSet(mixins.CreateModelMixin, viewsets.GenericViewSet):
+    serializer_class = CheatedJobReportSerializer
+    permission_classes = (IsAuthenticated | RequestHasHotkey,)
+
+    def get_authenticators(self) -> list[BaseAuthentication]:
+        return super().get_authenticators() + [JWTAuthentication()]
+
     def create(self, request, *args, **kwargs):
-        job_uuid = json.loads(request.body).get("job_uuid")
-        try:
-            job = Job.objects.get(uuid=job_uuid)
-            updated = Job.objects.filter(uuid=job_uuid, cheated=False).update(cheated=True)
-            if updated:
-                job.report_cheated(request.signature)
-                return Response(status=status.HTTP_200_OK, data={"message": "Job reported as cheated"})
-            return Response(status=status.HTTP_200_OK, data={"message": "Job already marked as cheated"})
-        except Job.DoesNotExist:
-            return Response(status=status.HTTP_404_NOT_FOUND)
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        validated = serializer.validated_data
+        job_uuid = validated["job_uuid"]
+        trusted_job_uuid = validated["trusted_job_uuid"]
+        details = validated.get("details")
+
+        if hasattr(request, "hotkey"):
+            owner_filter = {"hotkey": request.hotkey}
+        else:
+            owner_filter = {"user": request.user}
+
+        with transaction.atomic():
+            try:
+                job = Job.objects.select_for_update().get(uuid=job_uuid, on_trusted_miner=False, **owner_filter)
+            except Job.DoesNotExist:
+                return Response(
+                    status=status.HTTP_404_NOT_FOUND,
+                    data={"error": "Job not found"},
+                )
+
+            try:
+                trusted_job = Job.objects.select_for_update().get(
+                    uuid=trusted_job_uuid, on_trusted_miner=True, **owner_filter
+                )
+            except Job.DoesNotExist:
+                return Response(
+                    status=status.HTTP_404_NOT_FOUND,
+                    data={"error": "Trusted job not found"},
+                )
+
+            report, created = CheatedJobReport.objects.get_or_create(
+                job=job,
+                defaults={"trusted_job": trusted_job, "details": details},
+            )
+            if not created:
+                return Response(
+                    status=status.HTTP_400_BAD_REQUEST,
+                    data={"error": "Cheat report already exists for this job"},
+                )
+
+            if not job.cheated:
+                job.cheated = True
+                job.save(update_fields=["cheated"])
+
+        job.report_cheated(
+            signature=request.signature,
+            trusted_job_uuid=str(trusted_job_uuid),
+            details=details,
+        )
+        return Response(status=status.HTTP_201_CREATED, data={"message": "Job reported as cheated"})
 
 
 class JobFeedbackViewSet(mixins.CreateModelMixin, mixins.RetrieveModelMixin, viewsets.GenericViewSet):
