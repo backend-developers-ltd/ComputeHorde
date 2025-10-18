@@ -7,10 +7,15 @@ from unittest.mock import MagicMock
 import pytest
 from freezegun import freeze_time
 
+from compute_horde_validator.validator.allowance import settings as allowance_settings
 from compute_horde_validator.validator.allowance import tasks as allowance_tasks
 from compute_horde_validator.validator.allowance.tests.mockchain import set_block_number
 from compute_horde_validator.validator.allowance.utils import blocks, manifests
-from compute_horde_validator.validator.allowance.utils.supertensor import supertensor
+from compute_horde_validator.validator.allowance.utils.supertensor import (
+    SuperTensorError,
+    supertensor,
+)
+from compute_horde_validator.validator.models import SystemEvent
 
 
 @pytest.fixture()
@@ -289,3 +294,178 @@ def test_find_missing_blocks():
         assert blocks.find_missing_blocks(1020) == list(range(-424, 1000)) + [1001, 1004] + list(
             range(1010, 1021)
         )
+
+
+@pytest.mark.django_db(transaction=True, databases=["default_alias", "default"])
+def test_archive_scan_stops_on_supertensor_error_to_prevent_gaps(configure_logs):
+    current_block = 2500
+    blocks_to_seed = [1000, 1100, 1200, 1300, 2300, 2350]
+
+    with set_block_number(1000, oldest_reachable_block=1000):
+        manifests.sync_manifests()
+
+    for block_num in blocks_to_seed:
+        with set_block_number(block_num, oldest_reachable_block=1000):
+            blocks.process_block_allowance_with_reporting(block_num, supertensor_=supertensor())
+
+    with set_block_number(current_block, oldest_reachable_block=1000):
+        archive_supertensor = supertensor()
+
+    call_count = 0
+
+    def mock_process_with_error(block_number, *args, **kwargs):
+        nonlocal call_count
+        call_count += 1
+        if block_number == 2399:
+            raise SuperTensorError("Simulated blockchain API error")
+        return blocks.process_block_allowance_with_reporting(block_number, *args, **kwargs)
+
+    with (
+        mock.patch("turbobt.Bittensor", side_effect=AssertionError("Should not init Bittensor")),
+        set_block_number(current_block, oldest_reachable_block=1000),
+        mock.patch.object(
+            blocks,
+            "process_block_allowance_with_reporting",
+            side_effect=mock_process_with_error,
+        ) as proc_mock,
+    ):
+        allowance_tasks.scan_archive_blocks_and_calculate_allowance(
+            backfilling_supertensor=archive_supertensor,
+            keep_running=False,
+        )
+
+    assert call_count == 1
+    assert proc_mock.call_args_list[0].args[0] == 2399
+
+    system_events = SystemEvent.objects.filter(
+        type=SystemEvent.EventType.COMPUTE_TIME_ALLOWANCE,
+        subtype=SystemEvent.EventSubType.FAILURE,
+        data__context="archive_scan",
+    )
+    assert system_events.count() == 1
+    assert system_events[0].data["block_number"] == 2399
+    assert "blockchain API error" in system_events[0].data["error"]
+
+
+@pytest.mark.django_db(transaction=True, databases=["default_alias", "default"])
+def test_archive_scan_respects_range_boundaries_and_oldest_reachable(configure_logs):
+    current_block = 1650
+    blocks_to_seed = [1000, 1100, 1200, 1450, 1500, 1520]
+    oldest_reachable = 1100
+
+    with set_block_number(1000, oldest_reachable_block=oldest_reachable):
+        manifests.sync_manifests()
+
+    for block_num in blocks_to_seed:
+        with set_block_number(block_num, oldest_reachable_block=oldest_reachable):
+            blocks.process_block_allowance_with_reporting(block_num, supertensor_=supertensor())
+
+    with set_block_number(current_block, oldest_reachable_block=oldest_reachable):
+        archive_supertensor = supertensor()
+
+    def mock_process_noop(block_number, *args, **kwargs):
+        pass
+
+    with (
+        mock.patch("turbobt.Bittensor", side_effect=AssertionError("Should not init Bittensor")),
+        set_block_number(current_block, oldest_reachable_block=oldest_reachable),
+        mock.patch.object(
+            blocks,
+            "process_block_allowance_with_reporting",
+            side_effect=mock_process_noop,
+        ) as proc_mock,
+        mock.patch.object(allowance_settings, "ARCHIVE_SCAN_MAX_RUN_TIME", new=999999),
+        mock.patch.object(allowance_settings, "ARCHIVE_MAX_LOOKBACK", new=500),
+    ):
+        allowance_tasks.scan_archive_blocks_and_calculate_allowance(
+            backfilling_supertensor=archive_supertensor,
+            keep_running=False,
+        )
+
+    called_blocks = [call.args[0] for call in proc_mock.call_args_list]
+
+    archive_start = current_block - allowance_settings.ARCHIVE_START_OFFSET
+    archive_end = current_block - 500
+    effective_start = max(archive_end, oldest_reachable)
+
+    assert 1000 not in called_blocks
+    assert all(block <= archive_start for block in called_blocks)
+    assert all(block >= effective_start for block in called_blocks)
+
+    expected_missing = [
+        block_num
+        for block_num in range(archive_start, effective_start - 1, -1)
+        if block_num not in blocks_to_seed
+    ]
+    assert called_blocks == expected_missing
+
+
+@pytest.mark.django_db(transaction=True, databases=["default_alias", "default"])
+def test_archive_scan_completes_successfully_with_checkpoints(configure_logs):
+    current_block = 1400
+    blocks_to_seed = list(range(1000, 1020)) + list(range(1050, 1060)) + list(range(1280, 1285))
+
+    with set_block_number(1000, oldest_reachable_block=1000):
+        manifests.sync_manifests()
+
+    for block_num in blocks_to_seed:
+        with set_block_number(block_num, oldest_reachable_block=1000):
+            blocks.process_block_allowance_with_reporting(block_num, supertensor_=supertensor())
+
+    with set_block_number(current_block, oldest_reachable_block=1000):
+        archive_supertensor = supertensor()
+
+    checkpoint_calls = []
+
+    def mock_checkpoint(block_lt, block_gte):
+        checkpoint_calls.append((block_lt, block_gte))
+
+    def mock_process_noop(block_number, *args, **kwargs):
+        pass
+
+    with (
+        mock.patch("turbobt.Bittensor", side_effect=AssertionError("Should not init Bittensor")),
+        set_block_number(current_block, oldest_reachable_block=1000),
+        mock.patch.object(
+            blocks,
+            "process_block_allowance_with_reporting",
+            side_effect=mock_process_noop,
+        ) as proc_mock,
+        mock.patch.object(allowance_settings, "ARCHIVE_SCAN_MAX_RUN_TIME", new=999999),
+        mock.patch.object(allowance_settings, "ARCHIVE_MAX_LOOKBACK", new=300),
+        mock.patch.object(allowance_settings, "ARCHIVE_SCAN_BATCH_SIZE", new=50),
+        mock.patch.object(
+            allowance_tasks,
+            "report_allowance_checkpoint",
+            MagicMock(delay=mock_checkpoint),
+        ),
+    ):
+        allowance_tasks.scan_archive_blocks_and_calculate_allowance(
+            backfilling_supertensor=archive_supertensor,
+            keep_running=False,
+        )
+
+    called_blocks = [call.args[0] for call in proc_mock.call_args_list]
+
+    archive_start = current_block - allowance_settings.ARCHIVE_START_OFFSET
+    archive_end = current_block - 300
+
+    expected_missing = [
+        block_num
+        for block_num in range(archive_start, archive_end - 1, -1)
+        if block_num not in blocks_to_seed
+    ]
+
+    assert called_blocks == expected_missing
+    assert len(called_blocks) > 0
+
+    expected_checkpoint_count = len(called_blocks) // 50
+    assert len(checkpoint_calls) == expected_checkpoint_count
+
+    if checkpoint_calls:
+        for i, (block_lt, block_gte) in enumerate(checkpoint_calls):
+            expected_idx = (i + 1) * 50 - 1
+            if expected_idx < len(called_blocks):
+                expected_block = called_blocks[expected_idx]
+                assert block_gte == expected_block
+                assert block_lt == expected_block + 50
