@@ -412,7 +412,7 @@ class Receipts(ReceiptsBase):
 
             # Sleep for the remainder of the time if any
             if elapsed < interval:
-                time.sleep(interval - elapsed)
+                await asyncio.sleep(interval - elapsed)
 
     async def _run_once(
         self,
