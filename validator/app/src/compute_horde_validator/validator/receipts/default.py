@@ -32,7 +32,6 @@ from typing_extensions import deprecated
 from compute_horde_validator.validator.allowance.default import allowance
 from compute_horde_validator.validator.allowance.utils.supertensor import supertensor
 from compute_horde_validator.validator.dynamic_config import aget_config
-from compute_horde_validator.validator.models import Miner
 from compute_horde_validator.validator.models.allowance.internal import Block
 
 from .base import ReceiptsBase
@@ -119,17 +118,13 @@ class Receipts(ReceiptsBase):
 
         else:
             # 3rd, if no specific miners were specified, get from metagraph snapshot.
-            logger.info("Will fetch receipts from metagraph snapshot miners")
+            logger.info("Will fetch receipts from metagraph miners")
 
             async def miners():
                 def load_miners() -> list[MinerInfo]:
-                    metagraph = allowance().get_metagraph()
-                    serving_hotkeys = metagraph.serving_hotkeys
                     return [
-                        (hotkey, address, port)
-                        for hotkey, address, port in Miner.objects.filter(
-                            hotkey__in=serving_hotkeys
-                        ).values_list("hotkey", "address", "port")
+                        (miner.hotkey_ss58, miner.address, miner.port)
+                        for miner in allowance().miners()
                     ]
 
                 return await sync_to_async(load_miners)()
