@@ -71,8 +71,59 @@ async def test_filter_valid_excuse_receipts_valid():
 
 
 @pytest.mark.asyncio
+async def test_filter_valid_excuse_receipts_with_duplicate_receipts():
+    now = datetime.now(UTC)
+    miner = "miner_1"
+    validator = "validator_1"
+    executor_class = ExecutorClass.always_on__llm__a6000
+
+    receipts = [
+        schemas.Receipt(
+            payload=schemas.JobStartedReceiptPayload(
+                job_uuid="job-with-duplicated-uuid-1",
+                miner_hotkey=miner,
+                validator_hotkey=validator,
+                is_organic=True,
+                executor_class=executor_class,
+                timestamp=now - timedelta(seconds=1),
+                ttl=10,
+            ),
+            validator_signature="valid",
+            miner_signature="valid",
+        ),
+        schemas.Receipt(
+            payload=schemas.JobStartedReceiptPayload(
+                job_uuid="job-with-duplicated-uuid-1",
+                miner_hotkey=miner,
+                validator_hotkey=validator,
+                is_organic=True,
+                executor_class=executor_class,
+                timestamp=now - timedelta(seconds=1),
+                ttl=10,
+            ),
+            validator_signature="valid",
+            miner_signature="valid",
+        ),
+    ]
+
+    valid_receipts = await job_excuses.filter_valid_excuse_receipts(
+        receipts_to_check=receipts,
+        check_time=now,
+        declined_job_uuid="declined",
+        declined_job_executor_class=executor_class,
+        declined_job_is_synthetic=True,
+        miner_hotkey=miner,
+        minimum_validator_stake_for_excuse=5.0,
+        active_validators=[ValidatorInfo(uid=1, hotkey=validator, stake=10.0)],
+    )
+
+    assert len(valid_receipts) == 1
+    assert valid_receipts[0].payload.job_uuid == "job-with-duplicated-uuid-1"
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "case_name, make_receipts, expect_count",
+    "case_name, make_receipts",
     [
         (
             "not_a_job_started_receipt",
@@ -90,7 +141,6 @@ async def test_filter_valid_excuse_receipts_valid():
                     miner_signature="valid",
                 ),
             ],
-            0,
         ),
         (
             "is_organic_check_failed",
@@ -109,7 +159,6 @@ async def test_filter_valid_excuse_receipts_valid():
                     miner_signature="valid",
                 ),
             ],
-            0,
         ),
         (
             "miner_hotkey_mismatch",
@@ -128,7 +177,6 @@ async def test_filter_valid_excuse_receipts_valid():
                     miner_signature="valid",
                 ),
             ],
-            0,
         ),
         (
             "same_job_uuid_as_declined",
@@ -147,7 +195,6 @@ async def test_filter_valid_excuse_receipts_valid():
                     miner_signature="valid",
                 ),
             ],
-            0,
         ),
         (
             "validator_not_allowed",
@@ -166,7 +213,6 @@ async def test_filter_valid_excuse_receipts_valid():
                     miner_signature="valid",
                 ),
             ],
-            0,
         ),
         (
             "executor_class_mismatch",
@@ -185,7 +231,6 @@ async def test_filter_valid_excuse_receipts_valid():
                     miner_signature="valid",
                 ),
             ],
-            0,
         ),
         (
             "timestamp_too_new",
@@ -204,7 +249,6 @@ async def test_filter_valid_excuse_receipts_valid():
                     miner_signature="valid",
                 ),
             ],
-            0,
         ),
         (
             "receipt_expired_with_leeway",
@@ -223,7 +267,6 @@ async def test_filter_valid_excuse_receipts_valid():
                     miner_signature="valid",
                 ),
             ],
-            0,
         ),
         (
             "validator_signature_invalid",
@@ -242,43 +285,10 @@ async def test_filter_valid_excuse_receipts_valid():
                     miner_signature="valid",
                 ),
             ],
-            0,
-        ),
-        (
-            "duplicate_receipts",
-            lambda now, miner, validator, executor_class: [
-                schemas.Receipt(
-                    payload=schemas.JobStartedReceiptPayload(
-                        job_uuid="job-with-duplicated-uuid-9",
-                        miner_hotkey=miner,
-                        validator_hotkey=validator,
-                        is_organic=True,
-                        executor_class=executor_class,
-                        timestamp=now - timedelta(seconds=1),
-                        ttl=10,
-                    ),
-                    validator_signature="valid",
-                    miner_signature="valid",
-                ),
-                schemas.Receipt(
-                    payload=schemas.JobStartedReceiptPayload(
-                        job_uuid="job-with-duplicated-uuid-9",
-                        miner_hotkey=miner,
-                        validator_hotkey=validator,
-                        is_organic=True,
-                        executor_class=executor_class,
-                        timestamp=now - timedelta(seconds=1),
-                        ttl=10,
-                    ),
-                    validator_signature="valid",
-                    miner_signature="valid",
-                ),
-            ],
-            1,
         ),
     ],
 )
-async def test_filter_valid_excuse_receipts_failures(case_name, make_receipts, expect_count):
+async def test_filter_valid_excuse_receipts_failures(case_name, make_receipts):
     now = datetime.now(UTC)
     miner = "miner_1"
     validator = "validator_1"
@@ -301,6 +311,4 @@ async def test_filter_valid_excuse_receipts_failures(case_name, make_receipts, e
         active_validators=active_validators,
     )
 
-    assert len(res) == expect_count, (
-        f"case {case_name} expected {expect_count} valid receipts, got {len(res)}"
-    )
+    assert res == [], f"case {case_name} expected no valid receipts, got {res}"
