@@ -9,6 +9,16 @@ upcoming release can be found in [changelog.d](changelog.d).
 
 <!-- towncrier release notes start -->
 
+## [0.0.17](https://github.com/backend-developers-ltd/compute-horde-sdk/releases/tag/v0.0.17) - 2025-10-21
+
+
+### Breaking Change
+
+The API for reporting a cheated job has changed:
+- It now **requires** a `trusted_job_uuid` parameter.
+- A new **optional** field `details` has been added for providing additional information about the cheated job.
+
+
 ## [0.0.14](https://github.com/backend-developers-ltd/compute-horde-sdk/releases/tag/v0.0.14) - 2025-08-13
 
 
