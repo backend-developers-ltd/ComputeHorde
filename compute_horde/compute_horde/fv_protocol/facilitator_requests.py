@@ -1,4 +1,3 @@
-import json
 import typing
 from typing import Annotated, Literal, TypeAlias
 
@@ -32,9 +31,15 @@ class V0JobCheated(SignedRequest, BaseModel, extra="forbid"):
     message_type: Literal["V0JobCheated"] = "V0JobCheated"
 
     job_uuid: str
+    trusted_job_uuid: str
+    details: JsonValue
 
     def get_signed_payload(self) -> JsonValue:
-        return json.dumps({"job_uuid": self.job_uuid})
+        return {
+            "job_uuid": self.job_uuid,
+            "trusted_job_uuid": self.trusted_job_uuid,
+            "details": self.details,
+        }
 
 
 def to_json_array(data) -> list[JsonValue]:

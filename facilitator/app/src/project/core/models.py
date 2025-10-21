@@ -204,11 +204,19 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
                     status=protocol_consts.JobStatus.SENT.value,
                 )
 
-    def report_cheated(self, signature: Signature) -> None:
-        """
-        Notify validator of cheated job.
-        """
-        payload = V0JobCheated(job_uuid=str(self.uuid), signature=signature).model_dump()
+    def report_cheated(
+        self,
+        signature: Signature,
+        trusted_job_uuid: str | None,
+        details: dict | None = None,
+    ) -> None:
+        """Notify validator that the job was cheated."""
+        payload = V0JobCheated(
+            job_uuid=str(self.uuid),
+            signature=signature,
+            trusted_job_uuid=trusted_job_uuid,
+            details=details,
+        ).model_dump(exclude_none=True)
         log.debug("sending cheated report", payload=payload)
         self.send_to_validator(payload)
 
@@ -298,6 +306,22 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
         send = async_to_sync(channel_layer.send)
         for channel_name in channels_names:
             send(channel_name, payload)
+
+
+class CheatedJobReport(models.Model):
+    job = models.OneToOneField(Job, on_delete=models.CASCADE, related_name="cheated_report")
+    trusted_job = models.ForeignKey(
+        Job,
+        on_delete=models.PROTECT,
+        related_name="cheat_reports_against",
+        help_text="The trusted job this cheat report is filed against",
+    )
+    details = models.JSONField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self) -> str:
+        return f"CheatedJobReport(job_id={self.job_id}, trusted_job_id={self.trusted_job_id})"
 
 
 class JobStatus(ExportModelOperationsMixin("job_status"), models.Model):
