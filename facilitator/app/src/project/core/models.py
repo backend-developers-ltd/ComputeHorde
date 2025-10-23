@@ -198,11 +198,19 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
             super().save(*args, **kwargs)
             if is_new:
                 job_request = self.as_job_request().model_dump()
-                self.send_to_validator(job_request)
                 JobStatus.objects.create(
                     job=self,
                     status=protocol_consts.JobStatus.SENT.value,
                 )
+
+                def dispatch_job_on_commit() -> None:
+                    try:
+                        self.send_to_validator(job_request)
+                    except Exception:
+                        self.delete()
+                        raise
+
+                transaction.on_commit(dispatch_job_on_commit)
 
     def report_cheated(
         self,
