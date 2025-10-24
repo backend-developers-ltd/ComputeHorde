@@ -8,11 +8,13 @@ then
 fi
 
 SSH_DESTINATION="$1"
+SSH_OPTS="-o ConnectTimeout=10 -o ServerAliveInterval=5 -o ServerAliveCountMax=2"
 
 # install necessary software in the server
-ssh "$SSH_DESTINATION" <<'ENDSSH'
+ssh $SSH_OPTS "$SSH_DESTINATION" <<'ENDSSH'
 set -euxo pipefail
 export DEBIAN_FRONTEND=noninteractive
+APT_OPTS="-y -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confnew"
 
 echo "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINUPpB7FW7pLpmJSOUy/5UJ+04YT6OIndh28TPhTttTT miner@executor" >> ~/.ssh/authorized_keys
 
@@ -24,9 +26,9 @@ done
 
 sudo apt-get update
 sudo apt-mark hold openssh-server
-sudo apt-get upgrade -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confnew"
+sudo apt-get upgrade $APT_OPTS
 sudo apt-mark unhold openssh-server
-sudo apt-get install -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confnew" ca-certificates curl
+sudo apt-get install $APT_OPTS ca-certificates curl
 sudo install -m 0755 -d /etc/apt/keyrings
 sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
 sudo chmod a+r /etc/apt/keyrings/docker.asc
@@ -37,16 +39,16 @@ echo \
   sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
 sudo apt-get update
 
-sudo apt-get install -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confnew" docker-ce docker-compose-plugin
+sudo apt-get install $APT_OPTS docker-ce docker-compose-plugin
 sudo usermod -aG docker $USER
 
 # install cuda
-sudo apt-get install -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confnew" linux-headers-$(uname -r)
+sudo apt-get install $APT_OPTS linux-headers-$(uname -r)
 DISTRIBUTION=$(. /etc/os-release; echo $ID$VERSION_ID | sed -e 's/\.//g')
 wget -O cuda-keyring.deb "https://developer.download.nvidia.com/compute/cuda/repos/$DISTRIBUTION/x86_64/cuda-keyring_1.1-1_all.deb"
 sudo dpkg -i cuda-keyring.deb
 sudo apt-get update
-sudo apt-get install -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confnew" cuda-drivers
+sudo apt-get install $APT_OPTS cuda-drivers
 
 curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey \
   | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg \
@@ -55,7 +57,7 @@ curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey \
   | sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
 
 sudo apt-get update
-sudo apt-get install -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confnew" nvidia-container-toolkit
+sudo apt-get install $APT_OPTS nvidia-container-toolkit
 
 sudo nvidia-ctk runtime configure --runtime=docker
 sudo systemctl stop docker
@@ -63,7 +65,7 @@ sudo systemctl start docker
 ENDSSH
 
 # setup docuum-runner
-ssh "$SSH_DESTINATION" <<'ENDSSH'
+ssh $SSH_OPTS "$SSH_DESTINATION" <<'ENDSSH'
 set -euxo pipefail
 
 CRITICAL_IMAGES_PATH="$HOME/critical-images.txt"
@@ -89,11 +91,11 @@ ENDSSH
 
 
 # reboot
-ssh "$SSH_DESTINATION" "sudo reboot"
+ssh $SSH_OPTS "$SSH_DESTINATION" "sudo reboot"
 
 echo "Waiting for server to come back up..."
 sleep 10
-until ssh -q "$SSH_DESTINATION" exit >/dev/null 2>&1; do
+until ssh $SSH_OPTS -q "$SSH_DESTINATION" exit >/dev/null 2>&1; do
   echo -n "."
   sleep 1
 done
