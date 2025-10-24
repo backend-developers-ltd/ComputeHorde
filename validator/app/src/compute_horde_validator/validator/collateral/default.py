@@ -157,7 +157,7 @@ class Collateral(CollateralBase):
         transaction = function.build_transaction(
             {
                 "from": account.address,
-                "nonce": w3.eth.get_transaction_count(account.address),
+                "nonce": w3.eth.get_transaction_count(account.address, "pending"),
                 "gas": gas_limit,
                 "gasPrice": w3.eth.gas_price,
                 "chainId": w3.eth.chain_id,
