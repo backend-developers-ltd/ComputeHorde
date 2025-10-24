@@ -23,7 +23,9 @@ do
 done
 
 sudo apt-get update
+sudo apt-mark hold openssh-server
 sudo apt-get upgrade -y
+sudo apt-mark unhold openssh-server
 sudo apt-get install -y ca-certificates curl
 sudo install -m 0755 -d /etc/apt/keyrings
 sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
