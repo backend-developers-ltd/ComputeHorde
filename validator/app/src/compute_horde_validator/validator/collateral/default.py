@@ -3,6 +3,7 @@ import hashlib
 import json
 import logging
 import pathlib
+from collections.abc import Mapping
 from decimal import Decimal
 from typing import Any
 
@@ -48,6 +49,16 @@ def _get_collateral_abi() -> Any:
     path = pathlib.Path(__file__).parent / ".." / "collateral_abi.json"
     abi = json.loads(path.read_text())
     return abi
+
+
+def _parse_rpc_err_tuple(exc: Exception) -> tuple[int | None, str]:
+    if isinstance(exc, ValueError) and exc.args:
+        payload = exc.args[0]
+        if isinstance(payload, Mapping):
+            return payload.get("code"), str(payload.get("message", ""))
+        if isinstance(payload, str):
+            return None, payload
+    return None, str(exc)
 
 
 class Collateral(CollateralBase):
@@ -104,7 +115,12 @@ class Collateral(CollateralBase):
         function = contract.functions.slashCollateral(
             miner_checksum_address, amount_wei, url, md5_checksum
         )
-        tx_hash = self._build_and_send_transaction(w3, function, account, gas_limit=200_000)
+
+        try:
+            tx_hash = self._build_and_send_transaction(w3, function, account, gas_limit=200_000)
+        except ValueError as e:
+            _code, msg = _parse_rpc_err_tuple(e)
+            raise SlashCollateralError(msg or "Web3 RPC error", e) from e
 
         receipt = w3.eth.wait_for_transaction_receipt(tx_hash, 300, 2)
         if receipt["status"] == 0:
