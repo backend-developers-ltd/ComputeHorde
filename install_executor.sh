@@ -61,3 +61,28 @@ sudo systemctl start docker
 
 sudo shutdown -r now
 ENDSSH
+
+# setup docuum-runner
+ssh "$SSH_DESTINATION" <<'ENDSSH'
+set -euxo pipefail
+
+CRITICAL_IMAGES_PATH="$HOME/critical-images.txt"
+
+mkdir -p ~/docuum-runner
+touch "$CRITICAL_IMAGES_PATH"
+cat > ~/docuum-runner/compose.yml <<EOF
+services:
+  docuum-runner:
+    image: ghcr.io/backend-developers-ltd/docuum-runner:latest
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - $CRITICAL_IMAGES_PATH:/config/critical-images.txt:ro
+    environment:
+      - THRESHOLD=60%
+      - CRITICAL_IMAGES_PATH=/config/critical-images.txt
+EOF
+
+cd ~/docuum-runner
+docker compose up -d
+ENDSSH
