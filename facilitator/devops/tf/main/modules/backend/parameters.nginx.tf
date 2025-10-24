@@ -29,6 +29,12 @@ resource "aws_ssm_parameter" "certs" {
   name    = "/application/${var.name}/${var.env}/nginx/monitoring_certs/${local.certs[count.index].name}"
   type    = "SecureString"
   value   = file(local.certs[count.index].content)
+
+  # We don't want to commit the cert files, so ignore changes to the cert files after creation.
+  # When you need to update cert files, remove this lifecycle block.
+  lifecycle {
+    ignore_changes = [value]
+  }
 }
 
 resource "aws_ssm_parameter" "helpers" {

@@ -28,7 +28,7 @@ resource "aws_db_parameter_group" "dont_force_ssl" {
 resource "aws_db_instance" "self" {
   identifier             = "${var.name}-${var.env}-db"
   publicly_accessible    = true
-  allocated_storage      = 50
+  allocated_storage      = 15
   max_allocated_storage  = 100
   storage_encrypted      = true
   engine                 = "postgres"
