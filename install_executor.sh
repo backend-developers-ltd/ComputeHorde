@@ -60,8 +60,6 @@ sudo apt-get install -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::=
 sudo nvidia-ctk runtime configure --runtime=docker
 sudo systemctl stop docker
 sudo systemctl start docker
-
-sudo shutdown -r now
 ENDSSH
 
 # setup docuum-runner
@@ -88,3 +86,16 @@ EOF
 cd ~/docuum-runner
 docker compose up -d
 ENDSSH
+
+
+# reboot
+ssh "$SSH_DESTINATION" "sudo reboot"
+
+echo "Waiting for server to come back up..."
+sleep 10
+until ssh -q "$SSH_DESTINATION" exit >/dev/null 2>&1; do
+  echo -n "."
+  sleep 1
+done
+
+echo -e "\nServer is back up and running!"
