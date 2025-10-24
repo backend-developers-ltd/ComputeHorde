@@ -15,6 +15,7 @@ from asgiref.sync import async_to_sync, sync_to_async
 from celery import shared_task
 from celery.result import AsyncResult
 from celery.utils.log import get_task_logger
+from celery.utils.time import get_exponential_backoff_interval
 from compute_horde.dynamic_config import fetch_dynamic_configs_from_contract, sync_dynamic_config
 from compute_horde.fv_protocol.facilitator_requests import OrganicJobRequest
 from compute_horde.miner_client.organic import OrganicMinerClient
@@ -71,6 +72,7 @@ from .allowance import tasks as allowance_tasks  # noqa
 from .allowance.default import allowance
 from .clean_me_up import bittensor_client, get_single_manifest
 from .collateral import tasks as collateral_tasks  # noqa
+from .collateral.types import SlashCollateralError
 from .dynamic_config import aget_config
 from .models import AdminJobRequest, MinerManifest
 from .scoring import tasks as scoring_tasks  # noqa
@@ -84,6 +86,10 @@ JOB_WINDOW = 2 * 60 * 60
 MAX_SEED = (1 << 32) - 1
 
 COMPUTE_TIME_OVERHEAD_SECONDS = 30  # TODO: approximate a realistic value
+
+SLASH_COLLATERAL_TASK_MAX_RETRIES = 5
+SLASH_COLLATERAL_TASK_RETRY_FACTOR_SECONDS = 2
+SLASH_COLLATERAL_TASK_RETRY_MAXIMUM_SECONDS = 120
 
 
 class ScheduleError(Exception):
@@ -886,8 +892,8 @@ def _execute_organic_job_on_worker(job_request: JsonValue, job_route: JsonValue)
     async_to_sync(execute_organic_job_request)(request, route)
 
 
-@app.task
-def slash_collateral_task(job_uuid: str) -> None:
+@app.task(bind=True, max_retries=SLASH_COLLATERAL_TASK_MAX_RETRIES)
+def slash_collateral_task(self, job_uuid: str) -> None:
     with transaction.atomic():
         job = OrganicJob.objects.select_related("miner").select_for_update().get(job_uuid=job_uuid)
 
@@ -900,6 +906,24 @@ def slash_collateral_task(job_uuid: str) -> None:
                 miner_hotkey=job.miner.hotkey,
                 url=f"job {job_uuid} cheated",
             )
+        except SlashCollateralError as e:
+            error_message = str(e).lower()
+            retriable_messages = ["replacement transaction underpriced", "nonce too low"]
+            is_retriable = any(message in error_message for message in retriable_messages)
+
+            if is_retriable:
+                logger.warning(f"Failed to slash collateral for job {job_uuid} ({e}). Retrying...")
+                raise self.retry(
+                    exc=e,
+                    countdown=get_exponential_backoff_interval(
+                        factor=SLASH_COLLATERAL_TASK_RETRY_FACTOR_SECONDS,
+                        retries=self.request.retries,
+                        maximum=SLASH_COLLATERAL_TASK_RETRY_MAXIMUM_SECONDS,
+                        full_jitter=False,
+                    ),
+                )
+
+            logger.error(f"Failed to slash collateral for job {job_uuid}: {e}")
         except Exception as e:
             logger.error(f"Failed to slash collateral for job {job_uuid}: {e}")
         else:

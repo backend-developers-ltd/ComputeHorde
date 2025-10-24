@@ -16,6 +16,7 @@ from eth_account.signers.local import LocalAccount
 from hexbytes import HexBytes
 from web3 import Web3
 from web3.contract.contract import ContractFunction
+from web3.exceptions import Web3RPCError
 from web3.types import Wei
 
 from compute_horde_validator.validator.models import Miner
@@ -104,7 +105,11 @@ class Collateral(CollateralBase):
         function = contract.functions.slashCollateral(
             miner_checksum_address, amount_wei, url, md5_checksum
         )
-        tx_hash = self._build_and_send_transaction(w3, function, account, gas_limit=200_000)
+
+        try:
+            tx_hash = self._build_and_send_transaction(w3, function, account, gas_limit=200_000)
+        except Web3RPCError as e:
+            raise SlashCollateralError(str(e)) from e
 
         receipt = w3.eth.wait_for_transaction_receipt(tx_hash, 300, 2)
         if receipt["status"] == 0:
@@ -157,7 +162,7 @@ class Collateral(CollateralBase):
         transaction = function.build_transaction(
             {
                 "from": account.address,
-                "nonce": w3.eth.get_transaction_count(account.address),
+                "nonce": w3.eth.get_transaction_count(account.address, "pending"),
                 "gas": gas_limit,
                 "gasPrice": w3.eth.gas_price,
                 "chainId": w3.eth.chain_id,
