@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   redis:
-    image: redis:6-alpine
+    image: redis:8.2-alpine
     command: redis-server --appendonly yes
     healthcheck:
       test: redis-cli ping
@@ -125,7 +125,7 @@ services:
     image: stephanmisc/docuum:0.23.1
     command: [
       "--threshold", "${DOCKER_STORAGE_THRESHOLD:-50 GB}",
-      "--keep", "^redis:6-alpine",
+      "--keep", "^redis:8.2-alpine",
       "--keep", "^postgres:14.0-alpine",
       "--keep", "^containrrr/watchtower",
       "--keep", "^stephanmisc/docuum:0.23.1",

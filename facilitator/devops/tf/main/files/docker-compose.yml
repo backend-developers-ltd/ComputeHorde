@@ -2,7 +2,7 @@ version: '3.7'
 
 services:
   redis:
-    image: redis:6-alpine
+    image: redis:8.2-alpine
     command: redis-server --appendonly yes
     healthcheck:
       test: redis-cli ping
