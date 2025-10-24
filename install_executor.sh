@@ -24,9 +24,9 @@ done
 
 sudo apt-get update
 sudo apt-mark hold openssh-server
-sudo apt-get upgrade -y
+sudo apt-get upgrade -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confnew"
 sudo apt-mark unhold openssh-server
-sudo apt-get install -y ca-certificates curl
+sudo apt-get install -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confnew" ca-certificates curl
 sudo install -m 0755 -d /etc/apt/keyrings
 sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
 sudo chmod a+r /etc/apt/keyrings/docker.asc
@@ -37,16 +37,16 @@ echo \
   sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
 sudo apt-get update
 
-sudo apt-get install -y docker-ce docker-compose-plugin
+sudo apt-get install -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confnew" docker-ce docker-compose-plugin
 sudo usermod -aG docker $USER
 
 # install cuda
-sudo apt-get install -y linux-headers-$(uname -r)
+sudo apt-get install -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confnew" linux-headers-$(uname -r)
 DISTRIBUTION=$(. /etc/os-release; echo $ID$VERSION_ID | sed -e 's/\.//g')
 wget "https://developer.download.nvidia.com/compute/cuda/repos/$DISTRIBUTION/x86_64/cuda-keyring_1.1-1_all.deb"
 sudo dpkg -i cuda-keyring_1.1-1_all.deb
 sudo apt-get update
-sudo apt-get -y install cuda-drivers
+sudo apt-get install -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confnew" cuda-drivers
 
 curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey \
   | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg \
@@ -55,7 +55,7 @@ curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey \
   | sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
 
 sudo apt-get update
-sudo apt-get install -y nvidia-container-toolkit
+sudo apt-get install -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confnew" nvidia-container-toolkit
 
 sudo nvidia-ctk runtime configure --runtime=docker
 sudo systemctl stop docker
