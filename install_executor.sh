@@ -14,16 +14,15 @@ ssh "$SSH_DESTINATION" <<'ENDSSH'
 set -euxo pipefail
 export DEBIAN_FRONTEND=noninteractive
 
-echo "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINUPpB7FW7pLpmJSOUy/5UJ+04YT6OIndh28TPhTttTT miner@executor" >> ~/.ssh/authorized_keys
-
-# install docker
-for pkg in docker.io docker-doc docker-compose docker-compose-v2 podman-docker containerd runc
-do
-  (yes | sudo apt-get remove $pkg) || true
-done
+# add miner SSH key
+if ! grep -Fq 'miner@executor' ~/.ssh/authorized_keys 2>/dev/null; then
+  echo "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINUPpB7FW7pLpmJSOUy/5UJ+04YT6OIndh28TPhTttTT miner@executor" >> ~/.ssh/authorized_keys
+fi
 
 sudo apt-get update
 sudo apt-get upgrade -y
+
+# install docker
 sudo apt-get install -y ca-certificates curl
 sudo install -m 0755 -d /etc/apt/keyrings
 sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
