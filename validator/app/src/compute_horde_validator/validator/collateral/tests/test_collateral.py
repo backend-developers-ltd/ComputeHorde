@@ -6,7 +6,7 @@ from unittest.mock import Mock
 
 import pytest
 from django.conf import settings
-from web3 import Web3
+from web3 import Web3, exceptions
 
 from compute_horde_validator.validator.collateral.default import Collateral
 from compute_horde_validator.validator.collateral.tasks import get_miner_collateral
@@ -75,7 +75,7 @@ class TestSlashCollateral:
         )
         assert env.transaction_call == (expected_args, {"gas_limit": 200_000, "value": 0})
 
-    async def test_slash_collateral_when_build_and_send_transaction_raises_value_error_with_mapping_is_wrapped(
+    async def test_slash_collateral_when_build_and_send_transaction_raises_web3_rpc_error_is_wrapped(
         self,
     ) -> None:
         miner_obj = await Miner.objects.acreate(hotkey="hk-map")
@@ -86,31 +86,13 @@ class TestSlashCollateral:
             evm_addresses={"hk-map": "0x1234567890123456789012345678901234567890"},
         ):
             async with CollateralTestEnvironment(
-                build_and_send_transaction_side_effect=ValueError(
-                    {"code": -32603, "message": "replacement transaction underpriced"}
+                build_and_send_transaction_side_effect=exceptions.Web3RPCError(
+                    message="replacement transaction underpriced"
                 )
             ) as env:
                 with pytest.raises(
                     SlashCollateralError, match="replacement transaction underpriced"
                 ):
-                    await env.collateral.slash_collateral(
-                        miner_hotkey=miner_obj.hotkey, url=SLASH_URL
-                    )
-
-    async def test_slash_collateral_when_build_and_send_transaction_raises_value_error_with_string_is_wrapped(
-        self,
-    ) -> None:
-        miner_obj = await Miner.objects.acreate(hotkey="hk-str")
-
-        async with async_setup_collateral(
-            miners=[miner_obj],
-            uids={"hk-str": 1},
-            evm_addresses={"hk-str": "0x1234567890123456789012345678901234567890"},
-        ):
-            async with CollateralTestEnvironment(
-                build_and_send_transaction_side_effect=ValueError("nonce too low")
-            ) as env:
-                with pytest.raises(SlashCollateralError, match="nonce too low"):
                     await env.collateral.slash_collateral(
                         miner_hotkey=miner_obj.hotkey, url=SLASH_URL
                     )

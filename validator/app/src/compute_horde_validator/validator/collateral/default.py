@@ -3,7 +3,6 @@ import hashlib
 import json
 import logging
 import pathlib
-from collections.abc import Mapping
 from decimal import Decimal
 from typing import Any
 
@@ -17,6 +16,7 @@ from eth_account.signers.local import LocalAccount
 from hexbytes import HexBytes
 from web3 import Web3
 from web3.contract.contract import ContractFunction
+from web3.exceptions import Web3RPCError
 from web3.types import Wei
 
 from compute_horde_validator.validator.models import Miner
@@ -49,16 +49,6 @@ def _get_collateral_abi() -> Any:
     path = pathlib.Path(__file__).parent / ".." / "collateral_abi.json"
     abi = json.loads(path.read_text())
     return abi
-
-
-def _parse_rpc_err_tuple(exc: Exception) -> tuple[int | None, str]:
-    if isinstance(exc, ValueError) and exc.args:
-        payload = exc.args[0]
-        if isinstance(payload, Mapping):
-            return payload.get("code"), str(payload.get("message", ""))
-        if isinstance(payload, str):
-            return None, payload
-    return None, str(exc)
 
 
 class Collateral(CollateralBase):
@@ -118,9 +108,8 @@ class Collateral(CollateralBase):
 
         try:
             tx_hash = self._build_and_send_transaction(w3, function, account, gas_limit=200_000)
-        except ValueError as e:
-            _code, msg = _parse_rpc_err_tuple(e)
-            raise SlashCollateralError(msg or "Web3 RPC error", e) from e
+        except Web3RPCError as e:
+            raise SlashCollateralError(str(e)) from e
 
         receipt = w3.eth.wait_for_transaction_receipt(tx_hash, 300, 2)
         if receipt["status"] == 0:
