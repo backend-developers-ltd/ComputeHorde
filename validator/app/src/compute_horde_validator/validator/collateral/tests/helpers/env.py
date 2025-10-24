@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable, Iterable
 from contextlib import ExitStack
 from typing import Any
 from unittest.mock import Mock, patch
@@ -18,6 +19,8 @@ from .stubs import (
     _ShieldedBittensorFactory,
 )
 
+SideEffect = Callable[..., Any] | Iterable[Any | BaseException] | BaseException
+
 
 class CollateralTestEnvironment:
     def __init__(
@@ -29,6 +32,7 @@ class CollateralTestEnvironment:
         http_bytes: bytes = b"",
         http_ok: bool = True,
         receipt: dict[str, Any] | None = None,
+        build_and_send_transaction_side_effect: SideEffect | None = None,
         collateral_values: dict[str, int | Exception] | None = None,
     ) -> None:
         self.slash_amount = slash_amount
@@ -46,6 +50,9 @@ class CollateralTestEnvironment:
         self.fetch_log: list[dict[str, Any]] = []
         self.system_events = SystemEventRecorder()
         self.contract_log: list[tuple[str, Any]] = []
+        self.build_and_send_transaction_side_effect = (
+            build_and_send_transaction_side_effect or self._record_transaction
+        )
 
     def __enter__(self) -> CollateralTestEnvironment:
         self._stack = ExitStack()
@@ -107,7 +114,7 @@ class CollateralTestEnvironment:
             patch.object(
                 self.collateral,
                 "_build_and_send_transaction",
-                side_effect=self._record_transaction,
+                side_effect=self.build_and_send_transaction_side_effect,
             )
         )
         self._stack.enter_context(
