@@ -167,7 +167,7 @@ def job_request():
 
 @pytest.fixture()
 def cheated_job():
-    return V0JobCheated(job_uuid=str(uuid.uuid4()))
+    return V0JobCheated(job_uuid=str(uuid.uuid4()), trusted_job_uuid=str(uuid.uuid4()), details={})
 
 
 @pytest.fixture()
