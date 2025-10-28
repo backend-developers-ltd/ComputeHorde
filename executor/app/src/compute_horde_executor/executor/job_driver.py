@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import traceback
 
 import packaging.version
 import sentry_sdk
@@ -69,7 +70,7 @@ class JobDriver:
             except Exception as e:
                 sentry_sdk.capture_exception(e)
                 e = HordeError.wrap_unhandled(e)
-                e.add_context({"stage": self.current_stage})
+                e.add_context({"stage": self.current_stage, "traceback": traceback.format_exc()})
                 logger.exception(str(e), exc_info=True)
                 await self.send_horde_failed(e.message, e.reason, e.context)
 
