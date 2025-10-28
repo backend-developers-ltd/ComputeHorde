@@ -856,6 +856,16 @@ def evict_old_data():
     eviction.evict_all()
 
 
+def wait_for_celery_result(task_id: str, timeout: float | None = None) -> None:
+    # WARNING - The following two lines must execute on the same thread.
+    # Don't use sync_to_async on future_result.get after constructing AsyncResult.
+    # If needed, use sync_to_async on this whole function.
+    # Moving future_result to a different thread can corrupt the redis connection state
+    # (redis backends of celery are not thread safe).
+    future_result: AsyncResult[None] = AsyncResult(task_id, app=app)
+    return future_result.get(timeout=timeout)
+
+
 async def execute_organic_job_request_on_worker(
     job_request: OrganicJobRequest, job_route: JobRoute
 ) -> OrganicJob:
@@ -873,9 +883,9 @@ async def execute_organic_job_request_on_worker(
         args=(job_request.model_dump(), job_route.model_dump()),
         expires=timeout,
     )
-    # Note - thread sensitive is essential, otherwise the wait will block the sync thread.
-    # If this poses to be a problem, another approach is to asyncio.sleep then poll for the result (in a loop)
-    await sync_to_async(future_result.get, thread_sensitive=False)(timeout=timeout)
+    await sync_to_async(wait_for_celery_result, thread_sensitive=False)(
+        future_result.id, timeout=timeout
+    )
     return await OrganicJob.objects.aget(job_uuid=job_request.uuid)
 
 
