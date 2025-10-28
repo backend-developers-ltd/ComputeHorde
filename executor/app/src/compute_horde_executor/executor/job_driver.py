@@ -27,7 +27,6 @@ from compute_horde_executor.executor.miner_client import (
 from compute_horde_executor.executor.utils import (
     docker_container_wrapper,
     get_docker_container_outputs,
-    get_machine_specs,
 )
 
 logger = logging.getLogger(__name__)
@@ -149,7 +148,6 @@ class JobDriver:
         )
 
     async def _startup_stage(self) -> V0InitialJobRequest:
-        self.specs = await get_machine_specs()
         self._enter_stage(JobStage.EXECUTOR_STARTUP)
         await self.run_security_checks_or_fail()
         initial_job_request = await self.miner_client.initial_msg
