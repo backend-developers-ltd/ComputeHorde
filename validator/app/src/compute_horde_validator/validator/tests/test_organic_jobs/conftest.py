@@ -7,16 +7,20 @@ from unittest.mock import AsyncMock, patch
 import pytest
 import pytest_asyncio
 from compute_horde.executor_class import EXECUTOR_CLASS
-from compute_horde.fv_protocol.facilitator_requests import V2JobRequest
+from compute_horde.fv_protocol.facilitator_requests import V0JobCheated, V2JobRequest
 from compute_horde.miner_client.organic import OrganicMinerClient
-from compute_horde.transport import AbstractTransport
 from compute_horde_core.executor_class import ExecutorClass
 
 from compute_horde_validator.validator.models import (
     Cycle,
     Miner,
 )
-from compute_horde_validator.validator.organic_jobs.facilitator_client import FacilitatorClient
+from compute_horde_validator.validator.organic_jobs.facilitator_client.facilitator_connector import (
+    FacilitatorClient,
+)
+from compute_horde_validator.validator.organic_jobs.facilitator_client.job_request_manager import (
+    JobRequestManager,
+)
 from compute_horde_validator.validator.tests.transport import SimulationTransport
 
 
@@ -41,26 +45,6 @@ def patch_executor_spinup_time(monkeypatch):
         for spec in EXECUTOR_CLASS.values():
             m.setattr(spec, "spin_up_time", 1)
         yield
-
-
-class _SimulationTransportWsAdapter:
-    """
-    Dirty hack to adapt the SimulationTransport into FacilitatorClient, which doesn't abstract away its dependence
-    on WS socket. Quack.
-    TODO: Refactor FacilitatorClient.
-    """
-
-    def __init__(self, transport: AbstractTransport):
-        self.transport = transport
-
-    async def send(self, msg: str):
-        await self.transport.send(msg)
-
-    async def recv(self) -> str:
-        return await self.transport.receive()
-
-    def __aiter__(self):
-        return self.transport
 
 
 @pytest_asyncio.fixture
@@ -114,9 +98,18 @@ def execute_scenario(faci_transport, miner_transports, validator_keypair):
     The transports should be requested as fixtures by the test function to define the sequence of messages.
     """
 
-    async def actually_execute_scenario(until: Callable[[], bool], timeout_seconds: int = 1):
-        # The actual client being tested
-        faci_client = FacilitatorClient(validator_keypair, "")
+    async def actually_execute_scenario(until: Callable[[], bool], timeout_seconds: int = 10):
+        # Start the facilitator client (connection and message managers)
+        faci_client = FacilitatorClient(keypair=validator_keypair, transport_layer=faci_transport)
+        job_request_manager = JobRequestManager()
+
+        # Set retry intervals to 0 as this is all simulated
+        faci_client.message_manager.MSG_RETRY_DELAY = 0
+        faci_client.message_manager.EMPTY_MSG_QUEUE_BACKOFF_INTERVAL = 0
+
+        await faci_client.start()
+        await job_request_manager.start()
+        await asyncio.sleep(0.1)
 
         async def wait_for_condition(condition: asyncio.Condition, until: Callable[[], bool]):
             async with condition:
@@ -131,27 +124,25 @@ def execute_scenario(faci_transport, miner_transports, validator_keypair):
         ]
 
         try:
-            async with faci_client, asyncio.timeout(timeout_seconds):
-                faci_loop = asyncio.create_task(
-                    faci_client.handle_connection(_SimulationTransportWsAdapter(faci_transport))
-                )
+            async with asyncio.timeout(timeout_seconds):
                 _, pending = await asyncio.wait(finish_events, return_when=asyncio.FIRST_COMPLETED)
         except TimeoutError:
             pass
 
-        for future in (*finish_events, faci_loop):
+        for future in finish_events:
             if not future.done():
                 future.cancel()
+
+        await faci_client.stop()
+        await job_request_manager.stop()
 
         # This await is crucial as it allows multiple other tasks to get cancelled properly
         # Otherwise "cancelling" tasks will persist until the end of the event loop and asyncio doesn't like that
         await asyncio.sleep(0)
 
     with (
-        patch.object(FacilitatorClient, "heartbeat", AsyncMock()),
-        patch.object(FacilitatorClient, "wait_for_specs", AsyncMock()),
         patch(
-            "compute_horde_validator.validator.organic_jobs.facilitator_client.verify_request_or_fail",
+            "compute_horde_validator.validator.organic_jobs.facilitator_client.jobs_task.verify_request_or_fail",
             AsyncMock(),
         ),
     ):
@@ -172,6 +163,11 @@ def job_request():
         streaming_start_time_limit=1,
         upload_time_limit=1,
     )
+
+
+@pytest.fixture()
+def cheated_job():
+    return V0JobCheated(job_uuid=str(uuid.uuid4()))
 
 
 @pytest.fixture()

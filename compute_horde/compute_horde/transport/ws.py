@@ -64,17 +64,20 @@ class WSTransport(AbstractTransport):
     def _get_retry_delay(self, attempt: int):
         return self.base_retry_delay * 2**attempt + random.uniform(0, self.retry_jitter)
 
-    async def start(self) -> None:
+    def is_connected(self) -> bool:
+        return self._ws and self._ws.state is websockets.State.OPEN
+
+    async def start(self, *args, **kwargs) -> None:
         async with self.connect_lock:
-            await self.connect()
+            await self.connect(**kwargs)
 
     async def stop(self) -> None:
         async with self.connect_lock:
-            if self._ws and self._ws.state is websockets.State.OPEN:
+            if self.is_connected():
                 await self._ws.close()
 
-    async def connect(self):
-        if self._ws and self._ws.state is websockets.State.OPEN:
+    async def connect(self, *args, **kwargs):
+        if self.is_connected():
             return
 
         loop = asyncio.get_running_loop()
@@ -84,7 +87,8 @@ class WSTransport(AbstractTransport):
         while self.max_retries == 0 or attempt < self.max_retries:
             try:
                 self._ws = await websockets.connect(
-                    self.url, max_size=50 * (2**20), ping_timeout=120
+                    self.url, max_size=50 * (2**20), ping_timeout=120,
+                    additional_headers=kwargs.get("additional_headers", None),
                 )  # 50MB - ping timeout 2min in case of blocking job sends
                 logger.info(f"Connected to {self.name} after {attempt} attempts")
                 return

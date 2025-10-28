@@ -875,7 +875,7 @@ async def execute_organic_job_request_on_worker(
     Hint: the task also sends job status updates to a django channel:
         ```
         while True:
-            msg = await get_channel_layer().receive(f"job_status_updates__{job_uuid}")
+            msg = await get_channel_layer().receive(JOB_STATUS_UPDATE_CHANNEL)
         ```
     """
     timeout = await aget_config("ORGANIC_JOB_CELERY_WAIT_TIMEOUT")

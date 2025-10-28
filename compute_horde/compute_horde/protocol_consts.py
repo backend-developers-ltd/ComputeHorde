@@ -153,6 +153,7 @@ class JobRejectionReason(StrEnum):
     INVALID_SIGNATURE = "invalid_signature"
     NO_MINER_FOR_JOB = "no_miner_for_job"
     VALIDATOR_BLACKLISTED = "validator_blacklisted"
+    INVALID_REQUEST_FORMAT = "invalid_request_format"
 
     @classmethod
     def _missing_(cls, value: Any) -> "JobRejectionReason":

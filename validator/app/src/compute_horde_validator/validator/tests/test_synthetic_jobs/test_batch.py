@@ -104,7 +104,7 @@ async def check_scores(
     for msg in job_finished_messages:
         receipt = json.loads(msg)
 
-        job_uuid = receipt["payload"]["job_uuid"]
+        job_uuid = receipt["job_uuid"]
 
         job = await SyntheticJob.objects.aget(job_uuid=job_uuid)
 

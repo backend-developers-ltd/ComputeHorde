@@ -22,7 +22,11 @@ class AbstractTransport(abc.ABC):
         pass
 
     @abc.abstractmethod
-    async def start(self) -> None:
+    def is_connected(self) -> bool:
+        pass
+
+    @abc.abstractmethod
+    async def start(self, *args, **kwargs) -> None:
         pass
 
     @abc.abstractmethod

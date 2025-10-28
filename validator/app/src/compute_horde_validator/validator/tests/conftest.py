@@ -44,7 +44,7 @@ def _patch_current_block():
 @pytest.fixture(autouse=True)
 def _patch_celery_job_execution():
     with patch(
-        "compute_horde_validator.validator.organic_jobs.facilitator_client.execute_organic_job_request_on_worker",
+        "compute_horde_validator.validator.organic_jobs.facilitator_client.jobs_task.execute_organic_job_request_on_worker",
         execute_organic_job_request,
     ):
         yield

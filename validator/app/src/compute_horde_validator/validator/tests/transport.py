@@ -25,10 +25,13 @@ class SimulationTransport(AbstractTransport):
         ] = deque()
         self.receive_condition = asyncio.Condition()
         self.logger = logging.getLogger(f"transport.{name}")
+        self.connected_flag = asyncio.Event()
 
-    async def start(self): ...
+    async def start(self, *args, **kwargs):
+        self.connected_flag.set()
 
-    async def stop(self): ...
+    async def stop(self):
+        self.connected_flag.clear()
 
     async def send(self, message: str) -> None:
         async with self.receive_condition:
@@ -85,3 +88,6 @@ class SimulationTransport(AbstractTransport):
 
         self.receive_at_counter += send_before
         self.to_receive.append((self.receive_at_counter, sleep_before, message, side_effect))
+
+    def is_connected(self) -> bool:
+        return self.connected_flag.is_set()

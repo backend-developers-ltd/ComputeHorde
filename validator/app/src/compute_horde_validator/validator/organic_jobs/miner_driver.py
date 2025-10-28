@@ -5,7 +5,6 @@ from functools import partial
 
 import sentry_sdk
 from asgiref.sync import sync_to_async
-from channels.layers import get_channel_layer
 from compute_horde.fv_protocol.facilitator_requests import OrganicJobRequest, V2JobRequest
 from compute_horde.fv_protocol.validator_requests import (
     HordeFailureDetails,
@@ -49,6 +48,15 @@ from compute_horde_validator.validator.models import (
     Miner,
     OrganicJob,
     SystemEvent,
+)
+from compute_horde_validator.validator.organic_jobs.facilitator_client.constants import (
+    JOB_STATUS_UPDATE_CHANNEL,
+)
+from compute_horde_validator.validator.organic_jobs.facilitator_client.exceptions import (
+    LocalChannelSendError,
+)
+from compute_horde_validator.validator.organic_jobs.facilitator_client.util import (
+    safe_send_local_message,
 )
 from compute_horde_validator.validator.organic_jobs.miner_client import MinerClient
 from compute_horde_validator.validator.receipts.default import receipts
@@ -227,10 +235,14 @@ async def execute_organic_job_request(
     )
 
     async def job_status_callback(status_update: JobStatusUpdate):
-        await get_channel_layer().send(
-            f"job_status_updates__{status_update.uuid}",
-            {"type": "job_status_update", "payload": status_update.model_dump(mode="json")},
-        )
+        try:
+            await safe_send_local_message(
+                channel=JOB_STATUS_UPDATE_CHANNEL,
+                message=status_update,
+            )
+        except LocalChannelSendError as exc:
+            # Not sending job updates shouldn't abort the job but be logged for inspection
+            logger.error(str(exc))
 
     await drive_organic_job(
         miner_client,

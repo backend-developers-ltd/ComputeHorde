@@ -14,7 +14,10 @@ class StubTransport(AbstractTransport):
         self.messages = iter(messages)
         self.sent_messages: list[str] = []
 
-    async def start(self): ...
+    def is_connected(self) -> bool:
+        return True
+
+    async def start(self, *args, **kwargs): ...
 
     async def stop(self): ...
 
