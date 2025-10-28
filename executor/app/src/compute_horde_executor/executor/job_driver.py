@@ -148,8 +148,9 @@ class JobDriver:
         )
 
     async def _startup_stage(self) -> V0InitialJobRequest:
-        self.specs = await get_machine_specs()
         self._enter_stage(JobStage.EXECUTOR_STARTUP)
+        if not settings.DEBUG_NO_GPU_MODE:
+            self.specs = await get_machine_specs()
         await self.run_security_checks_or_fail()
         initial_job_request = await self.miner_client.initial_msg
         await self.runner.prepare_initial(initial_job_request)
