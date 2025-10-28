@@ -427,6 +427,7 @@ EXECUTOR_IMAGE = env.str(
     "EXECUTOR_IMAGE", default="backenddevelopersltd/compute-horde-executor:v1-latest"
 )
 DEBUG_SKIP_PULLING_EXECUTOR_IMAGE = env.bool("DEBUG_SKIP_PULLING_EXECUTOR_IMAGE", default=False)
+DEBUG_NO_GPU_MODE = env.bool("DEBUG_NO_GPU_MODE", default=False)
 # Path pointing to the file containing custom job runner classes.
 CUSTOM_JOB_RUNNERS_PATH = ""
 if "CUSTOM_JOB_RUNNERS_PATH" in os.environ:
