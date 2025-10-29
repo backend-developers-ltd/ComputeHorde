@@ -1,0 +1,24 @@
+[project]
+name = "stress"
+requires-python = "==3.11.*"
+version = "0"
+
+dependencies = [
+    "uvloop",
+    "pydantic<3,>=2.3",
+    "bittensor-wallet",
+    "matplotlib",
+    "compute-horde",
+    "compute-horde-sdk",
+]
+
+[tool.uv.sources]
+compute-horde = { path = "../../compute_horde", editable = true }
+compute-horde-sdk = { path = "../../compute_horde_sdk", editable = true }
+
+[tool.uv]
+environments = ["sys_platform == 'linux'", "sys_platform == 'darwin'"]
+
+[build-system]
+requires = ["pdm-backend==2.4.3"]
+build-backend = "pdm.backend"
