@@ -179,6 +179,8 @@ class DockerExecutorManager(BaseExecutorManager):
             f"MINER_ADDRESS=ws://{settings.ADDRESS_FOR_EXECUTORS}:{settings.PORT_FOR_EXECUTORS}",
             f"EXECUTOR_TOKEN={token}",
         ]
+        if settings.DEBUG_NO_GPU_MODE:
+            env.append("DEBUG_NO_GPU_MODE=1")
         if settings.HF_ACCESS_TOKEN is not None:
             env.append(f"HF_ACCESS_TOKEN={settings.HF_ACCESS_TOKEN}")
         if server_config.mode == "local":
