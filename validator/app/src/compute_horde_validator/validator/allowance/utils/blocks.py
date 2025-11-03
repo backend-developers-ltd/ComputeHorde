@@ -421,6 +421,9 @@ def find_miners_with_allowance(
 
     earliest_usable_block = job_start_block - settings.BLOCK_EXPIRY
 
+    logger.info(
+        f"find_miners_with_allowance checkpoint {job_start_block} BlockAllowance.objects.filter() START"
+    )
     latest_block_subquery = NeuronModel.objects.aggregate(max_block=Max("block"))
     latest_block = latest_block_subquery["max_block"]
 
@@ -483,6 +486,9 @@ def find_miners_with_allowance(
         }
         for agg in miner_aggregates
     }
+    logger.info(
+        f"find_miners_with_allowance checkpoint {job_start_block} BlockAllowance.objects.filter() END"
+    )
 
     # Filter miners with sufficient allowance
     eligible_miners = []
@@ -491,6 +497,7 @@ def find_miners_with_allowance(
     highest_unspent_allowance = 0.0
     highest_unspent_allowance_ss58 = None
 
+    logger.info(f"find_miners_with_allowance checkpoint {job_start_block} miner_data.items() START")
     for miner_ss58, data in miner_data.items():
         available = data["available_allowance"]
         total = data["total_allowance"]
@@ -512,6 +519,7 @@ def find_miners_with_allowance(
             earliest_block = data["earliest_unspent_block"] or float("inf")
 
             eligible_miners.append((miner_ss58, available, earliest_block, allowance_percentage))
+    logger.info(f"find_miners_with_allowance checkpoint {job_start_block} miner_data.items() END")
 
     # If no miners have enough allowance, raise exception
     if not eligible_miners:
