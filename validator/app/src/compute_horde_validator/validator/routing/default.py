@@ -82,6 +82,7 @@ def routing() -> Routing:
 def _pick_miner_for_job_v2(request: V2JobRequest) -> JobRoute:
     executor_class = request.executor_class
     logger.info(f"Picking a miner for job {request.uuid} with executor class {executor_class}")
+    logger.info(f"Routing checkpoint {request.uuid}: ENTER")
 
     if settings.DEBUG_MINER_KEY:
         logger.debug(f"Using DEBUG_MINER_KEY for job {request.uuid}")
@@ -121,10 +122,12 @@ def _pick_miner_for_job_v2(request: V2JobRequest) -> JobRoute:
         request.download_time_limit + request.execution_time_limit + request.upload_time_limit
     )
 
+    logger.info(f"Routing checkpoint {request.uuid}: allowance().get_current_block()")
     current_block = allowance().get_current_block()
 
     # Find miners with enough allowance
     try:
+        logger.info(f"Routing checkpoint {request.uuid}: allowance().find_miners_with_allowance()")
         suitable_miners = allowance().find_miners_with_allowance(
             allowance_seconds=executor_seconds,
             executor_class=executor_class,
@@ -141,6 +144,9 @@ def _pick_miner_for_job_v2(request: V2JobRequest) -> JobRoute:
     collateral_threshold = get_config("DYNAMIC_MINIMUM_COLLATERAL_AMOUNT_WEI")
     if collateral_threshold > 0:
         try:
+            logger.info(
+                f"Routing checkpoint {request.uuid}: collateral().list_miners_with_sufficient_collateral()"
+            )
             eligible_collateral_hotkeys = {
                 mc.hotkey
                 for mc in collateral().list_miners_with_sufficient_collateral(collateral_threshold)
@@ -165,9 +171,11 @@ def _pick_miner_for_job_v2(request: V2JobRequest) -> JobRoute:
                 )
                 raise NotEnoughCollateralException
 
+    logger.info(f"Routing checkpoint {request.uuid}: allowance().miners()")
     miners = {miner.hotkey_ss58: miner for miner in allowance().miners()}
     manifests = allowance().get_manifests()
 
+    logger.info(f"Routing checkpoint {request.uuid}: _get_miners_reliability_score()")
     reliability_score_per_hotkey = _get_miners_reliability_score(
         reliability_window=timedelta(
             hours=float(get_config("DYNAMIC_ROUTING_RELIABILITY_WINDOW_HOURS"))
@@ -183,6 +191,7 @@ def _pick_miner_for_job_v2(request: V2JobRequest) -> JobRoute:
     # Note on score values:
     # - any score lower than the cutoff, no matter how low, is only slightly worse than the cutoff value.
     # - similarly, any amount over 0 is only slightly better than 0.
+    logger.info(f"Routing checkpoint {request.uuid}: weighted_shuffle()")
     prioritized_hotkeys, probs = weighted_shuffle(
         items=suitable_hotkeys,
         weights=hotkey_weights,
@@ -194,6 +203,7 @@ def _pick_miner_for_job_v2(request: V2JobRequest) -> JobRoute:
     # Get receipts instance once to avoid bound method issues with async_to_sync
     receipts_instance = receipts()
 
+    logger.info(f"Routing checkpoint {request.uuid}: receipts().get_busy_executor_count()")
     busy_executors = receipts_instance.get_busy_executor_count(executor_class, timezone.now())
 
     system_event = SystemEvent(
@@ -214,6 +224,7 @@ def _pick_miner_for_job_v2(request: V2JobRequest) -> JobRoute:
     )
 
     # Iterate and try to reserve a miner
+    logger.info(f"Routing checkpoint {request.uuid}: for miner_hotkey in prioritized_hotkeys")
     for miner_hotkey in prioritized_hotkeys:
         ongoing_jobs = busy_executors.get(miner_hotkey, 0)
 
@@ -235,6 +246,9 @@ def _pick_miner_for_job_v2(request: V2JobRequest) -> JobRoute:
 
         try:
             # Reserve allowance for this miner
+            logger.info(
+                f"Routing checkpoint {request.uuid}: allowance().reserve_allowance() for {miner_hotkey}"
+            )
             reservation_id, blocks = allowance().reserve_allowance(
                 miner=miner_hotkey,
                 executor_class=executor_class,
@@ -243,6 +257,9 @@ def _pick_miner_for_job_v2(request: V2JobRequest) -> JobRoute:
             )
 
             miner = miners[miner_hotkey]
+            logger.info(
+                f"Routing checkpoint {request.uuid}: Miner.objects.update_or_create() for {miner_hotkey}"
+            )
             Miner.objects.update_or_create(
                 hotkey=miner.hotkey_ss58,
                 defaults={
@@ -257,6 +274,7 @@ def _pick_miner_for_job_v2(request: V2JobRequest) -> JobRoute:
             system_event.subtype = SystemEvent.EventSubType.JOB_ROUTING_SUCCESS
             system_event.data["picked_miner"] = miner_hotkey
             system_event.save()
+            logger.info(f"Routing checkpoint {request.uuid}: LEAVE")
             return JobRoute(
                 miner=miner,
                 allowance_blocks=blocks,
