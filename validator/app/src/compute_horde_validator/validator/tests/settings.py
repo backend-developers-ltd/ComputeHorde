@@ -36,12 +36,6 @@ def BITTENSOR_WALLET() -> bittensor_wallet.Wallet:
 
 DEFAULT_ADMIN_PASSWORD = "fake_admin_password"
 
-AWS_ACCESS_KEY_ID = "fake_access_key_id"
-AWS_SECRET_ACCESS_KEY = "fake_secret_access_key"
-
-S3_BUCKET_NAME_PROMPTS = "fake_bucket_prompts"
-S3_BUCKET_NAME_ANSWERS = "fake_bucket_answers"
-
 TRUSTED_MINER_ADDRESS = "fakehost"
 TRUSTED_MINER_PORT = 1234
 

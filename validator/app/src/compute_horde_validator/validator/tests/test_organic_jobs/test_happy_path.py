@@ -41,10 +41,10 @@ def add_allowance():
 # NOTE: Currently this is here to make sure job routing can read current block.
 #       Other fields are not used now.
 @pytest.fixture(autouse=True)
-def metagraph_snapshot(monkeypatch, cycle):
+def metagraph_snapshot(monkeypatch):
     metagraph = MetagraphData.model_construct(
-        block=cycle.start,
-        block_hash=f"hash_{cycle.start}",
+        block=1,
+        block_hash="hash_1",
         total_stake=[],
         uids=[],
         hotkeys=[],

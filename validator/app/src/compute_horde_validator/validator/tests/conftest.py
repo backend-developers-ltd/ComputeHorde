@@ -12,7 +12,7 @@ from compute_horde_core.executor_class import ExecutorClass
 from pytest_mock import MockerFixture
 
 from ..organic_jobs.miner_driver import execute_organic_job_request
-from .helpers import MockNeuron, MockSyntheticMinerClient
+from .helpers import MockNeuron
 
 logger = logging.getLogger(__name__)
 
@@ -22,14 +22,6 @@ def some() -> Generator[int, None, None]:
     # setup code
     yield 1
     # teardown code
-
-
-@pytest.fixture(autouse=True)
-def _patch_get_streaming_job_executor_classes(mocker: MockerFixture):
-    mocker.patch(
-        "compute_horde_validator.validator.synthetic_jobs.batch_run.get_streaming_job_executor_classes",
-        return_value={},
-    )
 
 
 @pytest.fixture(autouse=True)
@@ -80,33 +72,6 @@ def clear_cache():
     from django.core.cache import cache
 
     cache.clear()
-
-
-@pytest.fixture
-def override_weights_version_v2(settings):
-    settings.DEBUG_OVERRIDE_WEIGHTS_VERSION = 2
-
-
-@pytest.fixture
-def override_weights_version_v1(settings):
-    settings.DEBUG_OVERRIDE_WEIGHTS_VERSION = 1
-
-
-@pytest.fixture
-def mocked_synthetic_miner_client():
-    with patch(
-        "compute_horde_validator.validator.synthetic_jobs.batch_run.MinerClient"
-    ) as MockedMinerClient:
-        MockedMinerClient.instance = None
-
-        def side_effect(*args, **kwargs):
-            if MockedMinerClient.instance is not None:
-                raise RuntimeError("You can create only single instance of mocked MinerClient")
-            MockedMinerClient.instance = MockSyntheticMinerClient(*args, **kwargs)
-            return MockedMinerClient.instance
-
-        MockedMinerClient.side_effect = side_effect
-        yield MockedMinerClient
 
 
 @pytest.fixture

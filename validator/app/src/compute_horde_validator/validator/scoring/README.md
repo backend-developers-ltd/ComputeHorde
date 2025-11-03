@@ -194,9 +194,6 @@ DYNAMIC_SCORE_ORGANIC_JOBS_LIMIT = -1  # -1 = unlimited
 # Dancing bonus
 DYNAMIC_DANCING_BONUS = 0.1  # 10% bonus for dancing
 MAIN_HOTKEY_SHARE = 0.8  # 80% share for main hotkey
-
-# Synthetic job scoring
-DYNAMIC_EXCUSED_SYNTHETIC_JOB_SCORE = 1.0  # Score for excused jobs
 ```
 
 ## API Reference

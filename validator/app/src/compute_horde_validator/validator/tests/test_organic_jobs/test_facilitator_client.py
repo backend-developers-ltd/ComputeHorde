@@ -26,12 +26,10 @@ from compute_horde_validator.validator.allowance.types import MetagraphData
 from compute_horde_validator.validator.allowance.utils import blocks, manifests
 from compute_horde_validator.validator.allowance.utils.supertensor import supertensor
 from compute_horde_validator.validator.models import (
-    Cycle,
     Miner,
     MinerBlacklist,
     MinerManifest,
     OrganicJob,
-    SyntheticJobBatch,
 )
 from compute_horde_validator.validator.organic_jobs.facilitator_client import (
     FacilitatorClient,
@@ -91,12 +89,6 @@ async def async_patch_all():
 
 async def setup_db(n: int = 1):
     now = timezone.now()
-    cycle = await Cycle.objects.acreate(start=-14, stop=708)
-    batch = await SyntheticJobBatch.objects.acreate(
-        block=1,
-        cycle=cycle,
-        created_at=now,
-    )
     miners = [
         await Miner.objects.acreate(hotkey=f"miner_{i}", collateral_wei=Decimal(10**18))
         for i in range(0, n)
@@ -104,7 +96,6 @@ async def setup_db(n: int = 1):
     for i, miner in enumerate(miners):
         await MinerManifest.objects.acreate(
             miner=miner,
-            batch=batch,
             created_at=now - timedelta(minutes=i * 2),
             executor_class=DEFAULT_EXECUTOR_CLASS,
             online_executor_count=5,

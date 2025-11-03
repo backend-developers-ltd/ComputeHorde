@@ -1,12 +1,7 @@
 import asyncio
 import json
-import random
 import time
-import uuid
-from datetime import timedelta
-from math import ceil, floor
 
-import billiard.exceptions
 import requests
 import tenacity
 import turbobt
@@ -20,7 +15,6 @@ from compute_horde.dynamic_config import fetch_dynamic_configs_from_contract, sy
 from compute_horde.fv_protocol.facilitator_requests import OrganicJobRequest
 from compute_horde.miner_client.organic import OrganicMinerClient
 from compute_horde.smart_contracts.map_contract import get_dynamic_config_types_from_settings
-from compute_horde.utils import turbobt_get_validators
 from compute_horde_core.executor_class import ExecutorClass
 from constance import config
 from django.conf import settings
@@ -31,18 +25,10 @@ from web3.exceptions import ProviderConnectionError
 
 from compute_horde_validator.celery import app
 from compute_horde_validator.validator.collateral.default import collateral
-from compute_horde_validator.validator.cross_validation.prompt_answering import answer_prompts
-from compute_horde_validator.validator.cross_validation.prompt_generation import generate_prompts
 from compute_horde_validator.validator.locks import Locked, LockType, get_advisory_lock
 from compute_horde_validator.validator.models import (
-    Cycle,
     Miner,
     OrganicJob,
-    Prompt,
-    PromptSample,
-    PromptSeries,
-    SolveWorkload,
-    SyntheticJobBatch,
     SystemEvent,
 )
 from compute_horde_validator.validator.organic_jobs.miner_client import MinerClient
@@ -51,19 +37,6 @@ from compute_horde_validator.validator.organic_jobs.miner_driver import (
     execute_organic_job_request,
 )
 from compute_horde_validator.validator.routing.types import JobRoute
-from compute_horde_validator.validator.s3 import (
-    download_prompts_from_s3_url,
-    generate_upload_url,
-    get_public_url,
-    upload_prompts_to_s3_url,
-)
-from compute_horde_validator.validator.synthetic_jobs.batch_run import (
-    SYNTHETIC_JOBS_HARD_LIMIT,
-    SYNTHETIC_JOBS_SOFT_LIMIT,
-)
-from compute_horde_validator.validator.synthetic_jobs.utils import (
-    create_and_run_synthetic_job_batch,
-)
 
 from . import (
     eviction,
@@ -71,7 +44,7 @@ from . import (
 )
 from .allowance import tasks as allowance_tasks  # noqa
 from .allowance.default import allowance
-from .clean_me_up import bittensor_client, get_single_manifest
+from .clean_me_up import get_single_manifest
 from .collateral import tasks as collateral_tasks  # noqa
 from .collateral.types import (
     NonceTooHighCollateralException,
@@ -105,254 +78,6 @@ SLASH_COLLATERAL_TASK_RETRIABLE_ERRORS = (
 
 class ScheduleError(Exception):
     pass
-
-
-async def when_to_run(
-    bittensor: turbobt.Bittensor,
-    current_cycle: range,
-    block_finalization_number: int,
-) -> int:
-    """
-    Select block when to run validation for a given validator.
-    Validators needs to run their jobs temporarily separated from others.
-    The order of validators within a cycle is random, seeded by a block
-    preceding the cycle, therefore all validators should arrive at the same order.
-    """
-
-    try:
-        validators = await turbobt_get_validators(
-            bittensor,
-            netuid=settings.BITTENSOR_NETUID,
-            block=current_cycle.start,
-        )
-    except Exception as ex:
-        raise ScheduleError() from ex
-
-    ordered_hotkeys = [vali.hotkey for vali in validators]
-    this_hotkey = get_keypair().ss58_address
-    if this_hotkey not in ordered_hotkeys:
-        raise ScheduleError(
-            "This validator is not in a list of validators -> not scheduling synthetic jobs run"
-        )
-
-    try:
-        block_number = current_cycle.start - block_finalization_number
-        block = await bittensor.blocks[block_number].get()
-        seed = block.hash
-    except Exception as ex:
-        raise ScheduleError("Could not get seed hash") from ex
-
-    random.Random(seed).shuffle(ordered_hotkeys)
-    index_ = ordered_hotkeys.index(this_hotkey)
-    start_block = calculate_job_start_block(
-        cycle=current_cycle,
-        offset=settings.SYNTHETIC_JOBS_RUN_OFFSET,
-        total=len(validators),
-        index_=ordered_hotkeys.index(this_hotkey),
-    )
-
-    await SystemEvent.objects.acreate(
-        type=SystemEvent.EventType.VALIDATOR_SYNTHETIC_JOB_SCHEDULED,
-        subtype=SystemEvent.EventSubType.SUCCESS,
-        data={"seed": seed, "index": index_, "block": start_block},
-    )
-    return start_block
-
-
-def calculate_job_start_block(cycle: range, total: int, index_: int, offset: int = 0) -> int:
-    """
-    |______________________________________________________|__________
-    ^-cycle.start                                          ^-cycle.stop
-    _____________|_____________|_____________|_____________|
-                 ^-0           ^-1           ^-2
-    |____________|_____________|
-        offset       blocks
-                    b/w runs
-    """
-    blocks_between_runs = (cycle.stop - cycle.start - offset) / total
-    return cycle.start + offset + floor(blocks_between_runs * index_)
-
-
-@app.task(
-    soft_time_limit=SYNTHETIC_JOBS_SOFT_LIMIT,
-    time_limit=SYNTHETIC_JOBS_HARD_LIMIT,
-)
-def _run_synthetic_jobs(synthetic_jobs_batch_id: int) -> None:
-    try:
-        # metagraph will be refetched and that's fine, after sleeping
-        # for e.g. 30 minutes we should refetch the miner list
-        create_and_run_synthetic_job_batch(
-            settings.BITTENSOR_NETUID,
-            settings.BITTENSOR_NETWORK,
-            synthetic_jobs_batch_id=synthetic_jobs_batch_id,
-        )
-    except billiard.exceptions.SoftTimeLimitExceeded:
-        logger.info("Running synthetic jobs timed out")
-
-
-@app.task()
-@bittensor_client
-def run_synthetic_jobs(
-    bittensor: turbobt.Bittensor,
-    wait_in_advance_blocks: int | None = None,
-    poll_interval: timedelta | None = None,
-) -> None:
-    """
-    Run synthetic jobs as scheduled by SyntheticJobBatch.
-    If there is a job scheduled in near `wait_in_advance_blocks` blocks,
-    wait till the block is reached, and run the jobs.
-
-    If `settings.DEBUG_DONT_STAGGER_VALIDATORS` is set, we will run
-    synthetic jobs immediately.
-    """
-
-    if not config.SERVING:
-        logger.warning("Not running synthetic jobs, SERVING is disabled in constance config")
-        return
-
-    current_block = async_to_sync(bittensor.blocks.head)()
-
-    if settings.DEBUG_DONT_STAGGER_VALIDATORS:
-        batch = SyntheticJobBatch.objects.create(
-            block=current_block.number,
-            cycle=Cycle.from_block(current_block.number, settings.BITTENSOR_NETUID),
-        )
-        _run_synthetic_jobs.apply_async(kwargs={"synthetic_jobs_batch_id": batch.id})
-        return
-
-    wait_in_advance_blocks = (
-        wait_in_advance_blocks or config.DYNAMIC_SYNTHETIC_JOBS_PLANNER_WAIT_IN_ADVANCE_BLOCKS
-    )
-    poll_interval = poll_interval or timedelta(
-        seconds=config.DYNAMIC_SYNTHETIC_JOBS_PLANNER_POLL_INTERVAL
-    )
-
-    with transaction.atomic():
-        ongoing_synthetic_job_batches = list(
-            SyntheticJobBatch.objects.select_for_update(skip_locked=True)
-            .filter(
-                block__gte=current_block.number
-                - config.DYNAMIC_SYNTHETIC_JOBS_PLANNER_MAX_OVERSLEEP_BLOCKS,
-                block__lte=current_block.number + wait_in_advance_blocks,
-                started_at__isnull=True,
-            )
-            .order_by("block")
-        )
-        if not ongoing_synthetic_job_batches:
-            logger.debug(
-                "No ongoing scheduled synthetic jobs, current block is %s",
-                current_block.number,
-            )
-            return
-
-        if len(ongoing_synthetic_job_batches) > 1:
-            logger.warning(
-                "More than one scheduled synthetic jobs found (%s)",
-                ongoing_synthetic_job_batches,
-            )
-
-        batch = ongoing_synthetic_job_batches[0]
-        target_block = batch.block
-        blocks_to_wait = target_block - current_block.number
-        if blocks_to_wait < 0:
-            logger.info(
-                "Overslept a batch run, but still within acceptable margin, batch_id: %s, should_run_at_block: %s, current_block: %s",
-                batch.id,
-                batch.block,
-                current_block.number,
-            )
-            SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).create(
-                type=SystemEvent.EventType.VALIDATOR_OVERSLEPT_SCHEDULED_JOB_WARNING,
-                subtype=SystemEvent.EventSubType.WARNING,
-                long_description="Overslept a batch run, but still within acceptable margin",
-                data={
-                    "batch_id": batch.id,
-                    "batch_created_at": str(batch.created_at),
-                    "should_run_at_block": batch.block,
-                    "current_block": current_block.number,
-                },
-            )
-        elif blocks_to_wait == 0:
-            logger.info(
-                "Woke up just in time to run batch, batch_id: %s, should_run_at_block: %s",
-                batch.id,
-                batch.block,
-            )
-        else:
-            for _ in range(
-                ceil(
-                    blocks_to_wait
-                    * settings.BITTENSOR_APPROXIMATE_BLOCK_DURATION
-                    * 2
-                    / poll_interval
-                )
-            ):
-                current_block = async_to_sync(bittensor.blocks.head)()
-
-                if current_block.number >= target_block:
-                    break
-
-                logger.debug(
-                    "Waiting for block %s, current block is %s, sleeping for %s",
-                    target_block,
-                    current_block.number,
-                    poll_interval,
-                )
-                time.sleep(poll_interval.total_seconds())
-            else:
-                logger.error(
-                    "Failed to wait for target block %s, current block is %s",
-                    target_block,
-                    current_block.number,
-                )
-                SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).create(
-                    type=SystemEvent.EventType.VALIDATOR_SYNTHETIC_JOBS_FAILURE,
-                    subtype=SystemEvent.EventSubType.FAILED_TO_WAIT,
-                    long_description="Failed to await the right block to run at",
-                    data={
-                        "batch_id": batch.id,
-                        "batch_created_at": str(batch.created_at),
-                        "should_run_at_block": batch.block,
-                        "current_block": current_block.number,
-                    },
-                )
-                return
-
-        batch.started_at = now()
-        batch.save()
-
-    _run_synthetic_jobs.apply_async(kwargs={"synthetic_jobs_batch_id": batch.id})
-
-
-@app.task()
-@bittensor_client
-def check_missed_synthetic_jobs(bittensor: turbobt.Bittensor) -> None:
-    """
-    Check if there are any synthetic jobs that were scheduled to run, but didn't.
-    """
-    current_block = async_to_sync(bittensor.blocks.head)()
-
-    with transaction.atomic():
-        past_job_batches = SyntheticJobBatch.objects.select_for_update(skip_locked=True).filter(
-            block__lt=current_block.number
-            - config.DYNAMIC_SYNTHETIC_JOBS_PLANNER_MAX_OVERSLEEP_BLOCKS,
-            started_at__isnull=True,
-            is_missed=False,
-        )
-        for batch in past_job_batches:
-            SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).create(
-                type=SystemEvent.EventType.VALIDATOR_SYNTHETIC_JOBS_FAILURE,
-                subtype=SystemEvent.EventSubType.OVERSLEPT,
-                long_description="Failed to run synthetic jobs in time",
-                data={
-                    "batch_id": batch.id,
-                    "created_at": str(batch.created_at),
-                    "block": batch.block,
-                    "current_block": current_block.number,
-                    "current_time": str(now()),
-                },
-            )
-        past_job_batches.update(is_missed=True)
 
 
 @shared_task
@@ -566,308 +291,6 @@ def _do_fetch() -> None:
     )
 
 
-@app.task(
-    soft_time_limit=4 * 60 + 50,
-    time_limit=5 * 60,
-)
-def llm_prompt_generation():
-    unprocessed_workloads_count = SolveWorkload.objects.filter(finished_at__isnull=True).count()
-    if unprocessed_workloads_count > 0:
-        # prevent any starvation issues
-        logger.info("Unprocessed workloads found - skipping prompt generation")
-        return
-
-    num_expected_prompt_series = config.DYNAMIC_MAX_PROMPT_SERIES
-    num_prompt_series = PromptSeries.objects.count()
-
-    if num_prompt_series >= num_expected_prompt_series:
-        logger.warning(
-            "There are %s series in the db - skipping prompt generation",
-            num_prompt_series,
-        )
-        return
-
-    logger.info("There are %s series in the db, generating prompts", num_prompt_series)
-    SystemEvent.objects.create(
-        type=SystemEvent.EventType.LLM_PROMPT_GENERATION,
-        subtype=SystemEvent.EventSubType.PROMPT_GENERATION_STARTED,
-        long_description="",
-        data={
-            "prompt_series_count": num_prompt_series,
-            "expected_prompt_series_count": num_expected_prompt_series,
-        },
-    )
-
-    with transaction.atomic():
-        try:
-            get_advisory_lock(LockType.TRUSTED_MINER_LOCK)
-        except Locked:
-            logger.debug("Another thread already using the trusted miner")
-            return
-
-        try:
-            async_to_sync(generate_prompts)()
-        except Exception as e:
-            msg = f"Error while generating prompts: {e}"
-            logger.warning(msg)
-            SystemEvent.objects.create(
-                type=SystemEvent.EventType.LLM_PROMPT_GENERATION,
-                subtype=SystemEvent.EventSubType.FAILURE,
-                long_description=msg,
-                data={},
-            )
-
-
-@app.task(
-    soft_time_limit=4 * 60 + 50,
-    time_limit=5 * 60,
-)
-def llm_prompt_answering():
-    started_at = now()
-    unprocessed_workloads = SolveWorkload.objects.filter(finished_at__isnull=True)
-
-    SystemEvent.objects.create(
-        type=SystemEvent.EventType.LLM_PROMPT_ANSWERING,
-        subtype=SystemEvent.EventSubType.UNPROCESSED_WORKLOADS,
-        long_description="number of unprocessed workloads to be answered",
-        data={
-            "count": unprocessed_workloads.count(),
-        },
-    )
-
-    times = []
-    success_count = 0
-    failure_count = 0
-    for workload in unprocessed_workloads:
-        start = time.time()
-        with transaction.atomic():
-            try:
-                get_advisory_lock(LockType.TRUSTED_MINER_LOCK)
-            except Locked:
-                logger.debug("Another thread already using the trusted miner")
-                break
-
-            try:
-                success = async_to_sync(answer_prompts)(workload)
-            except Exception as e:
-                success = False
-                msg = f"Error while answering prompts: {e}"
-                logger.warning(msg)
-                SystemEvent.objects.create(
-                    type=SystemEvent.EventType.LLM_PROMPT_ANSWERING,
-                    subtype=SystemEvent.EventSubType.FAILURE,
-                    long_description=msg,
-                    data={},
-                )
-
-        if success:
-            success_count += 1
-        else:
-            failure_count += 1
-        times.append(time.time() - start)
-        total_time = sum(times)
-        avg_time = total_time / len(times)
-        if total_time + avg_time > 4 * 60 + 20:
-            break
-
-    completed_at = now()
-    if times:
-        SystemEvent.objects.create(
-            type=SystemEvent.EventType.LLM_PROMPT_ANSWERING,
-            subtype=SystemEvent.EventSubType.SUCCESS,
-            long_description="Finished running prompt answering jobs",
-            data={
-                "started_at": started_at.isoformat(),
-                "completed_at": completed_at.isoformat(),
-                "task_duration": (completed_at - started_at).total_seconds(),
-                "times": times,
-                "job_success_count": success_count,
-                "job_failure_count": failure_count,
-            },
-        )
-
-
-def init_workload(seed: int) -> tuple[SolveWorkload, str]:
-    workload_uuid = uuid.uuid4()
-    # generate an s3 url to upload workload prompts to
-    s3_upload_url = generate_upload_url(
-        key=str(workload_uuid), bucket_name=settings.S3_BUCKET_NAME_ANSWERS
-    )
-    # generate an s3 url to download workload prompts to be answered
-    s3_url = get_public_url(
-        key=str(workload_uuid),
-        bucket_name=settings.S3_BUCKET_NAME_ANSWERS,
-    )
-    return SolveWorkload(workload_uuid=workload_uuid, seed=seed, s3_url=s3_url), s3_upload_url
-
-
-@app.task()
-def llm_prompt_sampling():
-    # generate new prompt samples if needed
-
-    num_prompt_series = PromptSeries.objects.count()
-    required_series_to_start_sampling = min(
-        config.DYNAMIC_TARGET_NUMBER_OF_PROMPT_SAMPLES_READY * 2, config.DYNAMIC_MAX_PROMPT_SERIES
-    )
-    if num_prompt_series < required_series_to_start_sampling:
-        logger.warning(
-            "There are %s series in the db - expected %s for start sampling - skipping prompt sampling",
-            num_prompt_series,
-            required_series_to_start_sampling,
-        )
-        SystemEvent.objects.create(
-            type=SystemEvent.EventType.LLM_PROMPT_SAMPLING,
-            subtype=SystemEvent.EventSubType.PROMPT_SAMPLING_SKIPPED,
-            long_description="not enough prompt series in the database to start sampling",
-            data={
-                "prompt_series_count": num_prompt_series,
-                "required_prompt_series_count_to_start_sampling": required_series_to_start_sampling,
-            },
-        )
-        return
-
-    num_unused_prompt_samples = PromptSample.objects.filter(synthetic_job__isnull=True).count()
-    num_needed_prompt_samples = (
-        config.DYNAMIC_TARGET_NUMBER_OF_PROMPT_SAMPLES_READY - num_unused_prompt_samples
-    )
-
-    if num_needed_prompt_samples <= 0:
-        logger.warning(
-            "There are already %s prompt samples in the db not used in synthetic jobs - skipping prompt sampling",
-            num_unused_prompt_samples,
-        )
-        SystemEvent.objects.create(
-            type=SystemEvent.EventType.LLM_PROMPT_SAMPLING,
-            subtype=SystemEvent.EventSubType.PROMPT_SAMPLING_SKIPPED,
-            long_description="enough prompt samples unused in synthetic jobs in the database",
-            data={
-                "unused_prompt_samples_count": num_unused_prompt_samples,
-                "target_unused_prompt_samples_count": config.DYNAMIC_TARGET_NUMBER_OF_PROMPT_SAMPLES_READY,
-            },
-        )
-        return
-
-    logger.info(
-        "We need %s more prompt samples in the db for synthetic jobs - generating prompt answering workloads",
-        num_needed_prompt_samples,
-    )
-
-    num_workloads_created = create_sample_workloads(num_needed_prompt_samples)
-    SystemEvent.objects.create(
-        type=SystemEvent.EventType.LLM_PROMPT_SAMPLING,
-        subtype=SystemEvent.EventSubType.NEW_WORKLOADS_CREATED,
-        long_description="number of new workloads for prompt answering created",
-        data={
-            "new_workloads_count": num_workloads_created,
-            "prompt_series_count": num_prompt_series,
-            "unused_prompt_samples_count": num_unused_prompt_samples,
-        },
-    )
-
-
-def persist_workload(
-    workload: SolveWorkload, prompt_samples: list[PromptSample], prompts: list[Prompt]
-):
-    logger.info(f"Saving workload {workload}")
-    try:
-        # save the sampled prompts as unanswered in the db
-        with transaction.atomic():
-            workload.save()
-            PromptSample.objects.bulk_create(prompt_samples)
-            Prompt.objects.bulk_create(prompts)
-    except Exception:
-        logger.error(f"Failed to create workload {workload}")
-
-
-def create_sample_workloads(num_needed_prompt_samples: int) -> int:
-    """
-    Creates enough workloads to cover at least `num_needed_prompt_samples` prompt samples
-    Returns the number of workloads created
-    """
-    prompts_per_sample = config.DYNAMIC_NUMBER_OF_PROMPTS_TO_SAMPLE_FROM_SERIES
-    prompts_per_workload = config.DYNAMIC_NUMBER_OF_PROMPTS_PER_WORKLOAD
-
-    # set seed for the current synthetic jobs run
-    seed = random.randint(0, MAX_SEED)
-
-    # workload we are currently sampling for
-    try:
-        current_workload, current_upload_url = init_workload(seed)
-    except Exception as e:
-        logger.error(f"Failed to create new workload: {e} - aborting prompt sampling")
-        return 0
-
-    # how many prompts series we sampled so far
-    # for each prompt series there is one prompt sample
-    num_prompt_series_sampled = 0
-    num_workloads_created = 0
-
-    current_prompt_samples = []
-    current_prompts = []
-
-    # assume we have sufficient prompt series in the db to make all the prompt_samples needed
-    # take a random order of prompt series to avoid using the same series at each synthetic jobs run
-    for prompt_series in PromptSeries.objects.order_by("?").all():
-        # get all prompts
-        try:
-            lines = download_prompts_from_s3_url(prompt_series.s3_url)
-        except Exception as e:
-            msg = f"Failed to download prompt series from {prompt_series.s3_url}: {e} - skipping"
-            logger.error(msg, exc_info=True)
-            SystemEvent.objects.create(
-                type=SystemEvent.EventType.LLM_PROMPT_SAMPLING,
-                subtype=SystemEvent.EventSubType.ERROR_DOWNLOADING_FROM_S3,
-                long_description=msg,
-            )
-            continue
-
-        # should always have enough prompts
-        if len(lines) <= prompts_per_sample:
-            logger.error(f"Skipping bucket {prompt_series.s3_url}, not enough prompts")
-            continue
-
-        # sample prompts
-        sampled_lines = random.sample(lines, prompts_per_sample)
-
-        prompt_sample = PromptSample(series=prompt_series, workload=current_workload)
-        current_prompt_samples += [prompt_sample]
-        current_prompts += [Prompt(sample=prompt_sample, content=line) for line in sampled_lines]
-
-        if len(current_prompts) >= prompts_per_workload:
-            content = "\n".join([p.content for p in current_prompts])
-            try:
-                upload_prompts_to_s3_url(current_upload_url, content)
-
-                # save the workload in the db
-                persist_workload(current_workload, current_prompt_samples, current_prompts)
-                num_prompt_series_sampled += len(current_prompt_samples)
-                num_workloads_created += 1
-
-            except Exception as e:
-                msg = f"Failed to upload prompts to s3 {current_upload_url} for workload {current_workload.workload_uuid}: {e} - skipping"
-                logger.error(msg, exc_info=True)
-                SystemEvent.objects.create(
-                    type=SystemEvent.EventType.LLM_PROMPT_SAMPLING,
-                    subtype=SystemEvent.EventSubType.ERROR_UPLOADING_TO_S3,
-                    long_description=msg,
-                )
-
-            # finished creating all needed prompt samples so exit after last batch is filled
-            if num_prompt_series_sampled >= num_needed_prompt_samples:
-                logger.info(f"Created {num_prompt_series_sampled} new prompt samples")
-                break
-
-            # reset for next workload
-            current_prompt_samples = []
-            current_prompts = []
-            try:
-                current_workload, current_upload_url = init_workload(seed)
-            except Exception as e:
-                logger.error(f"Failed to create new workload: {e} - aborting prompt sampling")
-                continue
-    return num_workloads_created
-
-
 @app.task
 def evict_old_data():
     eviction.evict_all()
@@ -992,7 +415,6 @@ async def _get_latest_manifests(miners: list[Miner]) -> dict[str, dict[ExecutorC
 def poll_miner_manifests() -> None:
     """
     Poll all miners for their manifests and update the MinerManifest table.
-    This runs independently of synthetic job batches.
     """
     async_to_sync(_poll_miner_manifests)()
 
@@ -1027,7 +449,6 @@ async def _poll_miner_manifests() -> None:
                 manifest_records.append(
                     MinerManifest(
                         miner=miner,
-                        batch=None,
                         executor_class=executor_class,
                         executor_count=executor_count,
                         online_executor_count=executor_count,
@@ -1049,7 +470,6 @@ async def _poll_miner_manifests() -> None:
                     manifest_records.append(
                         MinerManifest(
                             miner=miner,
-                            batch=None,
                             executor_class=last_manifest.executor_class,
                             executor_count=last_manifest.executor_count,
                             online_executor_count=0,

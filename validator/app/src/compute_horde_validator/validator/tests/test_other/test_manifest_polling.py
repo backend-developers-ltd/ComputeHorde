@@ -304,14 +304,12 @@ async def test_poll_miner_manifests_with_partial_transport_failures(
 
     await MinerManifest.objects.acreate(
         miner=miner2,
-        batch=None,
         executor_class=ExecutorClass.always_on__gpu_24gb,
         executor_count=3,
         online_executor_count=2,
     )
     await MinerManifest.objects.acreate(
         miner=miner2,
-        batch=None,
         executor_class=ExecutorClass.spin_up_4min__gpu_24gb,
         executor_count=1,
         online_executor_count=1,
@@ -358,7 +356,6 @@ async def test_poll_miner_manifests_no_duplicate_offline_records(monkeypatch):
 
     await MinerManifest.objects.acreate(
         miner=miner,
-        batch=None,
         executor_class=ExecutorClass.always_on__gpu_24gb,
         executor_count=1,
         online_executor_count=1,
@@ -366,7 +363,6 @@ async def test_poll_miner_manifests_no_duplicate_offline_records(monkeypatch):
     )
     await MinerManifest.objects.acreate(
         miner=miner,
-        batch=None,
         executor_class=ExecutorClass.always_on__gpu_24gb,
         executor_count=2,
         online_executor_count=2,
@@ -374,7 +370,6 @@ async def test_poll_miner_manifests_no_duplicate_offline_records(monkeypatch):
     )
     await MinerManifest.objects.acreate(
         miner=miner,
-        batch=None,
         executor_class=ExecutorClass.always_on__gpu_24gb,
         executor_count=3,
         online_executor_count=3,

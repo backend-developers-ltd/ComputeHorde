@@ -12,10 +12,7 @@ from compute_horde.miner_client.organic import OrganicMinerClient
 from compute_horde.transport import AbstractTransport
 from compute_horde_core.executor_class import ExecutorClass
 
-from compute_horde_validator.validator.models import (
-    Cycle,
-    Miner,
-)
+from compute_horde_validator.validator.models import Miner
 from compute_horde_validator.validator.organic_jobs.facilitator_client import FacilitatorClient
 from compute_horde_validator.validator.tests.transport import SimulationTransport
 
@@ -28,11 +25,6 @@ def miner(miner_keypair):
 @pytest.fixture
 def validator(settings):
     return Miner.objects.create(hotkey=settings.BITTENSOR_WALLET().hotkey.ss58_address)
-
-
-@pytest.fixture
-def cycle():
-    return Cycle.objects.create(start=1, stop=2)
 
 
 @pytest.fixture(autouse=True)
