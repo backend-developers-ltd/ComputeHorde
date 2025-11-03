@@ -2,14 +2,22 @@ import itertools
 import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from celery import exceptions as celery_exceptions
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from django.conf import settings
 from django.utils.timezone import now
 from requests import Response
+from web3.exceptions import ProviderConnectionError
 
+from compute_horde_validator.validator.collateral.types import (
+    NonceTooHighCollateralException,
+    NonceTooLowCollateralException,
+    ReplacementUnderpricedCollateralException,
+    SlashCollateralError,
+)
 from compute_horde_validator.validator.models import (
     AdminJobRequest,
     Cycle,
@@ -23,6 +31,7 @@ from compute_horde_validator.validator.tasks import (
     check_missed_synthetic_jobs,
     run_synthetic_jobs,
     send_events_to_facilitator,
+    slash_collateral_task,
     trigger_run_admin_job_request,
 )
 
@@ -377,3 +386,128 @@ def test__check_missed_synthetic_jobs(settings, bittensor):
         .count()
         == 1
     )
+
+
+@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
+@pytest.mark.parametrize(
+    "exception",
+    [
+        NonceTooLowCollateralException("Nonce too low"),
+        NonceTooHighCollateralException("Nonce too high"),
+        ReplacementUnderpricedCollateralException("replacement transaction underpriced"),
+        ProviderConnectionError("Failed to connect to RPC node"),
+    ],
+)
+def test_slash_collateral_task_retriable_error_triggers_retry(settings, monkeypatch, exception):
+    settings.CELERY_TASK_ALWAYS_EAGER = True
+    settings.CELERY_TASK_EAGER_PROPAGATES = True
+
+    miner = Miner.objects.create(hotkey="hotkey-slash-1")
+    job = OrganicJob.objects.create(
+        miner=miner,
+        miner_address="127.0.0.1",
+        miner_address_ip_version=4,
+        miner_port=8000,
+        cheated=True,
+    )
+
+    mock_collateral = MagicMock()
+    mock_collateral.slash_collateral = AsyncMock(side_effect=exception)
+    monkeypatch.setattr(
+        "compute_horde_validator.validator.tasks.collateral",
+        lambda: mock_collateral,
+    )
+
+    with pytest.raises(celery_exceptions.Retry):
+        slash_collateral_task.apply(args=(str(job.job_uuid),))
+
+    job.refresh_from_db()
+    assert job.slashed is False
+    assert job.slashed_at is None
+
+
+@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
+def test_slash_collateral_task_non_retriable_error_no_retry(settings, monkeypatch):
+    settings.CELERY_TASK_ALWAYS_EAGER = True
+    settings.CELERY_TASK_EAGER_PROPAGATES = True
+
+    miner = Miner.objects.create(hotkey="hotkey-slash-2")
+    job = OrganicJob.objects.create(
+        miner=miner,
+        miner_address="127.0.0.1",
+        miner_address_ip_version=4,
+        miner_port=8001,
+        cheated=True,
+    )
+
+    mock_collateral = MagicMock()
+    mock_collateral.slash_collateral = AsyncMock(
+        side_effect=SlashCollateralError("some fatal error")
+    )
+    monkeypatch.setattr(
+        "compute_horde_validator.validator.tasks.collateral",
+        lambda: mock_collateral,
+    )
+
+    slash_collateral_task.apply(args=(str(job.job_uuid),))
+
+    job.refresh_from_db()
+    assert job.slashed is False
+    assert job.slashed_at is None
+
+
+@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
+def test_slash_collateral_task_success_marks_slashed(settings, monkeypatch):
+    settings.CELERY_TASK_ALWAYS_EAGER = True
+    settings.CELERY_TASK_EAGER_PROPAGATES = True
+
+    miner = Miner.objects.create(hotkey="hotkey-slash-3")
+    job = OrganicJob.objects.create(
+        miner=miner,
+        miner_address="127.0.0.1",
+        miner_address_ip_version=4,
+        miner_port=8002,
+        cheated=True,
+    )
+
+    # Mock successful slash
+    mock_collateral = MagicMock()
+    mock_collateral.slash_collateral = AsyncMock(return_value=None)
+    monkeypatch.setattr(
+        "compute_horde_validator.validator.tasks.collateral",
+        lambda: mock_collateral,
+    )
+
+    slash_collateral_task.apply(args=(str(job.job_uuid),))
+
+    job.refresh_from_db()
+    assert job.slashed is True
+    assert job.slashed_at is not None
+
+
+@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
+def test_slash_collateral_task_already_slashed_returns_early(settings, monkeypatch):
+    settings.CELERY_TASK_ALWAYS_EAGER = True
+    settings.CELERY_TASK_EAGER_PROPAGATES = True
+
+    miner = Miner.objects.create(hotkey="hotkey-slash-4")
+    job = OrganicJob.objects.create(
+        miner=miner,
+        miner_address="127.0.0.1",
+        miner_address_ip_version=4,
+        miner_port=8003,
+        cheated=True,
+        slashed=True,
+        slashed_at=now(),
+    )
+
+    mock_collateral = MagicMock()
+    mock_collateral.slash_collateral = AsyncMock(return_value=None)
+    monkeypatch.setattr(
+        "compute_horde_validator.validator.tasks.collateral",
+        lambda: mock_collateral,
+    )
+
+    slash_collateral_task.apply(args=(str(job.job_uuid),))
+
+    assert mock_collateral.slash_collateral.await_count == 0

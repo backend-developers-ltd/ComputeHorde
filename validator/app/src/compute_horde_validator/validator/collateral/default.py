@@ -3,6 +3,7 @@ import hashlib
 import json
 import logging
 import pathlib
+import re
 from decimal import Decimal
 from typing import Any
 
@@ -16,16 +17,34 @@ from eth_account.signers.local import LocalAccount
 from hexbytes import HexBytes
 from web3 import Web3
 from web3.contract.contract import ContractFunction
+from web3.exceptions import Web3RPCError
 from web3.types import Wei
 
 from compute_horde_validator.validator.models import Miner
 
 from .base import CollateralBase
-from .types import MinerCollateral, SlashCollateralError
+from .types import (
+    CollateralException,
+    MinerCollateral,
+    NonceTooHighCollateralException,
+    NonceTooLowCollateralException,
+    ReplacementUnderpricedCollateralException,
+    SlashCollateralError,
+)
 
 logger = logging.getLogger(__name__)
 
 _cached_contract_address: str | None = None
+
+
+_ERROR_PATTERNS = [
+    (NonceTooLowCollateralException, re.compile(r"nonce too low", re.I)),
+    (NonceTooHighCollateralException, re.compile(r"nonce too high", re.I)),
+    (
+        ReplacementUnderpricedCollateralException,
+        re.compile(r"replacement transaction underpriced", re.I),
+    ),
+]
 
 
 @functools.cache
@@ -48,6 +67,16 @@ def _get_collateral_abi() -> Any:
     path = pathlib.Path(__file__).parent / ".." / "collateral_abi.json"
     abi = json.loads(path.read_text())
     return abi
+
+
+def _get_collateral_exception_from_web3(e: Web3RPCError):
+    raw_msg = getattr(e, "message", "") or str(e)
+
+    for exception_cls, pattern in _ERROR_PATTERNS:
+        if pattern.search(raw_msg):
+            return exception_cls(raw_msg)
+
+    return CollateralException(raw_msg)
 
 
 class Collateral(CollateralBase):
@@ -104,6 +133,7 @@ class Collateral(CollateralBase):
         function = contract.functions.slashCollateral(
             miner_checksum_address, amount_wei, url, md5_checksum
         )
+
         tx_hash = self._build_and_send_transaction(w3, function, account, gas_limit=200_000)
 
         receipt = w3.eth.wait_for_transaction_receipt(tx_hash, 300, 2)
@@ -154,20 +184,52 @@ class Collateral(CollateralBase):
             gas_limit: Maximum gas to use for the transaction
             value: Amount of ETH to send with the transaction (in Wei)
         """
-        transaction = function.build_transaction(
-            {
-                "from": account.address,
-                "nonce": w3.eth.get_transaction_count(account.address),
-                "gas": gas_limit,
-                "gasPrice": w3.eth.gas_price,
-                "chainId": w3.eth.chain_id,
-                "value": Wei(value),
-            }
-        )
+        nonce = None
+        gas_price = None
+        chain_id = None
 
-        signed_txn = w3.eth.account.sign_transaction(transaction, account.key)
-        tx_hash = w3.eth.send_raw_transaction(signed_txn.raw_transaction)
-        return tx_hash
+        try:
+            nonce = w3.eth.get_transaction_count(account.address)
+            gas_price = w3.eth.gas_price
+            chain_id = w3.eth.chain_id
+
+            logger.info(
+                "Building and sending transaction from=%s nonce=%s gas_price=%s chain_id=%s value=%s",
+                account.address,
+                nonce,
+                gas_price,
+                chain_id,
+                value,
+            )
+
+            transaction = function.build_transaction(
+                {
+                    "from": account.address,
+                    "nonce": nonce,
+                    "gas": gas_limit,
+                    "gasPrice": gas_price,
+                    "chainId": chain_id,
+                    "value": Wei(value),
+                }
+            )
+
+            signed_txn = w3.eth.account.sign_transaction(transaction, account.key)
+            tx_hash = w3.eth.send_raw_transaction(signed_txn.raw_transaction)
+        except Web3RPCError as e:
+            logger.warning(
+                "Web3RPCError while sending transaction: %s from=%s nonce=%s gas_price=%s chain_id=%s value=%s",
+                str(e),
+                account.address,
+                nonce,
+                gas_price,
+                chain_id,
+                value,
+                exc_info=True,
+            )
+
+            raise _get_collateral_exception_from_web3(e) from e
+        else:
+            return tx_hash
 
 
 _collateral_instance: Collateral | None = None

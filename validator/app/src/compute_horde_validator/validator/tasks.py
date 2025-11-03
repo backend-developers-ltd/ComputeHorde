@@ -15,6 +15,7 @@ from asgiref.sync import async_to_sync, sync_to_async
 from celery import shared_task
 from celery.result import AsyncResult
 from celery.utils.log import get_task_logger
+from celery.utils.time import get_exponential_backoff_interval
 from compute_horde.dynamic_config import fetch_dynamic_configs_from_contract, sync_dynamic_config
 from compute_horde.fv_protocol.facilitator_requests import OrganicJobRequest
 from compute_horde.miner_client.organic import OrganicMinerClient
@@ -26,6 +27,7 @@ from django.conf import settings
 from django.db import transaction
 from django.utils.timezone import now
 from pydantic import JsonValue, TypeAdapter
+from web3.exceptions import ProviderConnectionError
 
 from compute_horde_validator.celery import app
 from compute_horde_validator.validator.collateral.default import collateral
@@ -71,6 +73,11 @@ from .allowance import tasks as allowance_tasks  # noqa
 from .allowance.default import allowance
 from .clean_me_up import bittensor_client, get_single_manifest
 from .collateral import tasks as collateral_tasks  # noqa
+from .collateral.types import (
+    NonceTooHighCollateralException,
+    NonceTooLowCollateralException,
+    ReplacementUnderpricedCollateralException,
+)
 from .dynamic_config import aget_config
 from .models import AdminJobRequest, MinerManifest
 from .scoring import tasks as scoring_tasks  # noqa
@@ -84,6 +91,16 @@ JOB_WINDOW = 2 * 60 * 60
 MAX_SEED = (1 << 32) - 1
 
 COMPUTE_TIME_OVERHEAD_SECONDS = 30  # TODO: approximate a realistic value
+
+SLASH_COLLATERAL_TASK_MAX_RETRIES = 5
+SLASH_COLLATERAL_TASK_RETRY_FACTOR_SECONDS = 2
+SLASH_COLLATERAL_TASK_RETRY_MAXIMUM_SECONDS = 120
+SLASH_COLLATERAL_TASK_RETRIABLE_ERRORS = (
+    NonceTooLowCollateralException,
+    NonceTooHighCollateralException,
+    ReplacementUnderpricedCollateralException,
+    ProviderConnectionError,
+)
 
 
 class ScheduleError(Exception):
@@ -896,22 +913,43 @@ def _execute_organic_job_on_worker(job_request: JsonValue, job_route: JsonValue)
     async_to_sync(execute_organic_job_request)(request, route)
 
 
-@app.task
-def slash_collateral_task(job_uuid: str) -> None:
+@app.task(bind=True, max_retries=SLASH_COLLATERAL_TASK_MAX_RETRIES)
+def slash_collateral_task(self, job_uuid: str) -> None:
     with transaction.atomic():
         job = OrganicJob.objects.select_related("miner").select_for_update().get(job_uuid=job_uuid)
 
         if job.slashed:
-            logger.info(f"Already slashed for this job {job_uuid}")
+            logger.info("Already slashed for this job %s", job_uuid)
             return
+
+        logger.info("Slashing collateral for job %s on miner %s", job_uuid, job.miner.hotkey)
 
         try:
             async_to_sync(collateral().slash_collateral)(
                 miner_hotkey=job.miner.hotkey,
                 url=f"job {job_uuid} cheated",
             )
+        except SLASH_COLLATERAL_TASK_RETRIABLE_ERRORS as e:
+            countdown = get_exponential_backoff_interval(
+                factor=SLASH_COLLATERAL_TASK_RETRY_FACTOR_SECONDS,
+                retries=self.request.retries,
+                maximum=SLASH_COLLATERAL_TASK_RETRY_MAXIMUM_SECONDS,
+                full_jitter=False,
+            )
+            logger.warning(
+                "Retriable slashing error for job %s (%s). Retry %d in %ss",
+                job_uuid,
+                str(e),
+                self.request.retries + 1,
+                countdown,
+            )
+
+            try:
+                raise self.retry(exc=e, countdown=countdown)
+            except SLASH_COLLATERAL_TASK_RETRIABLE_ERRORS as e:
+                logger.exception("Max retries reached for job %s: %s", job_uuid, e)
         except Exception as e:
-            logger.error(f"Failed to slash collateral for job {job_uuid}: {e}")
+            logger.exception("Failed to slash collateral for job %s: %s", job_uuid, e)
         else:
             job.slashed = True
             job.slashed_at = now()
