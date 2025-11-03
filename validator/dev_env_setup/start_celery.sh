@@ -29,7 +29,7 @@ celery -A compute_horde_validator multi start $WORKERS $OPTIONS $MAC_OPTS \
     -Q:llm llm --autoscale:llm=$CELERY_CONCURRENCY \
     -Q:receipts receipts --autoscale:receipts=$CELERY_CONCURRENCY \
     -Q:metagraph metagraph --autoscale:metagraph=$CELERY_CONCURRENCY \
-    -Q:organic_jobs organic_jobs --autoscale:receipts=$CELERY_CONCURRENCY
+    -Q:organic_jobs organic_jobs --autoscale:organic_jobs=$CELERY_CONCURRENCY
 
 
 tail -f /tmp/celery-validator-*.log &
