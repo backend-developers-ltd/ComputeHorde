@@ -7,7 +7,7 @@ from celery.utils.log import get_task_logger
 from compute_horde_core.executor_class import ExecutorClass
 from constance import config
 from django.db import IntegrityError, transaction
-from django.db.models import Case, FloatField, Max, Min, Q, Sum, Value, When
+from django.db.models import Case, Exists, Max, Min, OuterRef, Q, Sum, When
 
 from compute_horde_validator.validator.locks import Lock, LockType
 
@@ -421,44 +421,47 @@ def find_miners_with_allowance(
 
     earliest_usable_block = job_start_block - settings.BLOCK_EXPIRY
 
+    latest_block_subquery = NeuronModel.objects.aggregate(max_block=Max("block"))
+    latest_block = latest_block_subquery["max_block"]
+
+    if latest_block is None:
+        raise NotEnoughAllowanceException(
+            highest_available_allowance=0.0,
+            highest_available_allowance_ss58="",
+            highest_unspent_allowance=0.0,
+            highest_unspent_allowance_ss58="",
+        )
+
+    current_miners_subquery = NeuronModel.objects.filter(
+        block=latest_block,
+        hotkey_ss58address=OuterRef("miner_ss58"),
+    )
+
     miner_aggregates = (
         BlockAllowance.objects.filter(
             validator_ss58=validator_ss58,
             executor_class=executor_class,
             block__block_number__gte=earliest_usable_block,
-            invalidated_at_block__isnull=True,  # Only non-invalidated allowances
-            miner_ss58__in=NeuronModel.objects.filter(
-                block=NeuronModel.objects.aggregate(Max("block"))["block__max"]
-            ).values_list("hotkey_ss58address", flat=True),
+            invalidated_at_block__isnull=True,
         )
+        .annotate(is_current_miner=Exists(current_miners_subquery))
+        .filter(is_current_miner=True)
         .values("miner_ss58")
         .annotate(
             # Total allowance for non-invalidated allowances
             total_allowance=Sum("allowance"),
             # Available allowance: sum where booking is null OR (not spent AND not reserved)
             available_allowance=Sum(
-                Case(
-                    When(
-                        Q(allowance_booking__isnull=True)
-                        | Q(
-                            allowance_booking__is_spent=False, allowance_booking__is_reserved=False
-                        ),
-                        then="allowance",
-                    ),
-                    default=Value(0.0),
-                    output_field=FloatField(),
-                )
+                "allowance",
+                filter=(
+                    Q(allowance_booking__isnull=True)
+                    | Q(allowance_booking__is_spent=False, allowance_booking__is_reserved=False)
+                ),
             ),
             # Unspent allowance: sum where booking is null OR booking has is_spent=False
             unspent_allowance=Sum(
-                Case(
-                    When(
-                        Q(allowance_booking__isnull=True) | Q(allowance_booking__is_spent=False),
-                        then="allowance",
-                    ),
-                    default=Value(0.0),
-                    output_field=FloatField(),
-                )
+                "allowance",
+                filter=(Q(allowance_booking__isnull=True) | Q(allowance_booking__is_spent=False)),
             ),
             # Earliest unspent block: minimum block number where allowance is available
             earliest_unspent_block=Min(

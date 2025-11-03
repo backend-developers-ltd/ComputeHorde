@@ -425,7 +425,7 @@ class FacilitatorClient:
 
     async def _process_job_request(self, job_request: OrganicJobRequest) -> None:
         if isinstance(job_request, V2JobRequest):
-            logger.debug(f"Received signed job request: {job_request}")
+            logger.debug(f"Received signed job {job_request.uuid} - {job_request}")
             await verify_request_or_fail(job_request)
 
         await self.send_job_status_update(
@@ -435,6 +435,7 @@ class FacilitatorClient:
             )
         )
 
+        logger.debug(f"Picking miner for job {job_request.uuid}")
         job_route = await routing().pick_miner_for_job_request(job_request)
         logger.info(f"Selected miner {job_route.miner.hotkey_ss58} for job {job_request.uuid}")
 
