@@ -22,14 +22,14 @@ fi
 
 # shellcheck disable=2086
 celery -A compute_horde_validator multi start $WORKERS $OPTIONS $MAC_OPTS \
-    -Q:default default --autoscale:generic=$CELERY_CONCURRENCY \
+    -Q:default default --autoscale:default=$CELERY_CONCURRENCY \
     -Q:weights weights --autoscale:weights=$CELERY_CONCURRENCY \
     -Q:jobs jobs --autoscale:jobs=$CELERY_CONCURRENCY \
     -Q:scores scores --autoscale:scores=$CELERY_CONCURRENCY \
     -Q:llm llm --autoscale:llm=$CELERY_CONCURRENCY \
     -Q:receipts receipts --autoscale:receipts=$CELERY_CONCURRENCY \
     -Q:metagraph metagraph --autoscale:metagraph=$CELERY_CONCURRENCY \
-    -Q:organic_jobs organic_jobs --autoscale:receipts=$CELERY_CONCURRENCY
+    -Q:organic_jobs organic_jobs --autoscale:organic_jobs=$CELERY_CONCURRENCY
 
 
 tail -f /tmp/celery-validator-*.log &
