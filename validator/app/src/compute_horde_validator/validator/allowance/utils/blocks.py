@@ -421,6 +421,7 @@ def find_miners_with_allowance(
 
     earliest_usable_block = job_start_block - settings.BLOCK_EXPIRY
 
+    logger.info(f"find_miners_with_allowance checkpoint {job_start_block} BlockAllowance.objects.filter() START")
     miner_aggregates = (
         BlockAllowance.objects.filter(
             validator_ss58=validator_ss58,
@@ -469,6 +470,7 @@ def find_miners_with_allowance(
             ),
         )
     )
+    logger.info(f"find_miners_with_allowance checkpoint {job_start_block} BlockAllowance.objects.filter() END")
 
     # Convert to dictionary for easier access
     miner_data = {
