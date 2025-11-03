@@ -59,6 +59,12 @@ class Neuron(models.Model):
     coldkey_ss58address = models.TextField()
     block = models.IntegerField()
 
+    class Meta:
+        indexes = [
+            models.Index(fields=["block"]),
+            models.Index(fields=["block", "hotkey_ss58address"]),
+        ]
+
 
 class AllowanceMinerManifest(  # type: ignore
     BulkExportModelOperationsMixin("AllowanceMinerManifest"),  # type: ignore
@@ -107,6 +113,9 @@ class AllowanceBooking(BulkExportModelOperationsMixin("AllowanceBooking"), model
                 name="ck_allowance_booking_reserved_or_spent",
             ),
         ]
+        indexes = [
+            models.Index(fields=["is_spent", "is_reserved"]),
+        ]
 
     def __str__(self):
         return f"Allowance booking {self.id}"
@@ -147,5 +156,12 @@ class BlockAllowance(BulkExportModelOperationsMixin("BlockAllowance"), models.Mo
             UniqueConstraint(
                 fields=["block", "miner_ss58", "validator_ss58", "executor_class"],
                 name="unique_block_allowance",
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=["validator_ss58", "executor_class", "block", "miner_ss58"],
+                name="available_block_allowance",
+                condition=models.Q(invalidated_at_block__isnull=True),
             ),
         ]
