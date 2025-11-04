@@ -6,13 +6,12 @@ from decimal import Decimal
 from typing import Self
 
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
-from compute_horde.subtensor import get_cycle_containing_block
 from compute_horde_core.output_upload import OutputUpload, ZipAndHttpPutUpload
 from compute_horde_core.volume import Volume, ZipUrlVolume
 from django.conf import settings
 from django.contrib.postgres.fields import ArrayField
 from django.db import models
-from django.db.models import Exists, OuterRef, UniqueConstraint
+from django.db.models import Exists, OuterRef
 from django.utils import timezone
 from django.utils.timezone import now
 
@@ -219,50 +218,8 @@ class ValidatorWhitelist(models.Model):
         return f"hotkey: {self.hotkey}"
 
 
-class Cycle(models.Model):
-    start = models.BigIntegerField()
-    stop = models.BigIntegerField()
-
-    class Meta:
-        constraints = [
-            UniqueConstraint(fields=["start", "stop"], name="unique_cycle"),
-        ]
-
-    def __str__(self):
-        return f"Cycle [{self.start};{self.stop})"
-
-    @classmethod
-    def from_block(cls, block: int, netuid: int) -> Self:
-        r = get_cycle_containing_block(block=block, netuid=netuid)
-        c, _ = cls.objects.get_or_create(start=r.start, stop=r.stop)
-        return c
-
-
-class SyntheticJobBatch(models.Model):
-    """
-    Scheduled running of synthetic jobs for a specific block.
-    """
-
-    block = models.BigIntegerField(
-        unique=True, help_text="Block number for which this batch is scheduled"
-    )
-    cycle = models.ForeignKey(Cycle, related_name="batches", on_delete=models.CASCADE)
-    created_at = models.DateTimeField(default=now)
-    started_at = models.DateTimeField(null=True)
-    accepting_results_until = models.DateTimeField(null=True)
-    scored = models.BooleanField(default=False)
-    is_missed = models.BooleanField(
-        default=False, help_text="Whether the batch was missed (not run)"
-    )
-    should_be_scored = models.BooleanField(default=True)
-
-    def __str__(self) -> str:
-        return f"Scheduled validation #{self.pk} at block #{self.block}"
-
-
 class MinerManifest(models.Model):
     miner = models.ForeignKey(Miner, on_delete=models.CASCADE)
-    batch = models.ForeignKey(SyntheticJobBatch, on_delete=models.CASCADE, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     executor_class = models.CharField(max_length=255)
     executor_count = models.IntegerField(
@@ -275,15 +232,9 @@ class MinerManifest(models.Model):
     )
 
     class Meta:
-        constraints = [
-            UniqueConstraint(
-                fields=["miner", "batch", "executor_class"], name="unique_miner_manifest"
-            ),
-        ]
         indexes = [
             models.Index(fields=["created_at"]),
             models.Index(fields=["miner", "created_at"]),
-            models.Index(fields=["batch", "created_at"]),
         ]
 
 
@@ -310,13 +261,6 @@ class JobBase(models.Model):
 
     def __str__(self):
         return f"uuid: {self.job_uuid} - miner hotkey: {self.miner.hotkey} - {self.status}"
-
-
-class SyntheticJob(JobBase):
-    batch = models.ForeignKey(
-        SyntheticJobBatch, on_delete=models.CASCADE, related_name="synthetic_jobs"
-    )
-    score = models.FloatField(default=0)
 
 
 class OrganicJob(JobBase):
@@ -393,58 +337,6 @@ class AdminJobRequest(models.Model):
         if self.output_url:
             return ZipAndHttpPutUpload(url=self.output_url)
         return None
-
-
-class PromptSeries(models.Model):
-    """
-    A series of prompts generated in a single run of the prompt generator.
-    """
-
-    series_uuid = models.UUIDField(default=uuid.uuid4, unique=True)
-    s3_url = models.URLField(max_length=1000)
-    created_at = models.DateTimeField(default=now)
-    generator_version = models.PositiveSmallIntegerField()
-
-
-class SolveWorkload(models.Model):
-    """
-    A collective workload of prompt samples to be solved together.
-    """
-
-    workload_uuid = models.UUIDField(default=uuid.uuid4, unique=True)
-    seed = models.BigIntegerField()
-    s3_url = models.URLField(max_length=1000)
-    created_at = models.DateTimeField(default=now)
-    finished_at = models.DateTimeField(null=True, default=None, db_index=True)
-
-    def __str__(self):
-        return f"uuid: {self.workload_uuid} - seed: {self.seed}"
-
-
-class PromptSample(models.Model):
-    """
-    A sample of prompts to be solved from a particular series.
-    Each sample is used to generate a single synthetic job after being solved.
-    """
-
-    series = models.ForeignKey(PromptSeries, on_delete=models.CASCADE, related_name="samples")
-    workload = models.ForeignKey(SolveWorkload, on_delete=models.CASCADE, related_name="samples")
-    synthetic_job = models.ForeignKey(SyntheticJob, on_delete=models.CASCADE, null=True)
-    created_at = models.DateTimeField(default=now)
-
-    class Meta:
-        constraints = [
-            UniqueConstraint(
-                fields=["series", "workload"],
-                name="unique_series_workload",
-            ),
-        ]
-
-
-class Prompt(models.Model):
-    sample = models.ForeignKey(PromptSample, on_delete=models.CASCADE, related_name="prompts")
-    content = models.TextField()
-    answer = models.TextField(null=True)
 
 
 class MinerPreliminaryReservationQueryset(models.QuerySet["MinerPreliminaryReservation"]):

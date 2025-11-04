@@ -51,8 +51,6 @@ if env("ENV", default=None) is None:
 
 ENV = env("ENV", default="prod")
 
-PROMPT_GENERATION_MODEL = env("PROMPT_GENERATION_MODEL", default="phi3")
-
 DEFAULT_ADMIN_PASSWORD = env("DEFAULT_ADMIN_PASSWORD", default=None)
 DEFAULT_ADMIN_USERNAME = env("DEFAULT_ADMIN_USERNAME", default="admin")
 DEFAULT_ADMIN_EMAIL = env("DEFAULT_ADMIN_EMAIL", default="admin@admin.com")
@@ -152,7 +150,6 @@ CONSTANCE_CONFIG = {
         "The ratio at which the horde size needs to be changed for receiving bonus",
         float,
     ),
-    "DYNAMIC_WEIGHTS_VERSION": (1, "The weights version for synthetic jobs", int),
     "DYNAMIC_NON_PEAK_CYCLE_EXECUTOR_MIN_RATIO": (
         0.1,
         "Ratio of the number of executors in peak cycle that needs to be present in non-peak cycle",
@@ -167,21 +164,6 @@ CONSTANCE_CONFIG = {
         "always_on.llm.a6000=2",
         "The limits of executors per class per miner, if the miner or this validator missed the peak batch",
         str,
-    ),
-    "DYNAMIC_SYNTHETIC_JOBS_FLOW_VERSION": (
-        1,
-        "The synthetic jobs flow version",
-        int,
-    ),
-    "DYNAMIC_SYNTHETIC_JOBS_PLANNER_WAIT_IN_ADVANCE_BLOCKS": (
-        3,
-        "How many blocks in advance to start waiting before synthetic jobs spawn",
-        int,
-    ),
-    "DYNAMIC_SYNTHETIC_JOBS_PLANNER_POLL_INTERVAL": (
-        (BITTENSOR_APPROXIMATE_BLOCK_DURATION / 3).total_seconds(),
-        "How often (in seconds) to poll for block change",
-        float,
     ),
     "DYNAMIC_BLOCK_FINALIZATION_NUMBER": (
         3,
@@ -218,11 +200,6 @@ CONSTANCE_CONFIG = {
         "This should be synced with the hyperparam",
         int,
     ),
-    "DYNAMIC_SYNTHETIC_JOBS_PLANNER_MAX_OVERSLEEP_BLOCKS": (
-        3,
-        "If the job running task wakes up late by this many blocks (or less), the jobs will still run",
-        int,
-    ),
     "DYNAMIC_WEIGHT_REVEALING_TTL": (
         120,
         "in seconds",
@@ -241,39 +218,6 @@ CONSTANCE_CONFIG = {
     "DYNAMIC_WEIGHT_REVEALING_FAILURE_BACKOFF": (
         5,
         "in seconds",
-        int,
-    ),
-    # llama params
-    "DYNAMIC_MAX_PROMPT_SERIES": (
-        3500,
-        "Maximum number of prompt series upon which the prompt generator will not be triggered",
-        int,
-    ),
-    "DYNAMIC_TARGET_NUMBER_OF_PROMPT_SAMPLES_READY": (
-        1536,  # 256 * 2 * 3 - we allow 2 executors per miner and want queue for 3 synthetic job batches
-        "how many prompt samples to generate (should be larger than how many prompts series we use per synthetic run)",
-        int,
-    ),
-    "DYNAMIC_NUMBER_OF_PROMPTS_PER_WORKLOAD": (
-        240,
-        "how many prompts to answer in a single workload",
-        int,
-    ),
-    # prompt generation params
-    "DYNAMIC_PROMPTS_SERIES_IN_A_SINGLE_GENERATION": (
-        25,
-        "Number of batches that prompt generator will process in a single go",
-        int,
-    ),
-    "DYNAMIC_NUMBER_OF_PROMPTS_IN_SERIES": (
-        240,
-        "Number of prompts to generate in a single series",
-        int,
-    ),
-    # prompts answering params
-    "DYNAMIC_NUMBER_OF_PROMPTS_TO_SAMPLE_FROM_SERIES": (
-        1,
-        "how many prompts to sample and answer from a series",
         int,
     ),
     "DYNAMIC_MINER_MAX_EXECUTORS_PER_CLASS": (
@@ -297,11 +241,6 @@ CONSTANCE_CONFIG = {
             "but int values that sum up to 100 are encouraged"
         ),
         str,
-    ),
-    "DYNAMIC_EXCUSED_SYNTHETIC_JOB_SCORE": (
-        1.0,
-        "Score for each properly excused synthetic job",
-        float,
     ),
     "DYNAMIC_MINIMUM_VALIDATOR_STAKE_FOR_EXCUSE": (
         30_000.0,
@@ -338,16 +277,6 @@ CONSTANCE_CONFIG = {
         "Disable system events for organic jobs run on trusted miner",
         bool,
     ),
-    "DYNAMIC_SYSTEM_EVENT_LIMITS": (
-        "MINER_SYNTHETIC_JOB_FAILURE,LLM_PROMPT_ANSWERS_MISSING,10",
-        "Limits of system events produced for each type-subtype pairs in a synthetic job run. Format: TYPE1,SUBTYPE1,100;TYPE2,SUBTYPE2,200",
-        str,
-    ),
-    "DYNAMIC_LLM_ANSWER_S3_DOWNLOAD_TIMEOUT_SECONDS": (
-        5.0,
-        "Total timeout for downloading answer files from S3.",
-        float,
-    ),
     "DYNAMIC_RECEIPT_TRANSFER_ENABLED": (
         False,
         "Whether receipt transfer between miners and validators should be enabled",
@@ -356,16 +285,6 @@ CONSTANCE_CONFIG = {
     "DYNAMIC_RECEIPT_TRANSFER_INTERVAL": (
         2,
         "Seconds between consecutive receipt polling",
-        int,
-    ),
-    "DYNAMIC_SYNTHETIC_STREAMING_JOB_EXECUTOR_CLASSES": (
-        "",
-        "Comma separated list of classes to run streaming jobs on during synthetic jobs batch runs",
-        str,
-    ),
-    "DYNAMIC_SYNTHETIC_STREAMING_JOB_READY_TIMEOUT": (
-        300,
-        "Timeout for waiting for a streaming job to be ready to accept connections from the user",
         int,
     ),
     "DYNAMIC_JOB_FAILURE_BLACKLIST_TIME_SECONDS": (
@@ -686,7 +605,6 @@ CELERY_BEAT_SCHEDULE = {
     },
 }
 if env.bool("DEBUG_RUN_BEAT_VERY_OFTEN", default=False):
-    CELERY_BEAT_SCHEDULE["run_synthetic_jobs"]["schedule"] = crontab(minute="*")
     CELERY_BEAT_SCHEDULE["set_scores"]["schedule"] = crontab(minute="*/3")
 
 CELERY_TASK_ROUTES = ["compute_horde_validator.celery.route_task"]
@@ -810,10 +728,6 @@ def BITTENSOR_SHIELD_METAGRAPH_OPTIONS() -> ShieldMetagraphOptions:
     )
 
 
-SYNTHETIC_JOB_GENERATOR_FACTORY = env.str(
-    "SYNTHETIC_JOB_GENERATOR_FACTORY",
-    default="compute_horde_validator.validator.synthetic_jobs.generator.factory:DefaultSyntheticJobGeneratorFactory",
-)
 FACILITATOR_URI = env.str(
     "FACILITATOR_URI", default="wss://facilitator.computehorde.io/ws/v0/"
 ).strip()
@@ -842,25 +756,11 @@ HORDE_SCORE_SIZE_PARAM = 0
 # non integer number - like 4.5 (all hordes smaller than 5 will get 0 weights)
 HORDE_SCORE_CENTRAL_SIZE_PARAM = 1
 
-DEBUG_OVERRIDE_WEIGHTS_VERSION = env.int("DEBUG_OVERRIDE_WEIGHTS_VERSION", default=None)
-DEBUG_OVERRIDE_SYNTHETIC_JOBS_FLOW_VERSION = env.int(
-    "DEBUG_OVERRIDE_SYNTHETIC_JOBS_FLOW_VERSION", default=None
-)
-
 DYNAMIC_CONFIG_ENV = env.str("DYNAMIC_CONFIG_ENV", default="prod")
 CONFIG_CONTRACT_ADDRESS = env.str(
     "CONFIG_CONTRACT_ADDRESS", default="0x6034a34677b7c715EA97ED25Ee6B2A8DcB7c641E"
 )
 USE_CONTRACT_CONFIG = env.bool("USE_CONTRACT_CONFIG", default=False)
-
-# synthetic jobs are evenly distributed through the cycle, however
-# we start them from some offset because scheduling takes some time
-SYNTHETIC_JOBS_RUN_OFFSET = env.int("SYNTHETIC_JOBS_RUN_OFFSET", default=24)
-
-PROMPT_JOB_GENERATOR = env.str(
-    "PROMPT_JOB_GENERATOR",
-    default="compute_horde_validator.validator.cross_validation.generator.v0:PromptJobGenerator",
-)
 
 
 def BITTENSOR_WALLET() -> bittensor_wallet.Wallet:
@@ -875,7 +775,6 @@ def BITTENSOR_WALLET() -> bittensor_wallet.Wallet:
     return wallet
 
 
-# Local miner generating prompts
 TRUSTED_MINER_ADDRESS = env.str("TRUSTED_MINER_ADDRESS", default="")
 TRUSTED_MINER_PORT = env.int("TRUSTED_MINER_PORT", default=0)
 
@@ -901,14 +800,6 @@ CHANNEL_LAYERS = {
         },
     },
 }
-
-AWS_ACCESS_KEY_ID = env("AWS_ACCESS_KEY_ID", default=None)
-AWS_SECRET_ACCESS_KEY = env("AWS_SECRET_ACCESS_KEY", default=None)
-AWS_ENDPOINT_URL = env("AWS_ENDPOINT_URL", default=None)
-AWS_SIGNATURE_VERSION = env("AWS_SIGNATURE_VERSION", default=None)
-
-S3_BUCKET_NAME_PROMPTS = env("S3_BUCKET_NAME_PROMPTS", default=None)
-S3_BUCKET_NAME_ANSWERS = env("S3_BUCKET_NAME_ANSWERS", default=None)
 
 # Sentry
 if SENTRY_DSN := env("SENTRY_DSN", default=""):

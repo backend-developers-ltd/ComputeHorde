@@ -19,7 +19,7 @@ paving the way for Bittensor to scale beyond its current limitations to support 
 - **Fair and Verified Work**  
   ComputeHorde employs mechanisms to ensure miners provide authentic compute work, fairly verified by the validators:
   - Execute tasks from validators stake-proportionally
-  - Handle both **organic** (external, from other subnets) and **synthetic** (ComputeHorde miners validation) tasks.
+  - Handle **organic** (external, from other subnets) tasks.
   - Match jobs to the advertised hardware (e.g., ensuring A6000 GPUs are used for tasks requiring them).
   - Prevent malicious behaviors like "weight-copying" through innovative validation mechanisms.
 
@@ -87,7 +87,7 @@ while maintaining accountability and fairness in the network.
 - **Validators pay with blocks.** Starting a job consumes allowance blocks equal to its runtime.  
 - **Scoring is global.** All validators score all miners’ work, regardless of who paid, as long as jobs fit valid allowance blocks.  
 - **Runtime converts to points.** Paid seconds per miner are summed, folded by coldkey, then split across hotkeys 
-  following the [dancing rules](#dancing-bonus). Organic and synthetic jobs score equally if allowance is valid.  
+  following the [dancing rules](#dancing-bonus).
 
 ### Allowance & Blocks
 - The **allowance pool is recalculated every block**, since both executor counts (GPUs) and validator stakes change continuously.  
@@ -111,8 +111,7 @@ If you're a returning miner, here's what's new in ComputeHorde:
 - **🛡️ DDoS Shield Available:** Miners can now protect themselves against network attacks by running an optional shield. 
   Just run the Docker container from the [DDoS Shield repo](https://github.com/bactensor/bt-ddos-shield#running-shield-on-server-miner-side). 
   
-- **💰 Collateral for Organic Jobs:** Validators may now require miners to deposit collateral. Doing so increases trust and lets you access additionally paid **organic jobs**. 
-  If you don't deposit, you can still do synthetic jobs as before.
+- **💰 Collateral for Organic Jobs:** Validators may now require miners to deposit collateral. Doing so increases trust and lets you access **organic jobs**. 
   - [Miner deposit instructions](https://github.com/bactensor/collateral-contracts#recommended-miner-integration-guide-as-used-by-computehorde)
 
 - **🐳 Smarter Preloading of Docker Images:** A global `DYNAMIC_PRELOAD_DOCKER_JOB_IMAGES` parameter lists Docker images likely to be used across jobs. 
@@ -128,8 +127,8 @@ Want to maximize earnings? Stake collateral with validators, preload Docker imag
 - Sends tasks to chosen validators, who then distribute them to miners.
 
 ### **Validator**
-- Receives organic requests via the Facilitator or generates synthetic tasks for validation.
-- Distributes both kinds of tasks to miners and evaluates the results:
+- Receives organic requests via the Facilitator.
+- Distributes the tasks to miners and evaluates the results:
 - Uses a separate GPU, called a **Trusted Miner**, to pre-run part of the validation tasks and establish expected results. 
   The Trusted Miner shares the same code as a regular miner, but is configured differently:
   - It is not registered in the metagraph.
@@ -160,7 +159,6 @@ Want to maximize earnings? Stake collateral with validators, preload Docker imag
 - Executor Dancing: Miners randomly move GPUs across multiple UIDs, further reducing the effectiveness of copying old weights.
 
 ### Encouraging Actual Mining
-- Synthetic tasks are designed to run only on specific hardware (e.g., A6000 GPUs), ensuring miners deliver the advertised compute power.
 - Scoring system incentivizing for completing organic tasks.
 - Validators can require miners to deposit collateral to access organic jobs, creating economic pressure to behave honestly.
 - An optional DDoS shield is available for miners to stay reliably online and resilient against attacks.
@@ -197,7 +195,7 @@ Want to maximize earnings? Stake collateral with validators, preload Docker imag
 
 This repository contains the implementations of:
 
-- **Validator**: Requires a [Trusted Miner](#validator) for cross-checking synthetic tasks.
+- **Validator**: Requires a [Trusted Miner](#validator) for cross-checking organic task results.
 - **Miner**: Modifying the miner code on subnet 12 is discouraged, as the stock implementation manages only communications between components.
   The competitive edge lies in optimizing executor provisioning.
   Users can create [custom executor managers](miner#custom-executor-manager) to scale and optimize mining efficiency.
@@ -218,7 +216,6 @@ ComputeHorde validator is built out of three components
 
 The steps, performed by running installation scripts **on your local machine**, which has your wallet files. For clarity, **these installation scripts are not run on the machine that will become the trusted miner or the validator**, the scripts will connect through SSH to those machines from your local machine:
 1. [setup trusted miner](/validator#setting-up-a-trusted-miner-for-cross-validation) 
-1. [provision S3 buckets for prompts and answers](/validator#provision-s3-buckets-for-prompts-and-answers) 
 1. [setup validator](#validator-setup)
 
 ### Validator setup
@@ -242,21 +239,7 @@ Set the following environment variables in a terminal on your **local machine** 
 ```sh
 export TRUSTED_MINER_ADDRESS=...
 export TRUSTED_MINER_PORT=...
-
-export S3_BUCKET_NAME_PROMPTS=...
-export S3_BUCKET_NAME_ANSWERS=...
-
-export AWS_ACCESS_KEY_ID=...
-export AWS_SECRET_ACCESS_KEY=...
-export AWS_DEFAULT_REGION=...
 ```
-
-Note: The `AWS_DEFAULT_REGION` property is optional. Use it when your buckets are not in your default AWS region.
-
-Export `AWS_ENDPOINT_URL` to use another cloud object storage (s3-compatible) provider. If not given, AWS S3 will be used.
-
-Some cloud configuration may require you to specify a signature version (used for presigning links). You can do
-that by adding `AWS_SIGNATURE_VERSION=...` to your validator's `.env`.
 
 Then execute the following command from the same terminal session:
 
@@ -373,25 +356,6 @@ docker run --rm --runtime=nvidia --gpus all ubuntu nvidia-smi
 ```
 
 If the output indicates a problem (especially immediately after installation), a [restart of the services](#how-to-restart-the-services) may help.
-
-## How to list the contents of S3 buckets
-
-To verify that the S3 buckets are configured correctly, 
-you can list their contents by running the following command on a machine with the AWS CLI installed 
-(check out the [Amazon instructions](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html)). 
-Replace the placeholders with the appropriate values:
-
-```
-AWS_ACCESS_KEY_ID=... AWS_SECRET_ACCESS_KEY=... aws s3api list-objects --bucket BUCKET_NAME
-```
-
-The bucket names and required AWS credentials are stored in the validator’s `.env` file as:
-- `S3_BUCKET_NAME_PROMPTS`
-- `S3_BUCKET_NAME_ANSWERS`
-- `AWS_ACCESS_KEY_ID`
-- `AWS_SECRET_ACCESS_KEY`
-
-If you encounter a permissions error, such as missing the `s3:ListBucket` permission, you may need to use the AWS root user credentials.
 
 ## Local development
 

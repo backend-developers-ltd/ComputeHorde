@@ -15,11 +15,6 @@ from compute_horde_validator.validator.models import (
     Miner,
     MinerBlacklist,
     OrganicJob,
-    Prompt,
-    PromptSample,
-    PromptSeries,
-    SolveWorkload,
-    SyntheticJob,
     SystemEvent,
     ValidatorWhitelist,
 )
@@ -119,42 +114,6 @@ class SystemEventAdmin(admin.ModelAdmin, ReadOnlyAdminMixin):
 class WeightsReadOnlyAdmin(admin.ModelAdmin, ReadOnlyAdminMixin):
     list_display = ["block", "created_at", "revealed_at"]
     ordering = ["-created_at"]
-
-
-class PromptSeriesAdmin(admin.ModelAdmin, ReadOnlyAdminMixin):
-    list_display = [
-        "series_uuid",
-        "s3_url",
-        "created_at",
-        "generator_version",
-    ]
-
-
-class SolveWorkloadAdmin(admin.ModelAdmin, ReadOnlyAdminMixin):
-    list_display = [
-        "workload_uuid",
-        "seed",
-        "s3_url",
-        "created_at",
-        "finished_at",
-    ]
-
-
-class PromptSampleAdmin(admin.ModelAdmin, ReadOnlyAdminMixin):
-    list_display = [
-        "pk",
-        "series",
-        "workload",
-        "synthetic_job",
-        "created_at",
-    ]
-
-
-class PromptAdmin(admin.ModelAdmin, ReadOnlyAdminMixin):
-    list_display = [
-        "pk",
-        "sample",
-    ]
 
 
 class ValidatorWhitelistAdmin(admin.ModelAdmin):
@@ -356,16 +315,11 @@ class AllowanceBookingAdmin(ReadOnlyAdminMixin, admin.ModelAdmin):
 
 
 admin.site.register(Miner, admin_class=MinerReadOnlyAdmin)
-admin.site.register(SyntheticJob, admin_class=JobReadOnlyAdmin)
 admin.site.register(OrganicJob, admin_class=JobReadOnlyAdmin)
 admin.site.register(MinerBlacklist, admin_class=MinerBlacklistAdmin)
 admin.site.register(AdminJobRequest, admin_class=AdminJobRequestAddOnlyAdmin)
 admin.site.register(SystemEvent, admin_class=SystemEventAdmin)
 admin.site.register(Weights, admin_class=WeightsReadOnlyAdmin)
-admin.site.register(PromptSeries, admin_class=PromptSeriesAdmin)
-admin.site.register(SolveWorkload, admin_class=SolveWorkloadAdmin)
-admin.site.register(PromptSample, admin_class=PromptSampleAdmin)
-admin.site.register(Prompt, admin_class=PromptAdmin)
 admin.site.register(ValidatorWhitelist, admin_class=ValidatorWhitelistAdmin)
 admin.site.register(AllowanceMinerManifest, admin_class=AllowanceMinerManifestAdmin)
 admin.site.register(BlockAllowance, admin_class=BlockAllowanceAdmin)

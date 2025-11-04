@@ -32,7 +32,6 @@ from pydantic import TypeAdapter
 
 from compute_horde_validator.validator.models import SystemEvent
 from compute_horde_validator.validator.organic_jobs.miner_client import MinerClient
-from compute_horde_validator.validator.synthetic_jobs import batch_run
 
 NUM_NEURONS = 5
 
@@ -67,12 +66,6 @@ class MockAxonInfo:
 
     def is_serving(self):
         return self.ip == "0.0.0.0"
-
-
-class MockSyntheticMinerClient(batch_run.MinerClient):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self._sent_models = []
 
     async def connect(self) -> None:
         pass
