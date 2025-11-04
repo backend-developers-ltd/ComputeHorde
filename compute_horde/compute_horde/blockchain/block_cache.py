@@ -46,7 +46,7 @@ def _get_current_block_from_cache(timeout: float = 1.0) -> int:
     return _get_current_block_from_cache(timeout=0)
 
 
-aget_current_block = sync_to_async(_get_current_block_from_cache, thread_sensitive=False)
+aget_current_block = sync_to_async(_get_current_block_from_cache)
 
 
 def get_current_block() -> int:
