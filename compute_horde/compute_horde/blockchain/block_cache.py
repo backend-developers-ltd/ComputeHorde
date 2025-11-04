@@ -1,8 +1,8 @@
-import asyncio
 import functools
+import time
 
 import bittensor
-from asgiref.sync import async_to_sync
+from asgiref.sync import sync_to_async
 from django.conf import settings
 from django.core.cache import cache
 
@@ -26,7 +26,7 @@ def _clear_subtensor_cache():
     _get_subtensor.cache_clear()
 
 
-async def aget_current_block(timeout: float = 1.0) -> int:
+def _get_current_block_from_cache(timeout: float = 1.0) -> int:
     """
     Gets the current block number from cache. Waits for ``timeout`` seconds if it's not there.
 
@@ -41,14 +41,17 @@ async def aget_current_block(timeout: float = 1.0) -> int:
     if timeout <= 0:
         raise BlockNotInCacheError(_BLOCK_CACHE_KEY)
 
-    await asyncio.sleep(timeout)
+    time.sleep(timeout)
 
-    return await aget_current_block(timeout=0)
+    return _get_current_block_from_cache(timeout=0)
+
+
+aget_current_block = sync_to_async(_get_current_block_from_cache, thread_sensitive=False)
 
 
 def get_current_block() -> int:
     try:
-        return async_to_sync(aget_current_block)(timeout=0)
+        return _get_current_block_from_cache(timeout=0)
     except BlockNotInCacheError:
         return cache_current_block()
 
