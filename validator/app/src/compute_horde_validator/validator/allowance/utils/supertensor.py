@@ -296,7 +296,7 @@ class SuperTensor(BaseSuperTensor):
         block_hash = self.get_block_hash(block_number)
         turbobt_neurons = self.list_neurons(block_number)
         subnet_state = self.get_subnet_state(block_number)
-        total_stake = list(subnet_state.get("total_stake", []))
+        total_stake = [s / 1_000_000_000 for s in subnet_state.get("total_stake", [])]
         uids = [neuron.uid for neuron in turbobt_neurons]
         hotkeys = [neuron.hotkey for neuron in turbobt_neurons]
         serving_hotkeys = [
