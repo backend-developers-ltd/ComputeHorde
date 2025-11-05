@@ -1,9 +1,8 @@
 import logging
 import threading
-from datetime import datetime, timedelta
+from datetime import timedelta
 from typing import assert_never
 
-from asgiref.sync import async_to_sync
 from compute_horde.fv_protocol.facilitator_requests import (
     OrganicJobRequest,
     V2JobRequest,
@@ -193,11 +192,7 @@ def _pick_miner_for_job_v2(request: V2JobRequest) -> JobRoute:
     # Get receipts instance once to avoid bound method issues with async_to_sync
     receipts_instance = receipts()
 
-    # Create async wrapper functions to avoid bound method warnings
-    async def get_busy_executor_count(executor_class: ExecutorClass, at_time: datetime):
-        return await receipts_instance.get_busy_executor_count(executor_class, at_time)
-
-    busy_executors = async_to_sync(get_busy_executor_count)(executor_class, timezone.now())
+    busy_executors = receipts_instance.get_busy_executor_count(executor_class, timezone.now())
 
     system_event = SystemEvent(
         type=SystemEvent.EventType.JOB_ROUTING,

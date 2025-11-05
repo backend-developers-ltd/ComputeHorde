@@ -89,7 +89,7 @@ class ReceiptsBase(ABC):
 
     @deprecated("Use database queries instead")
     @abstractmethod
-    async def get_job_started_receipt_by_uuid(self, job_uuid: str) -> JobStartedReceipt | None:
+    def get_job_started_receipt_by_uuid(self, job_uuid: str) -> JobStartedReceipt | None:
         """
         Get a job started receipt by UUID.
 
@@ -117,7 +117,7 @@ class ReceiptsBase(ABC):
         pass
 
     @abstractmethod
-    async def get_busy_executor_count(
+    def get_busy_executor_count(
         self, executor_class: ExecutorClass, at_time: datetime.datetime
     ) -> dict[str, int]:
         """

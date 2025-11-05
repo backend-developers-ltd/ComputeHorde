@@ -55,11 +55,11 @@ finished = receipts().create_job_finished_receipt(
 
 ```python
 # JobStarted by job UUID
-receipt: JobStartedReceipt = await receipts().get_job_started_receipt_by_uuid(job_uuid: str)
+receipt: JobStartedReceipt = receipts().get_job_started_receipt_by_uuid(job_uuid: str)
 # Raises: JobStartedReceipt.DoesNotExist if receipt not found
 
 # Finished jobs for block range [start_block, end_block) - including the allowance spending info and job cost
-rows: list[JobSpendingInfo] = await receipts().get_finished_jobs_for_block_range(
+rows: list[JobSpendingInfo] = receipts().get_finished_jobs_for_block_range(
     start_block: int,
     end_block: int,
     executor_class: ExecutorClass,
@@ -76,7 +76,7 @@ rows: list[JobSpendingInfo] = await receipts().get_finished_jobs_for_block_range
 """
 
 # Busy executors count per miner at a timestamp
-counts: dict[str, int] = await receipts().get_busy_executor_count(
+counts: dict[str, int] = receipts().get_busy_executor_count(
     executor_class: ExecutorClass,
     at_time: datetime.datetime,
 )
