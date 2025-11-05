@@ -1,6 +1,7 @@
 import os
 import json
 import uuid
+import random
 import asyncio
 import traceback
 from datetime import datetime, UTC
@@ -137,14 +138,16 @@ async def run_job(
                 # ),
             }
 
+            sleep = random.randint(1, 60)
             job_spec = ComputeHordeJobSpec(
                 executor_class=EXECUTOR_CLASS,
                 job_namespace=JOB_NAMESPACE,
                 docker_image=JOB_DOCKER_IMAGE,
-                download_time_limit_sec=30,
-                execution_time_limit_sec=30,
-                streaming_start_time_limit_sec=30,
-                upload_time_limit_sec=30,
+                args=["--sleep", str(sleep)],
+                download_time_limit_sec=10,
+                execution_time_limit_sec=90,
+                streaming_start_time_limit_sec=1,
+                upload_time_limit_sec=5,
                 artifacts_dir="/artifacts",
                 input_volumes=input_volumes,
             )
