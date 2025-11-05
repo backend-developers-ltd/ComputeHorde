@@ -413,7 +413,7 @@ async def drive_organic_job(
         job.status = status
         await job.asave()
         if status != OrganicJob.Status.EXCUSED:
-            await routing().report_miner_incident(
+            await sync_to_async(routing().report_miner_incident)(
                 MinerIncidentType.MINER_JOB_REJECTED,
                 hotkey_ss58address=job.miner.hotkey,
                 job_uuid=str(job.job_uuid),
@@ -427,7 +427,7 @@ async def drive_organic_job(
         job.status = OrganicJob.Status.FAILED
         job.comment = failure.msg.message
         await job.asave()
-        await routing().report_miner_incident(
+        await sync_to_async(routing().report_miner_incident)(
             MinerIncidentType.MINER_JOB_FAILED,
             hotkey_ss58address=job.miner.hotkey,
             job_uuid=str(job.job_uuid),
@@ -446,7 +446,7 @@ async def drive_organic_job(
         job.status = OrganicJob.Status.FAILED
         job.comment = failure.msg.message
         await job.asave()
-        await routing().report_miner_incident(
+        await sync_to_async(routing().report_miner_incident)(
             MinerIncidentType.MINER_HORDE_FAILED,
             hotkey_ss58address=job.miner.hotkey,
             job_uuid=str(job.job_uuid),

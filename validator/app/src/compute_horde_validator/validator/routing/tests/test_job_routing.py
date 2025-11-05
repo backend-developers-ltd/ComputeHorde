@@ -4,8 +4,6 @@ from datetime import timedelta
 from decimal import Decimal
 
 import pytest
-import pytest_asyncio
-from asgiref.sync import sync_to_async
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.fv_protocol.facilitator_requests import V2JobRequest
 from compute_horde.receipts.models import JobFinishedReceipt, JobStartedReceipt
@@ -49,107 +47,96 @@ def clone_job(**updates) -> V2JobRequest:
     return JOB_REQUEST.model_copy(update=updates)
 
 
-@pytest_asyncio.fixture(autouse=True)
-async def mock_block_number():
-    with await sync_to_async(set_block_number)(1005):
+@pytest.fixture(autouse=True)
+def mock_block_number():
+    with set_block_number(1005):
         yield
 
 
-@pytest_asyncio.fixture()
-async def add_allowance():
-    with await sync_to_async(set_block_number)(1000):
-        await sync_to_async(manifests.sync_manifests)()
+@pytest.fixture()
+def add_allowance():
+    with set_block_number(1000):
+        manifests.sync_manifests()
     for block_number in range(1001, 1004):
-        with await sync_to_async(set_block_number)(block_number):
-            await sync_to_async(blocks.process_block_allowance_with_reporting)(
-                block_number, supertensor_=supertensor()
-            )
+        with set_block_number(block_number):
+            blocks.process_block_allowance_with_reporting(block_number, supertensor_=supertensor())
 
 
 @pytest.mark.django_db(transaction=True)
-@pytest.mark.asyncio
-async def test_pick_miner_for_job__picks_a_miner_and_spend_allowance(add_allowance):
-    job_route = await routing().pick_miner_for_job_request(JOB_REQUEST)
+def test_pick_miner_for_job__picks_a_miner_and_spend_allowance(add_allowance):
+    job_route = routing().pick_miner_for_job_request(JOB_REQUEST)
     assert job_route.allowance_blocks == [1001]
     assert job_route.allowance_reservation_id is not None
-    await sync_to_async(allowance().spend_allowance)(job_route.allowance_reservation_id)
+    allowance().spend_allowance(job_route.allowance_reservation_id)
 
 
 @pytest.mark.django_db(transaction=True)
-@pytest.mark.asyncio
-async def test_pick_miner_for_job__picks_a_miner_and_undo_allowance(add_allowance):
-    job_route = await routing().pick_miner_for_job_request(JOB_REQUEST)
+def test_pick_miner_for_job__picks_a_miner_and_undo_allowance(add_allowance):
+    job_route = routing().pick_miner_for_job_request(JOB_REQUEST)
     assert job_route.allowance_blocks == [1001]
     assert job_route.allowance_reservation_id is not None
-    await sync_to_async(allowance().undo_allowance_reservation)(job_route.allowance_reservation_id)
+    allowance().undo_allowance_reservation(job_route.allowance_reservation_id)
 
 
 @pytest.mark.django_db(transaction=True)
-@pytest.mark.asyncio
-async def test_pick_miner_for_job__trusted_miner(add_allowance):
+def test_pick_miner_for_job__trusted_miner(add_allowance):
     job_request = clone_job(on_trusted_miner=True)
-    job_route = await routing().pick_miner_for_job_request(job_request)
+    job_route = routing().pick_miner_for_job_request(job_request)
     assert job_route.miner.hotkey_ss58 == TRUSTED_MINER_FAKE_KEY
     assert job_route.allowance_blocks is None
     assert job_route.allowance_reservation_id is None
 
 
 @pytest.mark.django_db(transaction=True)
-@pytest.mark.asyncio
-async def test_pick_miner_for_job__no_matching_executor_class(add_allowance):
+def test_pick_miner_for_job__no_matching_executor_class(add_allowance):
     with pytest.raises(NotEnoughAllowanceException):
-        await routing().pick_miner_for_job_request(clone_job(executor_class="non.existent.class"))
+        routing().pick_miner_for_job_request(clone_job(executor_class="non.existent.class"))
 
 
 @pytest.mark.django_db(transaction=True)
-@pytest.mark.asyncio
-async def test_pick_miner_for_job__no_allowance():
+def test_pick_miner_for_job__no_allowance():
     with pytest.raises(NotEnoughAllowanceException):
-        await routing().pick_miner_for_job_request(JOB_REQUEST)
+        routing().pick_miner_for_job_request(JOB_REQUEST)
 
 
 @pytest.mark.django_db(transaction=True)
-@pytest.mark.asyncio
-async def test_pick_miner_for_job__no_miner_with_enough_allowance(add_allowance):
+def test_pick_miner_for_job__no_miner_with_enough_allowance(add_allowance):
     with pytest.raises(NotEnoughAllowanceException):
         job_request = clone_job(execution_time_limit=101)
-        await routing().pick_miner_for_job_request(job_request)
+        routing().pick_miner_for_job_request(job_request)
 
 
 @pytest.mark.django_db(transaction=True)
-@pytest.mark.asyncio
-async def test_pick_miner_for_two_jobs(add_allowance):
-    job_route1 = await routing().pick_miner_for_job_request(JOB_REQUEST)
+def test_pick_miner_for_two_jobs(add_allowance):
+    job_route1 = routing().pick_miner_for_job_request(JOB_REQUEST)
     assert job_route1.allowance_blocks == [1001]
     assert job_route1.allowance_reservation_id is not None
 
-    job_route2 = await routing().pick_miner_for_job_request(JOB_REQUEST)
+    job_route2 = routing().pick_miner_for_job_request(JOB_REQUEST)
     assert job_route2.allowance_blocks == [1001]
     assert job_route2.allowance_reservation_id is not None
     assert job_route2.allowance_reservation_id != job_route1.allowance_reservation_id
 
 
 @pytest.mark.django_db(transaction=True)
-@pytest.mark.asyncio
-async def test_pick_miner_for_two_long_jobs(add_allowance):
+def test_pick_miner_for_two_long_jobs(add_allowance):
     job_request1 = clone_job(uuid=str(uuid.uuid4()), execution_time_limit=19)
-    job_route1 = await routing().pick_miner_for_job_request(job_request1)
+    job_route1 = routing().pick_miner_for_job_request(job_request1)
     assert job_route1.allowance_blocks == [1001, 1002]
     assert job_route1.allowance_reservation_id is not None
-    await sync_to_async(allowance().spend_allowance)(job_route1.allowance_reservation_id)
+    allowance().spend_allowance(job_route1.allowance_reservation_id)
 
     job_request2 = clone_job(uuid=str(uuid.uuid4()), execution_time_limit=19)
-    job_route2 = await routing().pick_miner_for_job_request(job_request2)
+    job_route2 = routing().pick_miner_for_job_request(job_request2)
     assert job_route2.allowance_blocks == [1001, 1002]
     assert job_route2.allowance_reservation_id is not None
     assert job_route2.allowance_reservation_id != job_route1.allowance_reservation_id
     assert job_route2.miner.hotkey_ss58 != job_route1.miner.hotkey_ss58
-    await sync_to_async(allowance().spend_allowance)(job_route2.allowance_reservation_id)
+    allowance().spend_allowance(job_route2.allowance_reservation_id)
 
 
 @pytest.mark.django_db(transaction=True)
-@pytest.mark.asyncio
-async def test_pick_miner_for_job__skips_busy_miner_based_on_receipts(add_allowance):
+def test_pick_miner_for_job__skips_busy_miner_based_on_receipts(add_allowance):
     """If a miner is saturated by started receipts, routing skips it."""
 
     executor_seconds = (
@@ -157,14 +144,14 @@ async def test_pick_miner_for_job__skips_busy_miner_based_on_receipts(add_allowa
         + JOB_REQUEST.execution_time_limit
         + JOB_REQUEST.upload_time_limit
     )
-    current_block = await sync_to_async(allowance().get_current_block)()
-    suitable_miners = await sync_to_async(allowance().find_miners_with_allowance)(
+    current_block = allowance().get_current_block()
+    suitable_miners = allowance().find_miners_with_allowance(
         allowance_seconds=executor_seconds,
         executor_class=DEFAULT_EXECUTOR_CLASS,
         job_start_block=current_block,
     )
     assert suitable_miners, "Expected at least one suitable miner"
-    manifests_map = await sync_to_async(allowance().get_manifests)()
+    manifests_map = allowance().get_manifests()
 
     busy_miner_hotkey = None
     busy_executor_count = 0
@@ -180,7 +167,7 @@ async def test_pick_miner_for_job__skips_busy_miner_based_on_receipts(add_allowa
 
     # Saturate miner with started receipts (no finishes)
     for _ in range(busy_executor_count):
-        await JobStartedReceipt.objects.acreate(
+        JobStartedReceipt.objects.create(
             job_uuid=uuid.uuid4(),
             miner_hotkey=busy_miner_hotkey,
             validator_hotkey=validator_hotkey,
@@ -191,15 +178,14 @@ async def test_pick_miner_for_job__skips_busy_miner_based_on_receipts(add_allowa
             ttl=60,
         )
 
-    job_route = await routing().pick_miner_for_job_request(JOB_REQUEST)
+    job_route = routing().pick_miner_for_job_request(JOB_REQUEST)
     assert job_route.miner.hotkey_ss58 != busy_miner_hotkey
     assert job_route.allowance_blocks is not None
     assert job_route.allowance_reservation_id is not None
 
 
 @pytest.mark.django_db(transaction=True)
-@pytest.mark.asyncio
-async def test_pick_miner_for_job__miner_becomes_eligible_after_one_finished_receipt(
+def test_pick_miner_for_job__miner_becomes_eligible_after_one_finished_receipt(
     add_allowance,
 ):
     """Miner with one finished job should have a free slot and be eligible."""
@@ -209,13 +195,13 @@ async def test_pick_miner_for_job__miner_becomes_eligible_after_one_finished_rec
         + JOB_REQUEST.execution_time_limit
         + JOB_REQUEST.upload_time_limit
     )
-    current_block = await sync_to_async(allowance().get_current_block)()
-    suitable_miners = await sync_to_async(allowance().find_miners_with_allowance)(
+    current_block = allowance().get_current_block()
+    suitable_miners = allowance().find_miners_with_allowance(
         allowance_seconds=executor_seconds,
         executor_class=DEFAULT_EXECUTOR_CLASS,
         job_start_block=current_block,
     )
-    manifests_map = await sync_to_async(allowance().get_manifests)()
+    manifests_map = allowance().get_manifests()
     target_miner_hotkey = None
     executor_count = 0
     for miner_hotkey, _ in suitable_miners:
@@ -231,7 +217,7 @@ async def test_pick_miner_for_job__miner_becomes_eligible_after_one_finished_rec
     started = []
     for _ in range(executor_count):
         started.append(
-            await JobStartedReceipt.objects.acreate(
+            JobStartedReceipt.objects.create(
                 job_uuid=uuid.uuid4(),
                 miner_hotkey=target_miner_hotkey,
                 validator_hotkey=validator_hotkey,
@@ -243,7 +229,7 @@ async def test_pick_miner_for_job__miner_becomes_eligible_after_one_finished_rec
             )
         )
     finished_job = started[0]
-    await JobFinishedReceipt.objects.acreate(
+    JobFinishedReceipt.objects.create(
         job_uuid=finished_job.job_uuid,
         miner_hotkey=finished_job.miner_hotkey,
         validator_hotkey=finished_job.validator_hotkey,
@@ -255,15 +241,14 @@ async def test_pick_miner_for_job__miner_becomes_eligible_after_one_finished_rec
         block_numbers=[],
     )
 
-    job_route = await routing().pick_miner_for_job_request(JOB_REQUEST)
+    job_route = routing().pick_miner_for_job_request(JOB_REQUEST)
     assert job_route.miner.hotkey_ss58 == target_miner_hotkey
     assert job_route.allowance_blocks is not None
     assert job_route.allowance_reservation_id is not None
 
 
 @pytest.mark.django_db(transaction=True)
-@pytest.mark.asyncio
-async def test_pick_miner_for_job__miner_fully_free_picked(add_allowance):
+def test_pick_miner_for_job__miner_fully_free_picked(add_allowance):
     """No busy receipts -> miner with executors selected."""
 
     executor_seconds = (
@@ -271,13 +256,13 @@ async def test_pick_miner_for_job__miner_fully_free_picked(add_allowance):
         + JOB_REQUEST.execution_time_limit
         + JOB_REQUEST.upload_time_limit
     )
-    current_block = await sync_to_async(allowance().get_current_block)()
-    suitable_miners = await sync_to_async(allowance().find_miners_with_allowance)(
+    current_block = allowance().get_current_block()
+    suitable_miners = allowance().find_miners_with_allowance(
         allowance_seconds=executor_seconds,
         executor_class=DEFAULT_EXECUTOR_CLASS,
         job_start_block=current_block,
     )
-    manifests_map = await sync_to_async(allowance().get_manifests)()
+    manifests_map = allowance().get_manifests()
     target_miner_hotkey = None
     for miner_hotkey, _ in suitable_miners:
         if manifests_map.get(miner_hotkey, {}).get(DEFAULT_EXECUTOR_CLASS, 0) > 0:
@@ -285,15 +270,14 @@ async def test_pick_miner_for_job__miner_fully_free_picked(add_allowance):
             break
     assert target_miner_hotkey is not None
 
-    job_route = await routing().pick_miner_for_job_request(JOB_REQUEST)
+    job_route = routing().pick_miner_for_job_request(JOB_REQUEST)
     assert job_route.miner.hotkey_ss58 == target_miner_hotkey
     assert job_route.allowance_blocks is not None
     assert job_route.allowance_reservation_id is not None
 
 
 @pytest.mark.django_db(transaction=True)
-@pytest.mark.asyncio
-async def test_pick_miner_for_job__miner_fully_busy_not_picked(add_allowance):
+def test_pick_miner_for_job__miner_fully_busy_not_picked(add_allowance):
     """Saturate one miner -> another miner selected."""
 
     executor_seconds = (
@@ -301,13 +285,13 @@ async def test_pick_miner_for_job__miner_fully_busy_not_picked(add_allowance):
         + JOB_REQUEST.execution_time_limit
         + JOB_REQUEST.upload_time_limit
     )
-    current_block = await sync_to_async(allowance().get_current_block)()
-    suitable_miners = await sync_to_async(allowance().find_miners_with_allowance)(
+    current_block = allowance().get_current_block()
+    suitable_miners = allowance().find_miners_with_allowance(
         allowance_seconds=executor_seconds,
         executor_class=DEFAULT_EXECUTOR_CLASS,
         job_start_block=current_block,
     )
-    manifests_map = await sync_to_async(allowance().get_manifests)()
+    manifests_map = allowance().get_manifests()
     miners_with_capacity = []
     for miner_hotkey, _ in suitable_miners:
         count = manifests_map.get(miner_hotkey, {}).get(DEFAULT_EXECUTOR_CLASS, 0)
@@ -322,7 +306,7 @@ async def test_pick_miner_for_job__miner_fully_busy_not_picked(add_allowance):
     validator_hotkey = allowance().my_ss58_address
 
     for _ in range(executor_count):
-        await JobStartedReceipt.objects.acreate(
+        JobStartedReceipt.objects.create(
             job_uuid=uuid.uuid4(),
             miner_hotkey=target_miner_hotkey,
             validator_hotkey=validator_hotkey,
@@ -333,15 +317,14 @@ async def test_pick_miner_for_job__miner_fully_busy_not_picked(add_allowance):
             ttl=60,
         )
 
-    job_route = await routing().pick_miner_for_job_request(JOB_REQUEST)
+    job_route = routing().pick_miner_for_job_request(JOB_REQUEST)
     assert job_route.miner.hotkey_ss58 != target_miner_hotkey
     assert job_route.allowance_blocks is not None
     assert job_route.allowance_reservation_id is not None
 
 
 @pytest.mark.django_db(transaction=True)
-@pytest.mark.asyncio
-async def test_pick_miner_for_job__all_miners_fully_busy_raises(add_allowance):
+def test_pick_miner_for_job__all_miners_fully_busy_raises(add_allowance):
     """Limit suitable miners to two with capacity, then saturate both"""
 
     executor_seconds = (
@@ -349,13 +332,13 @@ async def test_pick_miner_for_job__all_miners_fully_busy_raises(add_allowance):
         + JOB_REQUEST.execution_time_limit
         + JOB_REQUEST.upload_time_limit
     )
-    current_block = await sync_to_async(allowance().get_current_block)()
-    initial_suitable = await sync_to_async(allowance().find_miners_with_allowance)(
+    current_block = allowance().get_current_block()
+    initial_suitable = allowance().find_miners_with_allowance(
         allowance_seconds=executor_seconds,
         executor_class=DEFAULT_EXECUTOR_CLASS,
         job_start_block=current_block,
     )
-    manifests_map = await sync_to_async(allowance().get_manifests)()
+    manifests_map = allowance().get_manifests()
     now = timezone.now()
     validator_hotkey = allowance().my_ss58_address
 
@@ -363,7 +346,7 @@ async def test_pick_miner_for_job__all_miners_fully_busy_raises(add_allowance):
         count = manifests_map.get(miner_hotkey, {}).get(DEFAULT_EXECUTOR_CLASS, 0)
         if count > 0:
             for _ in range(count):
-                await JobStartedReceipt.objects.acreate(
+                JobStartedReceipt.objects.create(
                     job_uuid=uuid.uuid4(),
                     miner_hotkey=miner_hotkey,
                     validator_hotkey=validator_hotkey,
@@ -375,13 +358,12 @@ async def test_pick_miner_for_job__all_miners_fully_busy_raises(add_allowance):
                 )
 
     with pytest.raises(AllMinersBusy):
-        await routing().pick_miner_for_job_request(JOB_REQUEST)
+        routing().pick_miner_for_job_request(JOB_REQUEST)
 
 
 @pytest.mark.override_config(DYNAMIC_MINIMUM_COLLATERAL_AMOUNT_WEI=1000)
 @pytest.mark.django_db(transaction=True)
-@pytest.mark.asyncio
-async def test_pick_miner_for_job__collateral_filter_excludes_all(add_allowance):
+def test_pick_miner_for_job__collateral_filter_excludes_all(add_allowance):
     """With a positive collateral threshold and no miners having collateral, all are filtered out.
 
     We rely on real allowance + manifest state produced by add_allowance. No Miner objects have
@@ -389,13 +371,12 @@ async def test_pick_miner_for_job__collateral_filter_excludes_all(add_allowance)
     filter yields an empty set and the routing layer raises NotEnoughCollateralException.
     """
     with pytest.raises(NotEnoughCollateralException):
-        await routing().pick_miner_for_job_request(JOB_REQUEST)
+        routing().pick_miner_for_job_request(JOB_REQUEST)
 
 
 @pytest.mark.override_config(DYNAMIC_MINIMUM_COLLATERAL_AMOUNT_WEI=10)
 @pytest.mark.django_db(transaction=True)
-@pytest.mark.asyncio
-async def test_pick_miner_for_job__collateral_filter_keeps_subset(add_allowance):
+def test_pick_miner_for_job__collateral_filter_keeps_subset(add_allowance):
     """Only miners whose recorded collateral meets the threshold should remain.
 
     We pick the first suitable miner (real allowance) and give it collateral >= threshold.
@@ -408,8 +389,8 @@ async def test_pick_miner_for_job__collateral_filter_keeps_subset(add_allowance)
         + JOB_REQUEST.execution_time_limit
         + JOB_REQUEST.upload_time_limit
     )
-    current_block = await sync_to_async(allowance().get_current_block)()
-    suitable_miners = await sync_to_async(allowance().find_miners_with_allowance)(
+    current_block = allowance().get_current_block()
+    suitable_miners = allowance().find_miners_with_allowance(
         allowance_seconds=executor_seconds,
         executor_class=DEFAULT_EXECUTOR_CLASS,
         job_start_block=current_block,
@@ -430,7 +411,7 @@ async def test_pick_miner_for_job__collateral_filter_keeps_subset(add_allowance)
     expected_address = f"192.168.1.{addr_port_num}" if m else "127.0.0.1"
     expected_port = 8000 + addr_port_num if m else 9000
 
-    miner_obj, created = await MinerModel.objects.aget_or_create(
+    miner_obj, created = MinerModel.objects.get_or_create(
         hotkey=funded_hotkey,
         address=expected_address,
         ip_version=4,
@@ -441,9 +422,9 @@ async def test_pick_miner_for_job__collateral_filter_keeps_subset(add_allowance)
     )
     if not created and miner_obj.collateral_wei < 100:  # ensure it meets threshold
         miner_obj.collateral_wei = Decimal(100)
-        await miner_obj.asave()
+        miner_obj.save()
 
-    job_route = await routing().pick_miner_for_job_request(JOB_REQUEST)
+    job_route = routing().pick_miner_for_job_request(JOB_REQUEST)
     assert job_route.miner.hotkey_ss58 == funded_hotkey
     # Real reservation should have non-empty blocks and reservation id
     assert job_route.allowance_blocks

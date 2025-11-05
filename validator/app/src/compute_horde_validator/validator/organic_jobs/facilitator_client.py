@@ -10,6 +10,7 @@ import pydantic
 import sentry_sdk
 import tenacity
 import websockets
+from asgiref.sync import sync_to_async
 from channels.layers import get_channel_layer
 from compute_horde.fv_protocol.facilitator_requests import (
     Error,
@@ -436,7 +437,7 @@ class FacilitatorClient:
         )
 
         logger.debug(f"Picking miner for job {job_request.uuid}")
-        job_route = await routing().pick_miner_for_job_request(job_request)
+        job_route = await sync_to_async(routing().pick_miner_for_job_request)(job_request)
         logger.info(f"Selected miner {job_route.miner.hotkey_ss58} for job {job_request.uuid}")
 
         logger.info(f"Submitting job {job_request.uuid} to worker")

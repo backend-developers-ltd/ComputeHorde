@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from asgiref.sync import sync_to_async
+from asgiref.sync import async_to_sync
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.fv_protocol.facilitator_requests import V2JobRequest
 from compute_horde.miner_client.organic import OrganicMinerClient
@@ -65,7 +65,7 @@ JOB_REQUEST = V2JobRequest(
 pytestmark = pytest.mark.override_config(DYNAMIC_MINIMUM_COLLATERAL_AMOUNT_WEI=0)
 
 
-async def reliability_env(
+def reliability_env(
     *,
     monkeypatch,
     miners: list[MinerScenario],
@@ -167,10 +167,10 @@ async def reliability_env(
     target_executor_class = CoreExecutorClass(JOB_REQUEST.executor_class)
 
     # Clean state for reliability scenario (avoid leakage from prior tests in worker)
-    await MinerIncident.objects.all().adelete()
-    await _DbgBlockAllowance.objects.all().adelete()
-    await _DbgAllowanceMinerManifest.objects.all().adelete()
-    await _DbgBlock.objects.all().adelete()
+    MinerIncident.objects.all().delete()
+    _DbgBlockAllowance.objects.all().delete()
+    _DbgAllowanceMinerManifest.objects.all().delete()
+    _DbgBlock.objects.all().delete()
 
     base_block = reservation_blocks[0] - 1
     validator_hotkey = allowance().my_ss58_address
@@ -233,15 +233,15 @@ async def reliability_env(
     _st = st_mod.supertensor()
     _patch_supertensor(_st, base_block, neurons)
 
-    await sync_to_async(manifests.sync_manifests)()
+    manifests.sync_manifests()
 
     for bn in range(reservation_blocks[0], reservation_blocks[0] + 3):
         _advance_current_block(_st, bn)
-        await sync_to_async(blocks.process_block_allowance_with_reporting)(bn, supertensor_=_st)
+        blocks.process_block_allowance_with_reporting(bn, supertensor_=_st)
 
     for m in miners:
         if m.incidents:
-            await _report_incidents(m.hotkey, m.incidents, target_executor_class)
+            async_to_sync(_report_incidents)(m.hotkey, m.incidents, target_executor_class)
 
     def _dbg_read():
         return list(
@@ -253,21 +253,20 @@ async def reliability_env(
             .annotate(total=DjangoSum("allowance"))
         )
 
-    _allowance_totals = await sync_to_async(_dbg_read)()
+    _allowance_totals = _dbg_read()
     assert _allowance_totals, "No BlockAllowance rows for scenario miners"
     for row in _allowance_totals:
         assert row["total"] > 0, (
             f"Zero allowance for {row['miner_ss58']} (allowance totals={_allowance_totals})"
         )
 
-    job_route = await routing().pick_miner_for_job_request(JOB_REQUEST)
+    job_route = routing().pick_miner_for_job_request(JOB_REQUEST)
     if expected_blocks is not None:
         assert job_route.allowance_blocks == list(expected_blocks)
     return job_route
 
 
-@pytest.mark.django_db(transaction=True)
-@pytest.mark.asyncio
+@pytest.mark.django_db(transaction=True, databases=["default_alias", "default"])
 @pytest.mark.parametrize(
     "miners,expected_winner,res_blocks,reason",
     [
@@ -291,7 +290,7 @@ async def reliability_env(
         ),
     ],
 )
-async def test_reliability_sorting(
+def test_reliability_sorting(
     miners: list[MinerScenario],
     expected_winner: str,
     res_blocks: list[int],
@@ -299,7 +298,7 @@ async def test_reliability_sorting(
     monkeypatch,
     disable_miner_shuffling,
 ):
-    job_route = await reliability_env(
+    job_route = reliability_env(
         miners=miners,
         reservation_blocks=res_blocks,
         expected_blocks=res_blocks,
@@ -309,9 +308,8 @@ async def test_reliability_sorting(
     assert job_route.allowance_blocks == res_blocks
 
 
-@pytest.mark.django_db(transaction=True)
-@pytest.mark.asyncio
-async def test_excused_job_no_incident(monkeypatch):
+@pytest.mark.django_db(transaction=True, databases=["default_alias", "default"])
+def test_excused_job_no_incident(monkeypatch):
     """If a miner rejects a job as BUSY but provides a valid excuse (sufficient receipts),
     the job is marked EXCUSED and no MinerIncident is recorded.
 
@@ -340,7 +338,9 @@ async def test_excused_job_no_incident(monkeypatch):
 
     # Facilitator transport (auth success + job request)
     faci_transport = SimulationTransport("facilitator_excused_case")
-    await faci_transport.add_message('{"status":"success"}', send_before=1)  # auth response
+    async_to_sync(faci_transport.add_message)(
+        '{"status":"success"}', send_before=1
+    )  # auth response
 
     request = V2JobRequest(
         uuid=job_uuid,
@@ -354,13 +354,13 @@ async def test_excused_job_no_incident(monkeypatch):
         streaming_start_time_limit=1,
         upload_time_limit=1,
     )
-    await faci_transport.add_message(request, send_before=0)
+    async_to_sync(faci_transport.add_message)(request, send_before=0)
 
     # Patch routing to return a deterministic miner; we bypass full allowance + miner driver.
 
-    async def fake_pick_miner(request):  # noqa: D401
+    def fake_pick_miner(request):  # noqa: D401
         # Ensure Miner ORM row so later code linking incidents / status updates works
-        orm_miner, _ = await Miner.objects.aget_or_create(
+        orm_miner, _ = Miner.objects.get_or_create(
             hotkey="excused_miner_hotkey",
             defaults={"address": "127.0.0.1", "port": 4321, "ip_version": 4},
         )
@@ -377,8 +377,8 @@ async def test_excused_job_no_incident(monkeypatch):
         )
 
     class _FakeRouting:
-        async def pick_miner_for_job_request(self, request):  # noqa: D401
-            return await fake_pick_miner(request)
+        def pick_miner_for_job_request(self, request):  # noqa: D401
+            return fake_pick_miner(request)
 
     monkeypatch.setattr(
         "compute_horde_validator.validator.organic_jobs.facilitator_client.routing",  # where it's imported
@@ -449,8 +449,8 @@ async def test_excused_job_no_incident(monkeypatch):
                 with contextlib.suppress(asyncio.CancelledError):
                     await task
 
-        await run_until()
+        async_to_sync(run_until)()
 
-    job = await OrganicJob.objects.aget(job_uuid=job_uuid)
+    job = OrganicJob.objects.get(job_uuid=job_uuid)
     assert job.status == OrganicJob.Status.EXCUSED
-    assert await MinerIncident.objects.acount() == 0
+    assert MinerIncident.objects.count() == 0

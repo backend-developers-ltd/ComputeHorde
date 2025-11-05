@@ -50,7 +50,7 @@ The primary data structure returned by this module is `JobRoute`.
 
 The module exposes a singleton `routing()` which provides the following method:
 
-1. `async def pick_miner_for_job_request(self, request: OrganicJobRequest) -> JobRoute`:
+1. `def pick_miner_for_job_request(self, request: OrganicJobRequest) -> JobRoute`:
     - The main entry point for the module.
     - Takes an `OrganicJobRequest` as input.
     - Returns a `JobRoute` for a suitable miner.
@@ -58,7 +58,7 @@ The module exposes a singleton `routing()` which provides the following method:
         - `NotEnoughAllowanceException`: If no miners have enough allowance for the job.
         - `AllMinersBusy`: If all suitable miners with enough allowance could not be reserved (e.g., due to concurrent reservation attempts).
 
-2. `async def report_miner_incident(self, type: MinerIncidentType, hotkey_ss58address: str, job_uuid: str, executor_class: ExecutorClass) -> None`:
+2. `def report_miner_incident(self, type: MinerIncidentType, hotkey_ss58address: str, job_uuid: str, executor_class: ExecutorClass) -> None`:
     - Records an incident for a miner (for example: job rejection, failure, or other executor-level problems).
     - Parameters:
         - `type`: the incident type (see `MinerIncidentType`).
