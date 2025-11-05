@@ -3,18 +3,17 @@ from datetime import datetime, timedelta
 
 from compute_horde.receipts import Receipt
 from compute_horde.receipts.schemas import JobStartedReceiptPayload
-from compute_horde.utils import BAC_VALIDATOR_SS58_ADDRESS, ValidatorInfo
+from compute_horde.utils import BAC_VALIDATOR_SS58_ADDRESS
 from compute_horde_core.executor_class import ExecutorClass
 from django.conf import settings
 
-from compute_horde_validator.validator.allowance.default import allowance
+from compute_horde_validator.validator.allowance.types import ValidatorModel
 from compute_horde_validator.validator.models import MinerManifest
-from compute_horde_validator.validator.synthetic_jobs.utils import get_validator_infos
 
 logger = logging.getLogger(__name__)
 
 
-async def filter_valid_excuse_receipts(
+def filter_valid_excuse_receipts(
     receipts_to_check: list[Receipt],
     check_time: datetime,
     declined_job_uuid: str,
@@ -22,21 +21,17 @@ async def filter_valid_excuse_receipts(
     declined_job_is_synthetic: bool,
     miner_hotkey: str,
     minimum_validator_stake_for_excuse: float,
-    active_validators: list[ValidatorInfo] | None = None,
+    active_validators: list[ValidatorModel],
 ) -> list[Receipt]:
     if not receipts_to_check:
         logger.debug("No receipts to check")
         return []
 
-    if active_validators is None:
-        metagraph = allowance().get_metagraph()
-        active_validators = get_validator_infos(metagraph)
-
     allowed_validators = {
         validator_info.hotkey
         for validator_info in active_validators
         if (
-            validator_info.stake >= minimum_validator_stake_for_excuse
+            validator_info.effective_stake >= minimum_validator_stake_for_excuse
             or validator_info.hotkey == BAC_VALIDATOR_SS58_ADDRESS
         )
     }
