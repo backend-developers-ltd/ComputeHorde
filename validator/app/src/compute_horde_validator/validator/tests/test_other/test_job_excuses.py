@@ -2,10 +2,10 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 from compute_horde.receipts import schemas
-from compute_horde.utils import ValidatorInfo
 from compute_horde_core.executor_class import ExecutorClass
 
 from compute_horde_validator.validator import job_excuses
+from compute_horde_validator.validator.allowance.types import ValidatorModel
 
 
 @pytest.fixture(autouse=True)
@@ -35,8 +35,7 @@ def patch_wallet_and_signatures(monkeypatch):
     )
 
 
-@pytest.mark.asyncio
-async def test_filter_valid_excuse_receipts_valid():
+def test_filter_valid_excuse_receipts_valid():
     now = datetime.now(UTC)
     miner = "miner_1"
     validator = "validator_1"
@@ -56,7 +55,7 @@ async def test_filter_valid_excuse_receipts_valid():
         miner_signature="valid",
     )
 
-    valid_receipts = await job_excuses.filter_valid_excuse_receipts(
+    valid_receipts = job_excuses.filter_valid_excuse_receipts(
         receipts_to_check=[receipt],
         check_time=now,
         declined_job_uuid="declined",
@@ -64,14 +63,13 @@ async def test_filter_valid_excuse_receipts_valid():
         declined_job_is_synthetic=True,
         miner_hotkey=miner,
         minimum_validator_stake_for_excuse=5.0,
-        active_validators=[ValidatorInfo(uid=1, hotkey=validator, stake=10.0)],
+        active_validators=[ValidatorModel(uid=1, hotkey=validator, effective_stake=10.0)],
     )
 
     assert [receipt.payload.job_uuid for receipt in valid_receipts] == [receipt.payload.job_uuid]
 
 
-@pytest.mark.asyncio
-async def test_filter_valid_excuse_receipts_with_duplicate_receipts():
+def test_filter_valid_excuse_receipts_with_duplicate_receipts():
     now = datetime.now(UTC)
     miner = "miner_1"
     validator = "validator_1"
@@ -106,7 +104,7 @@ async def test_filter_valid_excuse_receipts_with_duplicate_receipts():
         ),
     ]
 
-    valid_receipts = await job_excuses.filter_valid_excuse_receipts(
+    valid_receipts = job_excuses.filter_valid_excuse_receipts(
         receipts_to_check=receipts,
         check_time=now,
         declined_job_uuid="declined",
@@ -114,14 +112,13 @@ async def test_filter_valid_excuse_receipts_with_duplicate_receipts():
         declined_job_is_synthetic=True,
         miner_hotkey=miner,
         minimum_validator_stake_for_excuse=5.0,
-        active_validators=[ValidatorInfo(uid=1, hotkey=validator, stake=10.0)],
+        active_validators=[ValidatorModel(uid=1, hotkey=validator, effective_stake=10.0)],
     )
 
     assert len(valid_receipts) == 1
     assert valid_receipts[0].payload.job_uuid == "job-with-duplicated-uuid-1"
 
 
-@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "case_name, make_receipts",
     [
@@ -288,7 +285,7 @@ async def test_filter_valid_excuse_receipts_with_duplicate_receipts():
         ),
     ],
 )
-async def test_filter_valid_excuse_receipts_failures(case_name, make_receipts):
+def test_filter_valid_excuse_receipts_failures(case_name, make_receipts):
     now = datetime.now(UTC)
     miner = "miner_1"
     validator = "validator_1"
@@ -296,11 +293,11 @@ async def test_filter_valid_excuse_receipts_failures(case_name, make_receipts):
 
     receipts = make_receipts(now, miner, validator, executor_class)
 
-    active_validators = [ValidatorInfo(uid=1, hotkey=validator, stake=10.0)]
+    active_validators = [ValidatorModel(uid=1, hotkey=validator, effective_stake=10.0)]
     if case_name == "validator_not_allowed":
         active_validators = []
 
-    res = await job_excuses.filter_valid_excuse_receipts(
+    res = job_excuses.filter_valid_excuse_receipts(
         receipts_to_check=receipts,
         check_time=now,
         declined_job_uuid="declined",

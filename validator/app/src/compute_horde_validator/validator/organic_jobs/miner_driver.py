@@ -43,6 +43,8 @@ from pydantic import JsonValue
 
 from compute_horde_validator.validator import job_excuses
 from compute_horde_validator.validator.allowance.default import allowance
+from compute_horde_validator.validator.allowance.types import ValidatorModel
+from compute_horde_validator.validator.allowance.utils.supertensor import supertensor
 from compute_horde_validator.validator.dynamic_config import aget_config
 from compute_horde_validator.validator.models import (
     AdminJobRequest,
@@ -61,6 +63,13 @@ logger = logging.getLogger(__name__)
 
 def _get_current_block() -> int:
     return allowance().get_current_block()
+
+
+@sync_to_async
+def _get_active_validators(block: int | None) -> list[ValidatorModel]:
+    if block is None:
+        block = supertensor().get_current_block()
+    return supertensor().list_validators(block)
 
 
 def status_update_from_success(job: OrganicJob) -> JobStatusUpdate:
@@ -372,7 +381,8 @@ async def drive_organic_job(
                 str(job.job_uuid)
             )
             job_request_time = job_started_receipt.timestamp
-            valid_excuses = await job_excuses.filter_valid_excuse_receipts(
+            active_validators = await _get_active_validators(job.block)
+            valid_excuses = job_excuses.filter_valid_excuse_receipts(
                 receipts_to_check=rejection.msg.receipts or [],
                 check_time=job_request_time,
                 declined_job_uuid=str(job.job_uuid),
@@ -382,6 +392,7 @@ async def drive_organic_job(
                     "DYNAMIC_MINIMUM_VALIDATOR_STAKE_FOR_EXCUSE"
                 ),
                 miner_hotkey=job.miner.hotkey,
+                active_validators=active_validators,
             )
             expected_executor_count = await job_excuses.get_expected_miner_executor_count(
                 check_time=job_request_time,
