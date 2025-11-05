@@ -1,18 +1,29 @@
+import shlex
 import sys
+import uuid
 
 from asgiref.sync import async_to_sync
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
+from compute_horde.fv_protocol.facilitator_requests import V2JobRequest
 from compute_horde.fv_protocol.validator_requests import JobStatusUpdate
+from compute_horde_core.executor_class import ExecutorClass
+from django.conf import settings
 from django.core.management.base import BaseCommand
-from django.utils import timezone
 
+from compute_horde_validator.validator.allowance.default import allowance
 from compute_horde_validator.validator.models import (
-    AdminJobRequest,
     Miner,
     MinerBlacklist,
     OrganicJob,
 )
-from compute_horde_validator.validator.tasks import run_admin_job_request
+from compute_horde_validator.validator.organic_jobs.miner_client import MinerClient
+from compute_horde_validator.validator.organic_jobs.miner_driver import (
+    drive_organic_job,
+)
+
+
+def get_keypair():
+    return settings.BITTENSOR_WALLET().get_hotkey()
 
 
 async def notify_job_status_update(msg: JobStatusUpdate):
@@ -40,44 +51,36 @@ class Command(BaseCommand):
     """
 
     def add_arguments(self, parser):
-        parser.add_argument("--miner_hotkey", default=None, type=str, help="Miner Hotkey")
-        # TODO: mock miner with address, port, ip_type
-        # parser.add_argument("--miner_address", default=None, type=str, help="Miner IPv4 address")
-        # parser.add_argument("--miner_port", default=None, type=int, help="Miner port")
+        parser.add_argument("--miner_hotkey", default=None, help="Miner Hotkey")
+        parser.add_argument("--miner_address", default=None, help="Miner IP address")
+        parser.add_argument("--miner_ip_version", default=4, help="Miner IP version")
+        parser.add_argument("--miner_port", default=None, type=int, help="Miner port")
         parser.add_argument(
-            "--executor_class", type=str, help="Executor class", default=DEFAULT_EXECUTOR_CLASS
+            "--executor_class",
+            type=ExecutorClass,
+            help="Executor class",
+            default=DEFAULT_EXECUTOR_CLASS,
         )
-        parser.add_argument("--timeout", type=int, help="Timeout value", required=True)
+        parser.add_argument("--docker_image", help="docker image for job execution", required=True)
         parser.add_argument(
-            "--docker_image", type=str, help="docker image for job execution", required=True
+            "--cmd_args", default="", help="arguments passed to the script or docker image"
         )
+        parser.add_argument("--use_gpu", action="store_true", help="use gpu for job execution")
+
         parser.add_argument(
-            "--cmd_args",
-            type=str,
-            default="",
-            help="arguments passed to the script or docker image",
-        )
-        parser.add_argument(
-            "--use_gpu",
-            action="store_true",
-            help="use gpu for job execution",
+            "--download_time_limit", default=10, type=int, help="download time limit in seconds"
         )
         parser.add_argument(
-            "--input_url",
-            type=str,
-            default="",
-            help="input url for job execution",
+            "--execution_time_limit", default=100, type=int, help="execution time limit in seconds"
         )
         parser.add_argument(
-            "--output_url",
-            type=str,
-            default="",
-            help="output url for job execution",
+            "--upload_time_limit", default=10, type=int, help="upload time limit in seconds"
         )
         parser.add_argument(
-            "--nonzero_if_not_complete",
-            action="store_true",
-            help="if job completes with PENDING or FAILED state, exit with non-zero status code",
+            "--streaming_start_time_limit",
+            default=10,
+            type=int,
+            help="streaming start time limit in seconds",
         )
 
     def handle(self, *args, **options):
@@ -102,32 +105,64 @@ class Command(BaseCommand):
 
         print(f"\nPicked miner: {miner} to run the job")
 
-        job_request = AdminJobRequest.objects.create(
-            miner=miner,
-            timeout=options["timeout"],
+        miner_address = miner.address
+        miner_ip_version = miner.ip_version
+        miner_port = miner.port
+        if options["miner_address"]:
+            miner_address = options["miner_address"]
+            miner_ip_version = options["miner_ip_version"]
+        if options["miner_port"]:
+            miner_port = options["miner_port"]
+
+        job_request = V2JobRequest(
+            uuid=str(uuid.uuid4()),
             executor_class=options["executor_class"],
             docker_image=options["docker_image"],
-            args=options["cmd_args"],
+            args=shlex.split(options["cmd_args"]),
+            env={},
             use_gpu=options["use_gpu"],
-            input_url=options["input_url"],
-            output_url=options["output_url"],
-            created_at=timezone.now(),
+            download_time_limit=options["download_time_limit"],
+            execution_time_limit=options["execution_time_limit"],
+            upload_time_limit=options["upload_time_limit"],
+            streaming_start_time_limit=options["streaming_start_time_limit"],
         )
 
+        job = OrganicJob.objects.create(
+            job_uuid=str(job_request.uuid),
+            miner=miner,
+            miner_address=miner_address,
+            miner_address_ip_version=miner_ip_version,
+            miner_port=miner_port,
+            namespace=job_request.job_namespace or job_request.docker_image or None,
+            executor_class=job_request.executor_class,
+            job_description="User job from facilitator",
+            block=allowance().get_current_block(),
+        )
+
+        async def _run_job():
+            keypair = get_keypair()
+            miner_client = MinerClient(
+                miner_hotkey=miner.hotkey,
+                miner_address=miner_address,
+                miner_port=miner_port,
+                job_uuid=str(job.job_uuid),
+                my_keypair=keypair,
+            )
+            await drive_organic_job(
+                miner_client,
+                job,
+                job_request,
+                notify_callback=notify_job_status_update,
+            )
+
         try:
-            async_to_sync(run_admin_job_request)(job_request.pk, callback=notify_job_status_update)
+            async_to_sync(_run_job)()
+        except Exception as e:
+            print(f"Failed to run job {job.job_uuid}: {e}")
+            sys.exit(1)
         except KeyboardInterrupt:
             print("Interrupted by user")
             sys.exit(1)
 
-        try:
-            job_request.refresh_from_db()
-            job = OrganicJob.objects.get(job_uuid=job_request.uuid)
-            print(f"\nJob {job.job_uuid} done processing")
-        except OrganicJob.DoesNotExist:
-            print(f"\nJob {job_request.uuid} not found")
-            sys.exit(1)
-
-        if options["nonzero_if_not_complete"] and job.status != OrganicJob.Status.COMPLETED:
-            print(f"\nJob {job_request.uuid} was unsuccessful, status = {job.status}")
-            sys.exit(1)
+        job.refresh_from_db()
+        print(f"\nJob {job.job_uuid} done processing with status: {job.status}")

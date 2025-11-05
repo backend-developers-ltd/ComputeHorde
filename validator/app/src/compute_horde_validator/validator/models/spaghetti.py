@@ -1,13 +1,10 @@
 import logging
-import shlex
 import uuid
 from datetime import datetime
 from decimal import Decimal
 from typing import Self
 
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
-from compute_horde_core.output_upload import OutputUpload, ZipAndHttpPutUpload
-from compute_horde_core.volume import Volume, ZipUrlVolume
 from django.conf import settings
 from django.contrib.postgres.fields import ArrayField
 from django.db import models
@@ -295,48 +292,6 @@ class OrganicJob(JobBase):
 
     def get_absolute_url(self):
         return f"/admin/validator/organicjob/{self.pk}/change/"
-
-
-class AdminJobRequest(models.Model):
-    uuid = models.UUIDField(default=uuid.uuid4, unique=True)
-    miner = models.ForeignKey(Miner, on_delete=models.PROTECT)
-    executor_class = models.CharField(
-        max_length=255, default=DEFAULT_EXECUTOR_CLASS, help_text="executor hardware class"
-    )
-    timeout = models.PositiveIntegerField(default=300, help_text="timeout in seconds")
-
-    docker_image = models.CharField(max_length=255, help_text="docker image for job execution")
-
-    args = models.TextField(blank=True, help_text="arguments passed to the script or docker image")
-    env = models.JSONField(blank=True, default=dict, help_text="environment variables for the job")
-
-    use_gpu = models.BooleanField(default=False, help_text="Whether to use GPU for the job")
-    input_url = models.URLField(
-        blank=True, help_text="URL to the input data source", max_length=1000
-    )
-    output_url = models.TextField(blank=True, help_text="URL for uploading output")
-
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    status_message = models.TextField(blank=True, default="")
-
-    def get_args(self):
-        return shlex.split(self.args)
-
-    def __str__(self):
-        return f"uuid: {self.uuid} - miner hotkey: {self.miner.hotkey}"
-
-    @property
-    def volume(self) -> Volume | None:
-        if self.input_url:
-            return ZipUrlVolume(contents=self.input_url)
-        return None
-
-    @property
-    def output_upload(self) -> OutputUpload | None:
-        if self.output_url:
-            return ZipAndHttpPutUpload(url=self.output_url)
-        return None
 
 
 class MinerPreliminaryReservationQueryset(models.QuerySet["MinerPreliminaryReservation"]):

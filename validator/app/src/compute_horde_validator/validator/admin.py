@@ -1,6 +1,4 @@
-from compute_horde.base.admin import AddOnlyAdminMixin, ReadOnlyAdminMixin
-from compute_horde.executor_class import EXECUTOR_CLASS
-from django import forms
+from compute_horde.base.admin import ReadOnlyAdminMixin
 from django.contrib import (
     admin,  # noqa
     messages,  # noqa
@@ -11,7 +9,6 @@ from django.utils.safestring import mark_safe  # noqa
 from rangefilter.filters import DateTimeRangeFilter, NumericRangeFilter
 
 from compute_horde_validator.validator.models import (
-    AdminJobRequest,
     Miner,
     MinerBlacklist,
     OrganicJob,
@@ -26,59 +23,12 @@ from compute_horde_validator.validator.models.allowance.internal import (
 from compute_horde_validator.validator.models.scoring.internal import Weights
 
 # noqa
-from compute_horde_validator.validator.tasks import trigger_run_admin_job_request  # noqa
 
 admin.site.site_header = "ComputeHorde Validator Administration"
 admin.site.site_title = "compute_horde_validator"
 admin.site.index_title = "Welcome to ComputeHorde Validator Administration"
 
 admin.site.index_template = "admin/validator_index.html"
-
-
-class AdminJobRequestForm(forms.ModelForm):
-    executor_class = forms.ChoiceField()
-
-    class Meta:
-        model = AdminJobRequest
-        fields = [
-            "uuid",
-            "miner",
-            "executor_class",
-            "docker_image",
-            "timeout",
-            "args",
-            "use_gpu",
-            "input_url",
-            "output_url",
-            "status_message",
-        ]
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        if self.fields:
-            # exclude blacklisted miners from valid results
-            self.fields["miner"].queryset = Miner.objects.exclude(minerblacklist__isnull=False)
-            self.fields["executor_class"].choices = [(name, name) for name in EXECUTOR_CLASS]
-
-
-class AdminJobRequestAddOnlyAdmin(admin.ModelAdmin, AddOnlyAdminMixin):
-    form = AdminJobRequestForm
-    exclude = ["env"]  # not used ?
-    list_display = ["uuid", "executor_class", "docker_image", "use_gpu", "miner", "created_at"]
-    readonly_fields = ["uuid", "status_message"]
-    ordering = ["-created_at"]
-    autocomplete_fields = ["miner"]
-
-    def save_model(self, request, obj, form, change):
-        super().save_model(request, obj, form, change)
-        trigger_run_admin_job_request.delay(obj.id)
-        organic_job = OrganicJob.objects.filter(job_uuid=obj.uuid).first()
-        msg = (
-            f"Please see <a href='/admin/validator/organicjob/{organic_job.pk}/change/'>ORGANIC JOB</a> for further details"
-            if organic_job
-            else f"Job {obj.uuid} failed to initialize"
-        )
-        messages.add_message(request, messages.INFO, mark_safe(msg))
 
 
 class JobReadOnlyAdmin(admin.ModelAdmin, ReadOnlyAdminMixin):
@@ -317,7 +267,6 @@ class AllowanceBookingAdmin(ReadOnlyAdminMixin, admin.ModelAdmin):
 admin.site.register(Miner, admin_class=MinerReadOnlyAdmin)
 admin.site.register(OrganicJob, admin_class=JobReadOnlyAdmin)
 admin.site.register(MinerBlacklist, admin_class=MinerBlacklistAdmin)
-admin.site.register(AdminJobRequest, admin_class=AdminJobRequestAddOnlyAdmin)
 admin.site.register(SystemEvent, admin_class=SystemEventAdmin)
 admin.site.register(Weights, admin_class=WeightsReadOnlyAdmin)
 admin.site.register(ValidatorWhitelist, admin_class=ValidatorWhitelistAdmin)

@@ -2,7 +2,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from celery import exceptions as celery_exceptions
-from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from django.conf import settings
 from django.utils.timezone import now
 from requests import Response
@@ -15,7 +14,6 @@ from compute_horde_validator.validator.collateral.types import (
     SlashCollateralError,
 )
 from compute_horde_validator.validator.models import (
-    AdminJobRequest,
     Miner,
     OrganicJob,
     SystemEvent,
@@ -23,57 +21,7 @@ from compute_horde_validator.validator.models import (
 from compute_horde_validator.validator.tasks import (
     send_events_to_facilitator,
     slash_collateral_task,
-    trigger_run_admin_job_request,
 )
-
-from ..helpers import MockMinerClient
-
-
-@patch("compute_horde_validator.validator.tasks.MinerClient", MockMinerClient)
-@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
-def test_trigger_run_admin_job__should_trigger_job(bittensor):
-    miner = Miner.objects.create(hotkey="miner_client_1")
-    OrganicJob.objects.all().delete()
-    job_request = AdminJobRequest.objects.create(
-        miner=miner,
-        timeout=0,  # should timeout
-        executor_class=DEFAULT_EXECUTOR_CLASS,
-        docker_image="python:3.11-slim",
-        args="",
-    )
-
-    assert AdminJobRequest.objects.count() == 1
-    trigger_run_admin_job_request.apply(args=(job_request.pk,))
-
-    job_request.refresh_from_db()
-    assert job_request.status_message == "Job successfully triggered"
-
-    assert OrganicJob.objects.count() == 1
-    job = OrganicJob.objects.filter(job_uuid=job_request.uuid).first()
-    assert "initial_response_timed_out" in job.comment
-    assert job.status == OrganicJob.Status.FAILED
-
-
-@patch("compute_horde_validator.validator.tasks.MinerClient", MockMinerClient)
-@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
-def test_trigger_run_admin_job__should_not_trigger_job():
-    miner = Miner.objects.create(hotkey="miner_client_2")
-    OrganicJob.objects.all().delete()
-    job_request = AdminJobRequest.objects.create(
-        miner=miner,
-        timeout=0,  # should timeout
-        executor_class=DEFAULT_EXECUTOR_CLASS,
-        docker_image="python:3.11-slim",
-        args="",
-    )
-
-    assert AdminJobRequest.objects.count() == 1
-    trigger_run_admin_job_request.apply(args=(job_request.pk,))
-
-    job_request.refresh_from_db()
-    assert "Job failed to trigger" in job_request.status_message
-
-    assert OrganicJob.objects.count() == 0
 
 
 def add_system_events():
