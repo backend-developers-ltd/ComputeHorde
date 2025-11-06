@@ -9,6 +9,7 @@ from typing import Any
 
 import requests
 import turbobt
+from asgiref.sync import async_to_sync
 from compute_horde.smart_contracts.utils import get_web3_connection
 from constance import config
 from django.conf import settings
@@ -90,7 +91,7 @@ class Collateral(CollateralBase):
             for m in miners
         ]
 
-    async def slash_collateral(
+    def slash_collateral(
         self,
         miner_hotkey: str,
         url: str,
@@ -99,7 +100,7 @@ class Collateral(CollateralBase):
         assert private_key is not None, "EVM private key not found"
 
         try:
-            miner = await Miner.objects.aget(hotkey=miner_hotkey)
+            miner = Miner.objects.get(hotkey=miner_hotkey)
             miner_address = miner.evm_address
             if not miner_address:
                 raise SlashCollateralError(f"Miner {miner_hotkey} has no associated EVM address")
@@ -112,7 +113,7 @@ class Collateral(CollateralBase):
         if amount_wei <= 0:
             raise SlashCollateralError("Slash amount must be greater than 0")
 
-        contract_address = await self.get_collateral_contract_address()
+        contract_address = self._get_collateral_contract_address()
         if contract_address is None:
             raise SlashCollateralError("Collateral contract address not configured")
 
@@ -140,25 +141,29 @@ class Collateral(CollateralBase):
         if receipt["status"] == 0:
             raise SlashCollateralError("collateral slashing transaction failed")
 
-    async def get_collateral_contract_address(self) -> str | None:
+    def _get_collateral_contract_address(self) -> str | None:
         global _cached_contract_address
         if _cached_contract_address:
             return _cached_contract_address
 
         hotkey = settings.BITTENSOR_WALLET().hotkey.ss58_address
 
-        async with turbobt.Bittensor(settings.BITTENSOR_NETWORK) as bt_client:
-            subnet = bt_client.subnet(settings.BITTENSOR_NETUID)
-            raw_commitment = await subnet.commitments.get(hotkey)
-            if not raw_commitment:
-                return None
+        async def _fetch_contract_address() -> str | None:
+            async with turbobt.Bittensor(settings.BITTENSOR_NETWORK) as bt_client:
+                subnet = bt_client.subnet(settings.BITTENSOR_NETUID)
+                raw_commitment = await subnet.commitments.get(hotkey)
+                if not raw_commitment:
+                    return None
 
-            try:
-                data = json.loads(raw_commitment)
-                _cached_contract_address = data["contract"]["address"]
-                return _cached_contract_address
-            except (TypeError, KeyError, json.JSONDecodeError):
-                return None
+                try:
+                    data = json.loads(raw_commitment)
+                    address: str = data["contract"]["address"]
+                    return address
+                except (TypeError, KeyError, json.JSONDecodeError):
+                    return None
+
+        _cached_contract_address = async_to_sync(_fetch_contract_address)()
+        return _cached_contract_address
 
     def _get_private_key(self) -> str | None:
         return _get_private_key()

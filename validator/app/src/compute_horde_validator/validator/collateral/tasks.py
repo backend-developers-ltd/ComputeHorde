@@ -53,7 +53,7 @@ class CollateralTaskDependencies:
     def _default_fetch_evm_key_associations(
         self, subtensor: turbobt.Subtensor, netuid: int, block_hash: str | None
     ) -> dict[int, str]:
-        return async_to_sync(get_evm_key_associations)(
+        return get_evm_key_associations(
             subtensor=subtensor,
             netuid=netuid,
             block_hash=block_hash,
@@ -96,7 +96,7 @@ def get_miner_collateral(
     return collateral_amount
 
 
-async def get_evm_key_associations(
+def get_evm_key_associations(
     subtensor: turbobt.Subtensor, netuid: int, block_hash: str | None = None
 ) -> dict[int, str]:
     """
@@ -108,11 +108,10 @@ async def get_evm_key_associations(
     Returns:
         dict: A dictionary mapping UIDs (int) to their associated EVM key addresses (str).
     """
-    associations = await subtensor.subtensor_module.AssociatedEvmAddress.fetch(
+    associations = async_to_sync(subtensor.subtensor_module.AssociatedEvmAddress.fetch)(
         netuid,
         block_hash=block_hash,
     )
-
     return {uid: evm_address for (netuid, uid), (evm_address, block) in associations}
 
 
@@ -147,7 +146,7 @@ def sync_collaterals(deps: CollateralTaskDependencies | None = None) -> None:
     miners = Miner.objects.filter(hotkey__in=hotkeys)
     w3 = deps.web3(settings.BITTENSOR_NETWORK)
     collateral_client = deps.collateral()
-    contract_address = async_to_sync(collateral_client.get_collateral_contract_address)()
+    contract_address = collateral_client._get_collateral_contract_address()
 
     to_update = []
     for miner in miners:

@@ -21,7 +21,7 @@ Each MinerCollateral contains:
 """
 
 # Slash collateral from a miner
-await collateral().slash_collateral(
+collateral().slash_collateral(
     miner_hotkey: str,
     url: str,
 )
@@ -34,13 +34,6 @@ The slashing amount is determined by the DYNAMIC_COLLATERAL_SLASH_AMOUNT_WEI con
 
 Returns None.
 Raises SlashCollateralError if transaction fails, slash amount is invalid, or miner not found.
-"""
-
-# Get collateral contract address (async)
-contract_address: str | None = await collateral().get_collateral_contract_address()
-"""
-Returns the current collateral contract address or None if unavailable.
-Address is fetched from the validator's commitment on the Bittensor network.
 """
 ```
 

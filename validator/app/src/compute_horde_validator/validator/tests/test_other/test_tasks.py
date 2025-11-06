@@ -1,4 +1,4 @@
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from celery import exceptions as celery_exceptions
@@ -150,7 +150,7 @@ def test_slash_collateral_task_retriable_error_triggers_retry(settings, monkeypa
     )
 
     mock_collateral = MagicMock()
-    mock_collateral.slash_collateral = AsyncMock(side_effect=exception)
+    mock_collateral.slash_collateral = MagicMock(side_effect=exception)
     monkeypatch.setattr(
         "compute_horde_validator.validator.tasks.collateral",
         lambda: mock_collateral,
@@ -179,7 +179,7 @@ def test_slash_collateral_task_non_retriable_error_no_retry(settings, monkeypatc
     )
 
     mock_collateral = MagicMock()
-    mock_collateral.slash_collateral = AsyncMock(
+    mock_collateral.slash_collateral = MagicMock(
         side_effect=SlashCollateralError("some fatal error")
     )
     monkeypatch.setattr(
@@ -210,7 +210,7 @@ def test_slash_collateral_task_success_marks_slashed(settings, monkeypatch):
 
     # Mock successful slash
     mock_collateral = MagicMock()
-    mock_collateral.slash_collateral = AsyncMock(return_value=None)
+    mock_collateral.slash_collateral = MagicMock(return_value=None)
     monkeypatch.setattr(
         "compute_horde_validator.validator.tasks.collateral",
         lambda: mock_collateral,
@@ -240,7 +240,7 @@ def test_slash_collateral_task_already_slashed_returns_early(settings, monkeypat
     )
 
     mock_collateral = MagicMock()
-    mock_collateral.slash_collateral = AsyncMock(return_value=None)
+    mock_collateral.slash_collateral = MagicMock(return_value=None)
     monkeypatch.setattr(
         "compute_horde_validator.validator.tasks.collateral",
         lambda: mock_collateral,
@@ -248,4 +248,4 @@ def test_slash_collateral_task_already_slashed_returns_early(settings, monkeypat
 
     slash_collateral_task.apply(args=(str(job.job_uuid),))
 
-    assert mock_collateral.slash_collateral.await_count == 0
+    assert mock_collateral.slash_collateral.call_count == 0

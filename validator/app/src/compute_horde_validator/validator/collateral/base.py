@@ -20,7 +20,7 @@ class CollateralBase(ABC):
         pass
 
     @abstractmethod
-    async def slash_collateral(
+    def slash_collateral(
         self,
         miner_hotkey: str,
         url: str,
@@ -31,12 +31,5 @@ class CollateralBase(ABC):
             url: URL containing information about the slash.
         Returns:
             None
-        """
-        pass
-
-    @abstractmethod
-    async def get_collateral_contract_address(self) -> str | None:
-        """
-        Return the current collateral contract address or None if unavailable.
         """
         pass

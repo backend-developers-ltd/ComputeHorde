@@ -9,7 +9,6 @@ import pytest
 import turbobt
 from compute_horde.executor_class import EXECUTOR_CLASS
 from compute_horde_core.executor_class import ExecutorClass
-from pytest_mock import MockerFixture
 
 from ..organic_jobs.miner_driver import execute_organic_job_request
 from .helpers import MockNeuron
@@ -40,16 +39,6 @@ def _patch_celery_job_execution():
         execute_organic_job_request,
     ):
         yield
-
-
-@pytest.fixture(autouse=True)
-def _patch_collateral_contract_address(mocker: MockerFixture):
-    names = ["Collateral.get_collateral_contract_address"]
-    for name in names:
-        mocker.patch(
-            f"compute_horde_validator.validator.collateral.default.{name}",
-            return_value="0x7b89cb9B1D5B6A9F2296072885019D8Bfecc704A",
-        )
 
 
 @pytest.fixture
