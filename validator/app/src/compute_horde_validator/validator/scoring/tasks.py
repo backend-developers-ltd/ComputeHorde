@@ -20,6 +20,7 @@ from pydantic import JsonValue
 
 from compute_horde_validator.celery import app
 from compute_horde_validator.validator.clean_me_up import bittensor_client
+from compute_horde_validator.validator.dynamic_config import get_config
 from compute_horde_validator.validator.locks import Locked, LockType, get_advisory_lock
 from compute_horde_validator.validator.models import SystemEvent
 from compute_horde_validator.validator.models.scoring.internal import (
@@ -60,7 +61,7 @@ def set_scores(bittensor: turbobt.Bittensor):
         logger.warning("Not setting scores, SERVING is disabled in constance config")
         return
 
-    commit_reveal_weights_enabled = config.DYNAMIC_COMMIT_REVEAL_WEIGHTS_ENABLED
+    commit_reveal_weights_enabled = get_config("DYNAMIC_COMMIT_REVEAL_WEIGHTS_ENABLED")
 
     current_block = async_to_sync(bittensor.blocks.head)()
 
@@ -101,11 +102,21 @@ def set_scores(bittensor: turbobt.Bittensor):
                     SystemEvent.EventSubType.SUCCESS,
                     "",
                     {
-                        "DYNAMIC_COMMIT_REVEAL_WEIGHTS_INTERVAL": config.DYNAMIC_COMMIT_REVEAL_WEIGHTS_INTERVAL,
-                        "DYNAMIC_COMMIT_REVEAL_COMMIT_START_OFFSET": config.DYNAMIC_COMMIT_REVEAL_COMMIT_START_OFFSET,
-                        "DYNAMIC_COMMIT_REVEAL_COMMIT_END_BUFFER": config.DYNAMIC_COMMIT_REVEAL_COMMIT_END_BUFFER,
-                        "DYNAMIC_COMMIT_REVEAL_REVEAL_END_BUFFER": config.DYNAMIC_COMMIT_REVEAL_REVEAL_END_BUFFER,
-                        "DYNAMIC_COMMIT_REVEAL_WEIGHTS_ENABLED": config.DYNAMIC_COMMIT_REVEAL_WEIGHTS_ENABLED,
+                        "DYNAMIC_COMMIT_REVEAL_WEIGHTS_INTERVAL": get_config(
+                            "DYNAMIC_COMMIT_REVEAL_WEIGHTS_INTERVAL"
+                        ),
+                        "DYNAMIC_COMMIT_REVEAL_COMMIT_START_OFFSET": get_config(
+                            "DYNAMIC_COMMIT_REVEAL_COMMIT_START_OFFSET"
+                        ),
+                        "DYNAMIC_COMMIT_REVEAL_COMMIT_END_BUFFER": get_config(
+                            "DYNAMIC_COMMIT_REVEAL_COMMIT_END_BUFFER"
+                        ),
+                        "DYNAMIC_COMMIT_REVEAL_REVEAL_END_BUFFER": get_config(
+                            "DYNAMIC_COMMIT_REVEAL_REVEAL_END_BUFFER"
+                        ),
+                        "DYNAMIC_COMMIT_REVEAL_WEIGHTS_ENABLED": get_config(
+                            "DYNAMIC_COMMIT_REVEAL_WEIGHTS_ENABLED"
+                        ),
                         "current_block_number": current_block.number,
                     },
                 )
@@ -212,12 +223,16 @@ class CommitRevealInterval:
         reveal_end_buffer: int | None = None,
     ):
         self.current_block = current_block
-        self.length = length or config.DYNAMIC_COMMIT_REVEAL_WEIGHTS_INTERVAL
-        self.commit_start_offset = (
-            commit_start_offset or config.DYNAMIC_COMMIT_REVEAL_COMMIT_START_OFFSET
+        self.length = length or get_config("DYNAMIC_COMMIT_REVEAL_WEIGHTS_INTERVAL")
+        self.commit_start_offset = commit_start_offset or get_config(
+            "DYNAMIC_COMMIT_REVEAL_COMMIT_START_OFFSET"
         )
-        self.commit_end_buffer = commit_end_buffer or config.DYNAMIC_COMMIT_REVEAL_COMMIT_END_BUFFER
-        self.reveal_end_buffer = reveal_end_buffer or config.DYNAMIC_COMMIT_REVEAL_REVEAL_END_BUFFER
+        self.commit_end_buffer = commit_end_buffer or get_config(
+            "DYNAMIC_COMMIT_REVEAL_COMMIT_END_BUFFER"
+        )
+        self.reveal_end_buffer = reveal_end_buffer or get_config(
+            "DYNAMIC_COMMIT_REVEAL_REVEAL_END_BUFFER"
+        )
 
     @cached_property
     def start(self):
@@ -386,9 +401,9 @@ def apply_dancing_burners(
     min_allowed_weights: int,
     max_weight_limit: int,
 ) -> tuple["torch.Tensor", "torch.FloatTensor"] | tuple[NDArray[np.int64], NDArray[np.float32]]:
-    burner_hotkeys = config.DYNAMIC_BURN_TARGET_SS58ADDRESSES.split(",")
-    burn_rate = config.DYNAMIC_BURN_RATE
-    burn_partition = config.DYNAMIC_BURN_PARTITION
+    burner_hotkeys = get_config("DYNAMIC_BURN_TARGET_SS58ADDRESSES").split(",")
+    burn_rate = get_config("DYNAMIC_BURN_RATE")
+    burn_partition = get_config("DYNAMIC_BURN_PARTITION")
 
     hotkey_to_uid = {neuron.hotkey: neuron.uid for neuron in neurons}
     registered_burner_hotkeys = sorted(

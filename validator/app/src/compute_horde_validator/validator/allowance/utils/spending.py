@@ -5,7 +5,8 @@ from collections import defaultdict
 from typing import NamedTuple, cast
 
 from compute_horde_core.executor_class import ExecutorClass
-from constance import config
+
+from compute_horde_validator.validator.dynamic_config import get_config
 
 from ...models import Block, BlockAllowance
 from .. import settings
@@ -44,10 +45,10 @@ class SpendingBookkeeperBase(ABC):
     def __init__(self) -> None:
         self._block_expiry = settings.BLOCK_EXPIRY
         self._validation_leeway_lower = cast(
-            int, config.DYNAMIC_SPENDING_VALIDATION_BLOCK_LEEWAY_LOWER
+            int, get_config("DYNAMIC_SPENDING_VALIDATION_BLOCK_LEEWAY_LOWER")
         )
         self._validation_leeway_upper = cast(
-            int, config.DYNAMIC_SPENDING_VALIDATION_BLOCK_LEEWAY_UPPER
+            int, get_config("DYNAMIC_SPENDING_VALIDATION_BLOCK_LEEWAY_UPPER")
         )
 
     def spend(
