@@ -64,7 +64,7 @@ loop until Client terminates the job or timeout occurs
     end
     opt If this is a cross-validation request
         Client->Client: Asses validity of the reposnse
-        opt if reponse is invalid
+        opt if response is invalid
             Client->Facilitator: Send info about malicious miner, signed\nwith a validator (not sn12 validator) hotkey.
         end
     end
