@@ -348,7 +348,7 @@ def slash_collateral_task(self, job_uuid: str) -> None:
         logger.info("Slashing collateral for job %s on miner %s", job_uuid, job.miner.hotkey)
 
         try:
-            async_to_sync(collateral().slash_collateral)(
+            collateral().slash_collateral(
                 miner_hotkey=job.miner.hotkey,
                 url=f"job {job_uuid} cheated",
             )

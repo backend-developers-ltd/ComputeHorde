@@ -24,7 +24,6 @@ from .helpers.contexts import (
 )
 from .helpers.env import CollateralTestEnvironment
 from .helpers.setup_helpers import (
-    async_setup_collateral,
     setup_collateral,
 )
 
@@ -54,22 +53,20 @@ class TestListMinersWithCollateral:
 
 
 class TestSlashCollateral:
-    pytestmark = pytest.mark.asyncio
+    def test_slash_collateral_when_request_succeeds_emits_transaction(self) -> None:
+        miner_obj = Miner.objects.create(hotkey="hk-evm")
 
-    async def test_slash_collateral_when_request_succeeds_emits_transaction(self) -> None:
-        miner_obj = await Miner.objects.acreate(hotkey="hk-evm")
-
-        async with async_setup_collateral(
+        with setup_collateral(
             miners=[miner_obj],
             uids={"hk-evm": 1},
             evm_addresses={"hk-evm": "0x1234567890123456789012345678901234567890"},
         ):
-            async with CollateralTestEnvironment() as env:
+            with CollateralTestEnvironment() as env:
                 miner = miner_obj
                 evidence = b"evidence-bytes"
 
                 env.set_http_response(evidence)
-                await env.collateral.slash_collateral(miner_hotkey=miner.hotkey, url=SLASH_URL)
+                env.collateral.slash_collateral(miner_hotkey=miner.hotkey, url=SLASH_URL)
 
         assert env.requested_urls == [SLASH_URL]
         expected_addr = "0x1234567890123456789012345678901234567890"
@@ -81,97 +78,95 @@ class TestSlashCollateral:
         )
         assert env.transaction_call == (expected_args, {"gas_limit": 200_000, "value": 0})
 
-    async def test_slash_collateral_when_amount_not_positive_raises(self) -> None:
-        miner_obj = await Miner.objects.acreate(hotkey="hk")
+    def test_slash_collateral_when_amount_not_positive_raises(self) -> None:
+        miner_obj = Miner.objects.create(hotkey="hk")
 
-        async with async_setup_collateral(
+        with setup_collateral(
             miners=[miner_obj],
             uids={"hk": 1},
             evm_addresses={"hk": "0xabc"},
         ):
-            async with CollateralTestEnvironment() as env:
+            with CollateralTestEnvironment() as env:
                 env.set_slash_amount(0)
 
                 with pytest.raises(
                     SlashCollateralError, match="Slash amount must be greater than 0"
                 ):
-                    await env.collateral.slash_collateral(miner_hotkey="hk", url=SLASH_URL)
+                    env.collateral.slash_collateral(miner_hotkey="hk", url=SLASH_URL)
 
-    async def test_slash_collateral_when_contract_address_missing_raises(self) -> None:
-        miner_obj = await Miner.objects.acreate(hotkey="hk")
+    def test_slash_collateral_when_contract_address_missing_raises(self) -> None:
+        miner_obj = Miner.objects.create(hotkey="hk")
 
-        async with async_setup_collateral(
+        with setup_collateral(
             miners=[miner_obj],
             uids={"hk": 1},
             evm_addresses={"hk": "0xabc"},
         ):
-            async with CollateralTestEnvironment(contract_address=None) as env:
+            with CollateralTestEnvironment(contract_address=None) as env:
                 with pytest.raises(
                     SlashCollateralError,
                     match="Collateral contract address not configured",
                 ):
-                    await env.collateral.slash_collateral(miner_hotkey="hk", url=SLASH_URL)
+                    env.collateral.slash_collateral(miner_hotkey="hk", url=SLASH_URL)
 
-    async def test_slash_collateral_when_receipt_status_zero_raises(self) -> None:
-        miner_obj = await Miner.objects.acreate(hotkey="hk")
+    def test_slash_collateral_when_receipt_status_zero_raises(self) -> None:
+        miner_obj = Miner.objects.create(hotkey="hk")
 
-        async with async_setup_collateral(
+        with setup_collateral(
             miners=[miner_obj],
             uids={"hk": 1},
             evm_addresses={"hk": "0xabc"},
         ):
-            async with CollateralTestEnvironment(receipt={"status": 0}) as env:
+            with CollateralTestEnvironment(receipt={"status": 0}) as env:
                 with pytest.raises(
                     SlashCollateralError,
                     match="collateral slashing transaction failed",
                 ):
-                    await env.collateral.slash_collateral(miner_hotkey="hk", url=SLASH_URL)
+                    env.collateral.slash_collateral(miner_hotkey="hk", url=SLASH_URL)
 
-    async def test_slash_collateral_when_miner_missing_raises(self) -> None:
+    def test_slash_collateral_when_miner_missing_raises(self) -> None:
         with CollateralTestEnvironment() as env:
             with pytest.raises(SlashCollateralError, match="not found"):
-                await env.collateral.slash_collateral(miner_hotkey="missing", url=SLASH_URL)
+                env.collateral.slash_collateral(miner_hotkey="missing", url=SLASH_URL)
 
-    async def test_slash_collateral_when_miner_has_no_evm_address_raises(self) -> None:
-        miner_obj = await Miner.objects.acreate(hotkey="hk")
+    def test_slash_collateral_when_miner_has_no_evm_address_raises(self) -> None:
+        miner_obj = Miner.objects.create(hotkey="hk")
 
-        async with async_setup_collateral(
+        with setup_collateral(
             miners=[miner_obj],
             uids={"hk": 1},
             evm_addresses={"hk": None},
         ):
-            async with CollateralTestEnvironment() as env:
+            with CollateralTestEnvironment() as env:
                 with pytest.raises(
                     SlashCollateralError,
                     match="has no associated EVM address",
                 ):
-                    await env.collateral.slash_collateral(miner_hotkey="hk", url=SLASH_URL)
+                    env.collateral.slash_collateral(miner_hotkey="hk", url=SLASH_URL)
 
-    async def test_slash_collateral_when_private_key_missing_raises(self) -> None:
-        miner_obj = await Miner.objects.acreate(hotkey="hk")
+    def test_slash_collateral_when_private_key_missing_raises(self) -> None:
+        miner_obj = Miner.objects.create(hotkey="hk")
 
-        async with async_setup_collateral(
+        with setup_collateral(
             miners=[miner_obj],
             uids={"hk": 1},
             evm_addresses={"hk": "0xabc"},
         ):
-            async with CollateralTestEnvironment(private_key=None) as env:
+            with CollateralTestEnvironment(private_key=None) as env:
                 with pytest.raises(AssertionError, match="EVM private key not found"):
-                    await env.collateral.slash_collateral(miner_hotkey="hk", url=SLASH_URL)
+                    env.collateral.slash_collateral(miner_hotkey="hk", url=SLASH_URL)
 
 
 class TestGetCollateralContractAddress:
-    pytestmark = pytest.mark.asyncio
-
-    async def test_get_collateral_contract_address_when_configured_returns_value(self) -> None:
+    def test_get_collateral_contract_address_when_configured_returns_value(self) -> None:
         with CollateralTestEnvironment() as env:
-            result = await env.collateral.get_collateral_contract_address()
+            result = env.collateral._get_collateral_contract_address()
 
         assert result == "0xcontract"
 
-    async def test_get_collateral_contract_address_when_missing_returns_none(self) -> None:
+    def test_get_collateral_contract_address_when_missing_returns_none(self) -> None:
         with CollateralTestEnvironment(contract_address=None) as env:
-            result = await env.collateral.get_collateral_contract_address()
+            result = env.collateral._get_collateral_contract_address()
 
         assert result is None
 
