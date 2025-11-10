@@ -16,7 +16,7 @@ class RoutingBase(ABC):
     """
 
     @abstractmethod
-    async def pick_miner_for_job_request(self, request: OrganicJobRequest) -> JobRoute:
+    def pick_miner_for_job_request(self, request: OrganicJobRequest) -> JobRoute:
         """
         Filters miners based on compute time allowance and minimum collateral requirements.
         Creates a preliminary reservation for the selected miner and returns the miner with:
@@ -27,7 +27,7 @@ class RoutingBase(ABC):
         """
 
     @abstractmethod
-    async def report_miner_incident(
+    def report_miner_incident(
         self,
         type: MinerIncidentType,
         hotkey_ss58address: str,

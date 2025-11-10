@@ -1,9 +1,9 @@
-import asyncio
 import logging
+import threading
 from datetime import datetime, timedelta
 from typing import assert_never
 
-from asgiref.sync import async_to_sync, sync_to_async
+from asgiref.sync import async_to_sync
 from compute_horde.fv_protocol.facilitator_requests import (
     OrganicJobRequest,
     V2JobRequest,
@@ -41,23 +41,23 @@ logger = logging.getLogger(__name__)
 
 class Routing(RoutingBase):
     def __init__(self):
-        self._lock = asyncio.Lock()
+        self._lock = threading.Lock()
 
-    async def pick_miner_for_job_request(self, request: OrganicJobRequest) -> JobRoute:
+    def pick_miner_for_job_request(self, request: OrganicJobRequest) -> JobRoute:
         if isinstance(request, V2JobRequest):
-            async with self._lock:
-                return await sync_to_async(_pick_miner_for_job_v2)(request)
+            with self._lock:
+                return _pick_miner_for_job_v2(request)
 
         assert_never(request)
 
-    async def report_miner_incident(
+    def report_miner_incident(
         self,
         type: MinerIncidentType,
         hotkey_ss58address: str,
         job_uuid: str,
         executor_class: ExecutorClass,
     ) -> None:
-        await MinerIncident.objects.acreate(
+        MinerIncident.objects.create(
             type=type,
             hotkey_ss58address=hotkey_ss58address,
             job_uuid=job_uuid,
