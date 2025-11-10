@@ -196,13 +196,12 @@ def test_create_job_finished_receipt_returns_expected_values(settings):
     assert finished.block_numbers == block_numbers
 
 
-@pytest.mark.asyncio
 @pytest.mark.django_db(transaction=True)
-async def test_get_job_started_receipt_by_uuid(settings):
+def test_get_job_started_receipt_by_uuid(settings):
     job_uuid_present = str(uuid.uuid4())
     job_uuid_missing = str(uuid.uuid4())
 
-    await JobStartedReceipt.objects.acreate(
+    JobStartedReceipt.objects.create(
         job_uuid=job_uuid_present,
         miner_hotkey="miner_xyz",
         validator_hotkey=settings.BITTENSOR_WALLET().get_hotkey().ss58_address,
@@ -213,13 +212,13 @@ async def test_get_job_started_receipt_by_uuid(settings):
         ttl=60,
     )
 
-    found = await receipts().get_job_started_receipt_by_uuid(job_uuid_present)
+    found = receipts().get_job_started_receipt_by_uuid(job_uuid_present)
 
     assert found is not None
     assert str(found.job_uuid) == job_uuid_present
 
     with pytest.raises(JobStartedReceipt.DoesNotExist):
-        await receipts().get_job_started_receipt_by_uuid(job_uuid_missing)
+        receipts().get_job_started_receipt_by_uuid(job_uuid_missing)
 
 
 @pytest.mark.django_db(transaction=True)
@@ -325,16 +324,15 @@ def test_get_finished_jobs_for_block_range_returns_only_in_range(settings):
     assert item.paid_with_blocks == in_block_numbers
 
 
-@pytest.mark.asyncio
 @pytest.mark.django_db(transaction=True)
-async def test_get_busy_executor_count_includes_job_accepted_receipts(settings):
+def test_get_busy_executor_count_includes_job_accepted_receipts(settings):
     now = timezone.now()
     executor_class = ExecutorClass.always_on__gpu_24gb
     miner_hotkey = "miner_hotkey_busy_tally"
     validator_hotkey = settings.BITTENSOR_WALLET().get_hotkey().ss58_address
 
     # Job with started receipt still valid.
-    await JobStartedReceipt.objects.acreate(
+    JobStartedReceipt.objects.create(
         job_uuid=str(uuid.uuid4()),
         miner_hotkey=miner_hotkey,
         validator_hotkey=validator_hotkey,
@@ -347,7 +345,7 @@ async def test_get_busy_executor_count_includes_job_accepted_receipts(settings):
 
     # Job where the started receipt expired but the accepted receipt is still valid.
     accepted_only_uuid = str(uuid.uuid4())
-    await JobStartedReceipt.objects.acreate(
+    JobStartedReceipt.objects.create(
         job_uuid=accepted_only_uuid,
         miner_hotkey=miner_hotkey,
         validator_hotkey=validator_hotkey,
@@ -357,7 +355,7 @@ async def test_get_busy_executor_count_includes_job_accepted_receipts(settings):
         is_organic=True,
         ttl=60,
     )
-    await JobAcceptedReceipt.objects.acreate(
+    JobAcceptedReceipt.objects.create(
         job_uuid=accepted_only_uuid,
         miner_hotkey=miner_hotkey,
         validator_hotkey=validator_hotkey,
@@ -369,7 +367,7 @@ async def test_get_busy_executor_count_includes_job_accepted_receipts(settings):
 
     # Job that has both receipts valid should only be counted once.
     both_valid_uuid = str(uuid.uuid4())
-    await JobStartedReceipt.objects.acreate(
+    JobStartedReceipt.objects.create(
         job_uuid=both_valid_uuid,
         miner_hotkey=miner_hotkey,
         validator_hotkey=validator_hotkey,
@@ -379,7 +377,7 @@ async def test_get_busy_executor_count_includes_job_accepted_receipts(settings):
         is_organic=True,
         ttl=180,
     )
-    await JobAcceptedReceipt.objects.acreate(
+    JobAcceptedReceipt.objects.create(
         job_uuid=both_valid_uuid,
         miner_hotkey=miner_hotkey,
         validator_hotkey=validator_hotkey,
@@ -389,7 +387,7 @@ async def test_get_busy_executor_count_includes_job_accepted_receipts(settings):
         ttl=180,
     )
 
-    counts = await receipts().get_busy_executor_count(executor_class, now)
+    counts = receipts().get_busy_executor_count(executor_class, now)
 
     assert counts == {miner_hotkey: 3}
 
@@ -482,9 +480,8 @@ def test_get_completed_job_receipts_for_block_range_filters_by_executor_class(se
     assert item.paid_with_blocks == gpu_block_numbers
 
 
-@pytest.mark.asyncio
 @pytest.mark.django_db(transaction=True)
-async def test_get_busy_executor_count_counts_only_valid_and_unfinished(settings):
+def test_get_busy_executor_count_counts_only_valid_and_unfinished(settings):
     start_ts = datetime.datetime.now(datetime.UTC)
     miner_a = "miner_A"
     miner_b = "miner_B"
@@ -492,7 +489,7 @@ async def test_get_busy_executor_count_counts_only_valid_and_unfinished(settings
     executor = ExecutorClass.always_on__gpu_24gb
 
     job_a = str(uuid.uuid4())
-    await JobStartedReceipt.objects.acreate(
+    JobStartedReceipt.objects.create(
         job_uuid=job_a,
         miner_hotkey=miner_a,
         validator_hotkey=validator_hotkey,
@@ -504,7 +501,7 @@ async def test_get_busy_executor_count_counts_only_valid_and_unfinished(settings
     )
 
     job_a_finished = str(uuid.uuid4())
-    await JobStartedReceipt.objects.acreate(
+    JobStartedReceipt.objects.create(
         job_uuid=job_a_finished,
         miner_hotkey=miner_a,
         validator_hotkey=validator_hotkey,
@@ -514,7 +511,7 @@ async def test_get_busy_executor_count_counts_only_valid_and_unfinished(settings
         is_organic=True,
         ttl=60,
     )
-    await JobFinishedReceipt.objects.acreate(
+    JobFinishedReceipt.objects.create(
         job_uuid=job_a_finished,
         miner_hotkey=miner_a,
         validator_hotkey=validator_hotkey,
@@ -526,7 +523,7 @@ async def test_get_busy_executor_count_counts_only_valid_and_unfinished(settings
     )
 
     job_b_other_exec = str(uuid.uuid4())
-    await JobStartedReceipt.objects.acreate(
+    JobStartedReceipt.objects.create(
         job_uuid=job_b_other_exec,
         miner_hotkey=miner_b,
         validator_hotkey=validator_hotkey,
@@ -538,7 +535,7 @@ async def test_get_busy_executor_count_counts_only_valid_and_unfinished(settings
     )
 
     job_b_expired = str(uuid.uuid4())
-    await JobStartedReceipt.objects.acreate(
+    JobStartedReceipt.objects.create(
         job_uuid=job_b_expired,
         miner_hotkey=miner_b,
         validator_hotkey=validator_hotkey,
@@ -549,13 +546,12 @@ async def test_get_busy_executor_count_counts_only_valid_and_unfinished(settings
         ttl=30,
     )
 
-    counts = await receipts().get_busy_executor_count(executor_class=executor, at_time=start_ts)
+    counts = receipts().get_busy_executor_count(executor_class=executor, at_time=start_ts)
     assert counts == {miner_a: 1}
 
 
-@pytest.mark.asyncio
 @pytest.mark.django_db(transaction=True)
-async def test_get_busy_executor_count__busy_miner_based_on_started_receipts():
+def test_get_busy_executor_count__busy_miner_based_on_started_receipts():
     executor = ExecutorClass.always_on__gpu_24gb
     miner = "busy_miner"
     validator_hotkey = "validator_hotkey"
@@ -564,7 +560,7 @@ async def test_get_busy_executor_count__busy_miner_based_on_started_receipts():
     # Create multiple started receipts for the same miner and executor class
     n_started = 3
     for _ in range(n_started):
-        await JobStartedReceipt.objects.acreate(
+        JobStartedReceipt.objects.create(
             job_uuid=str(uuid.uuid4()),
             miner_hotkey=miner,
             validator_hotkey=validator_hotkey,
@@ -575,13 +571,12 @@ async def test_get_busy_executor_count__busy_miner_based_on_started_receipts():
             ttl=3600,
         )
 
-    busy_map = await receipts().get_busy_executor_count(executor_class=executor, at_time=now)
+    busy_map = receipts().get_busy_executor_count(executor_class=executor, at_time=now)
     assert busy_map.get(miner) == n_started
 
 
-@pytest.mark.asyncio
 @pytest.mark.django_db(transaction=True)
-async def test_get_busy_executor_count__miner_becomes_less_busy_after_finished():
+def test_get_busy_executor_count__miner_becomes_less_busy_after_finished():
     executor = ExecutorClass.always_on__gpu_24gb
     miner = "target_miner"
     validator_hotkey = "validator_hotkey"
@@ -592,7 +587,7 @@ async def test_get_busy_executor_count__miner_becomes_less_busy_after_finished()
     for _ in range(4):
         job_uuid = str(uuid.uuid4())
         job_uuids.append(job_uuid)
-        await JobStartedReceipt.objects.acreate(
+        JobStartedReceipt.objects.create(
             job_uuid=job_uuid,
             miner_hotkey=miner,
             validator_hotkey=validator_hotkey,
@@ -605,7 +600,7 @@ async def test_get_busy_executor_count__miner_becomes_less_busy_after_finished()
 
     # Finish one of them (matching miner)
     finished_uuid = job_uuids[0]
-    await JobFinishedReceipt.objects.acreate(
+    JobFinishedReceipt.objects.create(
         job_uuid=finished_uuid,
         miner_hotkey=miner,
         validator_hotkey=validator_hotkey,
@@ -616,13 +611,12 @@ async def test_get_busy_executor_count__miner_becomes_less_busy_after_finished()
         score_str="1.0",
     )
 
-    busy_map = await receipts().get_busy_executor_count(executor_class=executor, at_time=now)
+    busy_map = receipts().get_busy_executor_count(executor_class=executor, at_time=now)
     assert busy_map.get(miner) == len(job_uuids) - 1
 
 
-@pytest.mark.asyncio
 @pytest.mark.django_db(transaction=True)
-async def test_get_busy_executor_count__expired_started_receipts_do_not_count():
+def test_get_busy_executor_count__expired_started_receipts_do_not_count():
     executor = ExecutorClass.always_on__gpu_24gb
     miner = "miner_with_expired"
     validator_hotkey = "validator_hotkey"
@@ -631,7 +625,7 @@ async def test_get_busy_executor_count__expired_started_receipts_do_not_count():
     # Insert expired started receipts: timestamp far in the past, small ttl so not valid_at(now)
     past_time = now - datetime.timedelta(seconds=3600)
     for _ in range(3):
-        await JobStartedReceipt.objects.acreate(
+        JobStartedReceipt.objects.create(
             job_uuid=str(uuid.uuid4()),
             miner_hotkey=miner,
             validator_hotkey=validator_hotkey,
@@ -642,13 +636,12 @@ async def test_get_busy_executor_count__expired_started_receipts_do_not_count():
             ttl=1,  # definitely expired
         )
 
-    busy_map = await receipts().get_busy_executor_count(executor_class=executor, at_time=now)
+    busy_map = receipts().get_busy_executor_count(executor_class=executor, at_time=now)
     assert miner not in busy_map
 
 
-@pytest.mark.asyncio
 @pytest.mark.django_db(transaction=True)
-async def test_get_busy_executor_count__two_miners_saturated():
+def test_get_busy_executor_count__two_miners_saturated():
     executor = ExecutorClass.always_on__gpu_24gb
     validator_hotkey = "validator_hotkey"
     now = datetime.datetime.now(datetime.UTC)
@@ -657,7 +650,7 @@ async def test_get_busy_executor_count__two_miners_saturated():
 
     for miner, count in miners_counts.items():
         for _ in range(count):
-            await JobStartedReceipt.objects.acreate(
+            JobStartedReceipt.objects.create(
                 job_uuid=str(uuid.uuid4()),
                 miner_hotkey=miner,
                 validator_hotkey=validator_hotkey,
@@ -668,6 +661,6 @@ async def test_get_busy_executor_count__two_miners_saturated():
                 ttl=3600,
             )
 
-    busy_map = await receipts().get_busy_executor_count(executor_class=executor, at_time=now)
+    busy_map = receipts().get_busy_executor_count(executor_class=executor, at_time=now)
     for miner, count in miners_counts.items():
         assert busy_map.get(miner) == count

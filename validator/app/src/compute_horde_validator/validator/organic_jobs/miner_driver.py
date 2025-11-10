@@ -377,9 +377,7 @@ async def drive_organic_job(
             )  # As far as the validator is concerned, the job is as good as failed
             system_event_subtype = SystemEvent.EventSubType.JOB_REJECTED
         else:  # rejection.msg.reason == JobRejectionReason.BUSY
-            job_started_receipt = await receipts().get_job_started_receipt_by_uuid(
-                str(job.job_uuid)
-            )
+            job_started_receipt = receipts().get_job_started_receipt_by_uuid(str(job.job_uuid))
             job_request_time = job_started_receipt.timestamp
             active_validators = await _get_active_validators(job.block)
             valid_excuses = job_excuses.filter_valid_excuse_receipts(

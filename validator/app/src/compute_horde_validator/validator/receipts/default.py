@@ -218,8 +218,8 @@ class Receipts(ReceiptsBase):
         return payload, validator_signature
 
     @deprecated("Use database queries instead")
-    async def get_job_started_receipt_by_uuid(self, job_uuid: str) -> JobStartedReceipt:
-        return await JobStartedReceipt.objects.aget(job_uuid=job_uuid)
+    def get_job_started_receipt_by_uuid(self, job_uuid: str) -> JobStartedReceipt:
+        return JobStartedReceipt.objects.get(job_uuid=job_uuid)
 
     def get_finished_jobs_for_block_range(
         self, start_block: int, end_block: int, executor_class: ExecutorClass, organic_only=False
@@ -269,7 +269,7 @@ class Receipts(ReceiptsBase):
             for r in finished_qs
         ]
 
-    async def get_busy_executor_count(
+    def get_busy_executor_count(
         self, executor_class: ExecutorClass, at_time: datetime.datetime
     ) -> dict[str, int]:
         starts_qs = JobStartedReceipt.objects.valid_at(at_time).filter(
@@ -286,7 +286,7 @@ class Receipts(ReceiptsBase):
 
         started_counts = {
             row["miner_hotkey"]: int(row["n"])
-            async for row in ongoing_started.values("miner_hotkey")
+            for row in ongoing_started.values("miner_hotkey")
             .annotate(n=Count("id"))
             .values("miner_hotkey", "n")
         }
@@ -312,7 +312,7 @@ class Receipts(ReceiptsBase):
 
         accepted_counts = {
             row["miner_hotkey"]: int(row["n"])
-            async for row in accepted_qs.values("miner_hotkey")
+            for row in accepted_qs.values("miner_hotkey")
             .annotate(n=Count("id"))
             .values("miner_hotkey", "n")
         }
