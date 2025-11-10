@@ -8,7 +8,6 @@ from compute_horde.fv_protocol.facilitator_requests import (
     V2JobRequest,
 )
 from compute_horde_core.executor_class import ExecutorClass
-from constance import config
 from django.conf import settings
 from django.db.models import Count
 from django.utils import timezone
@@ -22,6 +21,7 @@ from compute_horde_validator.validator.allowance.types import (
     Miner as AllowanceMiner,
 )
 from compute_horde_validator.validator.collateral.default import collateral
+from compute_horde_validator.validator.dynamic_config import get_config
 from compute_horde_validator.validator.models import Miner, MinerIncident, SystemEvent
 from compute_horde_validator.validator.receipts.default import receipts
 from compute_horde_validator.validator.routing.base import RoutingBase
@@ -138,7 +138,7 @@ def _pick_miner_for_job_v2(request: V2JobRequest) -> JobRoute:
         raise
 
     # Collateral filtering: build a set of miners with sufficient collateral if threshold > 0
-    collateral_threshold = config.DYNAMIC_MINIMUM_COLLATERAL_AMOUNT_WEI
+    collateral_threshold = get_config("DYNAMIC_MINIMUM_COLLATERAL_AMOUNT_WEI")
     if collateral_threshold > 0:
         try:
             eligible_collateral_hotkeys = {
@@ -169,7 +169,9 @@ def _pick_miner_for_job_v2(request: V2JobRequest) -> JobRoute:
     manifests = allowance().get_manifests()
 
     reliability_score_per_hotkey = _get_miners_reliability_score(
-        reliability_window=timedelta(hours=float(config.DYNAMIC_ROUTING_RELIABILITY_WINDOW_HOURS)),
+        reliability_window=timedelta(
+            hours=float(get_config("DYNAMIC_ROUTING_RELIABILITY_WINDOW_HOURS"))
+        ),
         executor_class=executor_class,
         manifests=manifests,
     )
@@ -185,8 +187,8 @@ def _pick_miner_for_job_v2(request: V2JobRequest) -> JobRoute:
         items=suitable_hotkeys,
         weights=hotkey_weights,
         # With steepness >5 there is a strong cutoff at ~center*2, hence center~=cutoff/2
-        center=float(config.DYNAMIC_ROUTING_RELIABILITY_SOFT_CUTOFF) / 2,
-        steepness=float(config.DYNAMIC_ROUTING_RELIABILITY_SEPARATION),
+        center=float(get_config("DYNAMIC_ROUTING_RELIABILITY_SOFT_CUTOFF")) / 2,
+        steepness=float(get_config("DYNAMIC_ROUTING_RELIABILITY_SEPARATION")),
     )
 
     # Get receipts instance once to avoid bound method issues with async_to_sync

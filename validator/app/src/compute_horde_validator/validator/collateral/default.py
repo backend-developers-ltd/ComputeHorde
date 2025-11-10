@@ -11,7 +11,6 @@ import requests
 import turbobt
 from asgiref.sync import async_to_sync
 from compute_horde.smart_contracts.utils import get_web3_connection
-from constance import config
 from django.conf import settings
 from eth_account import Account
 from eth_account.signers.local import LocalAccount
@@ -21,6 +20,7 @@ from web3.contract.contract import ContractFunction
 from web3.exceptions import Web3RPCError
 from web3.types import Wei
 
+from compute_horde_validator.validator.dynamic_config import get_config
 from compute_horde_validator.validator.models import Miner
 
 from .base import CollateralBase
@@ -109,7 +109,7 @@ class Collateral(CollateralBase):
 
         w3 = get_web3_connection(network=settings.BITTENSOR_NETWORK)
 
-        amount_wei = config.DYNAMIC_COLLATERAL_SLASH_AMOUNT_WEI
+        amount_wei = get_config("DYNAMIC_COLLATERAL_SLASH_AMOUNT_WEI")
         if amount_wei <= 0:
             raise SlashCollateralError("Slash amount must be greater than 0")
 

@@ -7,6 +7,10 @@ from compute_horde_core.executor_class import ExecutorClass
 from constance import config
 
 
+def get_config(key: str) -> Any:
+    return getattr(config, key)
+
+
 async def aget_config(key: str) -> Any:
     return await sync_to_async(lambda: getattr(config, key))()
 
@@ -30,7 +34,7 @@ def executor_class_value_map_parser(
 
 
 def get_miner_max_executors_per_class_sync() -> dict[ExecutorClass, int]:
-    miner_max_executors_per_class: str = config.DYNAMIC_MINER_MAX_EXECUTORS_PER_CLASS
+    miner_max_executors_per_class: str = get_config("DYNAMIC_MINER_MAX_EXECUTORS_PER_CLASS")
     result = {
         executor_class: count
         for executor_class, count in executor_class_value_map_parser(
@@ -43,5 +47,5 @@ def get_miner_max_executors_per_class_sync() -> dict[ExecutorClass, int]:
 
 def get_executor_class_weights() -> dict[ExecutorClass, float]:
     return executor_class_value_map_parser(
-        config.DYNAMIC_EXECUTOR_CLASS_WEIGHTS, value_parser=float
+        get_config("DYNAMIC_EXECUTOR_CLASS_WEIGHTS"), value_parser=float
     )

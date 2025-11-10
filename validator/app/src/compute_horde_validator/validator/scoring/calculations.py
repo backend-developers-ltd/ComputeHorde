@@ -5,7 +5,6 @@ from typing import Literal
 
 import numpy as np
 from compute_horde_core.executor_class import ExecutorClass
-from constance import config
 
 from compute_horde_validator.validator.allowance.default import allowance
 from compute_horde_validator.validator.allowance.types import (
@@ -14,6 +13,7 @@ from compute_horde_validator.validator.allowance.types import (
     SpendingDetails,
 )
 from compute_horde_validator.validator.allowance.utils.spending import Triplet
+from compute_horde_validator.validator.dynamic_config import get_config
 from compute_horde_validator.validator.models import Miner, OrganicJob
 from compute_horde_validator.validator.receipts import receipts
 from compute_horde_validator.validator.scoring.metrics import (
@@ -167,8 +167,8 @@ def horde_score(
 def score_organic_jobs(jobs: Sequence[OrganicJob]) -> dict[str, float]:
     """Score organic jobs."""
     batch_scores: defaultdict[str, float] = defaultdict(float)
-    score = config.DYNAMIC_ORGANIC_JOB_SCORE
-    limit = config.DYNAMIC_SCORE_ORGANIC_JOBS_LIMIT
+    score = get_config("DYNAMIC_ORGANIC_JOB_SCORE")
+    limit = get_config("DYNAMIC_SCORE_ORGANIC_JOBS_LIMIT")
 
     for job in jobs:
         batch_scores[job.miner.hotkey] += score
@@ -202,7 +202,7 @@ def calculate_organic_scores(organic_jobs: list[OrganicJob]) -> dict[str, dict[s
             executor_class_organic_jobs[job.executor_class].append(job)
 
     organic_scores_by_executor: dict[str, dict[str, float]] = {}
-    organic_job_score = config.DYNAMIC_ORGANIC_JOB_SCORE
+    organic_job_score = get_config("DYNAMIC_ORGANIC_JOB_SCORE")
 
     for executor_class, jobs in executor_class_organic_jobs.items():
         executor_class_scores: dict[str, float] = {}

@@ -8,6 +8,7 @@ from hexbytes import HexBytes
 
 from compute_horde_validator.validator.collateral import default as collateral_default
 from compute_horde_validator.validator.collateral.default import Collateral
+from compute_horde_validator.validator.tests.helpers import patch_constance
 
 from .stubs import (
     HttpStub,
@@ -46,6 +47,7 @@ class CollateralTestEnvironment:
         self.fetch_log: list[dict[str, Any]] = []
         self.system_events = SystemEventRecorder()
         self.contract_log: list[tuple[str, Any]] = []
+        self._constance_overlay: dict[str, Any] | None = None
 
     def __enter__(self) -> CollateralTestEnvironment:
         self._stack = ExitStack()
@@ -68,7 +70,12 @@ class CollateralTestEnvironment:
         )
         self._config = Mock()
         self._config.DYNAMIC_COLLATERAL_SLASH_AMOUNT_WEI = self.slash_amount
-        self._stack.enter_context(patch.object(collateral_default, "config", self._config))
+        self._constance_overlay = {
+            "DYNAMIC_COLLATERAL_SLASH_AMOUNT_WEI": self.slash_amount,
+        }
+        self._stack.enter_context(
+            patch_constance(self._constance_overlay),
+        )
         self._stack.enter_context(
             patch(
                 "compute_horde_validator.validator.collateral.default.settings.BITTENSOR_WALLET",
@@ -139,6 +146,8 @@ class CollateralTestEnvironment:
     def set_slash_amount(self, amount: int) -> None:
         self.slash_amount = amount
         self._config.DYNAMIC_COLLATERAL_SLASH_AMOUNT_WEI = amount
+        if self._constance_overlay is not None:
+            self._constance_overlay["DYNAMIC_COLLATERAL_SLASH_AMOUNT_WEI"] = amount
 
     def _record_transaction(
         self,

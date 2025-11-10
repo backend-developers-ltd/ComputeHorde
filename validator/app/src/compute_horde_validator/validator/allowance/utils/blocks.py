@@ -5,10 +5,10 @@ from typing import Any, cast
 import turbobt
 from celery.utils.log import get_task_logger
 from compute_horde_core.executor_class import ExecutorClass
-from constance import config
 from django.db import IntegrityError, transaction
 from django.db.models import Case, Exists, Max, Min, OuterRef, Q, Sum, When
 
+from compute_horde_validator.validator.dynamic_config import get_config
 from compute_horde_validator.validator.locks import Lock, LockType
 
 from ...models import SystemEvent
@@ -142,7 +142,7 @@ def process_block_allowance(
             creation_timestamp=supertensor_.get_block_timestamp(block_number),
         )
 
-        dynamic_multiplier = cast(float, config.DYNAMIC_BLOCK_ALLOWANCE_MULTIPLIER)
+        dynamic_multiplier = cast(float, get_config("DYNAMIC_BLOCK_ALLOWANCE_MULTIPLIER"))
         neurons = supertensor_.list_neurons(block_number)
         save_neurons(neurons, block_number)
 
