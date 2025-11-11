@@ -6,7 +6,7 @@ from functools import partial
 import sentry_sdk
 from asgiref.sync import sync_to_async
 from channels.layers import get_channel_layer
-from compute_horde.fv_protocol.facilitator_requests import OrganicJobRequest, V2JobRequest
+from compute_horde.fv_protocol.facilitator_requests import OrganicJobRequest
 from compute_horde.fv_protocol.validator_requests import (
     HordeFailureDetails,
     JobFailureDetails,
@@ -47,7 +47,6 @@ from compute_horde_validator.validator.allowance.types import ValidatorModel
 from compute_horde_validator.validator.allowance.utils.supertensor import supertensor
 from compute_horde_validator.validator.dynamic_config import aget_config
 from compute_horde_validator.validator.models import (
-    AdminJobRequest,
     Miner,
     OrganicJob,
     SystemEvent,
@@ -254,7 +253,7 @@ async def execute_organic_job_request(
 async def drive_organic_job(
     miner_client: MinerClient,
     job: OrganicJob,
-    job_request: OrganicJobRequest | AdminJobRequest,
+    job_request: OrganicJobRequest,
     notify_callback: Callable[[JobStatusUpdate], Awaitable[None]] | None = None,
 ) -> bool:
     """
@@ -300,29 +299,24 @@ async def drive_organic_job(
     miner_client.notify_streaming_readiness = streaming_ready_callback  # type: ignore[method-assign]
     # TODO: remove method assignment above and properly handle notify_* cases
 
-    artifacts_dir = job_request.artifacts_dir if isinstance(job_request, V2JobRequest) else None
     job_details = OrganicJobDetails(
-        job_uuid=str(job.job_uuid),  # TODO: fix uuid field in AdminJobRequest
+        job_uuid=str(job.job_uuid),
         executor_class=ExecutorClass(job_request.executor_class),
         docker_image=job_request.docker_image,
         docker_run_options_preset="nvidia_all" if job_request.use_gpu else "none",
         docker_run_cmd=job_request.get_args(),
-        env=job_request.env if isinstance(job_request.env, dict) else {},
-        total_job_timeout=job_request.timeout
-        if isinstance(job_request, AdminJobRequest)
-        else OrganicJobDetails.total_job_timeout,
+        env=job_request.env,
+        total_job_timeout=OrganicJobDetails.total_job_timeout,
         volume=job_request.volume,
         output=job_request.output_upload,
-        artifacts_dir=artifacts_dir,
+        artifacts_dir=job_request.artifacts_dir,
         job_timing=OrganicJobDetails.TimingDetails(
             allowed_leeway=await aget_config("DYNAMIC_ORGANIC_JOB_ALLOWED_LEEWAY_TIME"),
             download_time_limit=job_request.download_time_limit,
             execution_time_limit=job_request.execution_time_limit,
             upload_time_limit=job_request.upload_time_limit,
             streaming_start_time_limit=job_request.streaming_start_time_limit,
-        )
-        if isinstance(job_request, V2JobRequest)
-        else None,
+        ),
         streaming_details=job.streaming_details,
         allowance_blocks=job.allowance_blocks or [],
         allowance_job_value=job.allowance_job_value,

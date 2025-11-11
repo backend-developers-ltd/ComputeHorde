@@ -4,8 +4,6 @@ import time
 
 import requests
 import tenacity
-import turbobt
-import turbobt.substrate.exceptions
 from asgiref.sync import async_to_sync, sync_to_async
 from celery import shared_task
 from celery.result import AsyncResult
@@ -31,9 +29,7 @@ from compute_horde_validator.validator.models import (
     OrganicJob,
     SystemEvent,
 )
-from compute_horde_validator.validator.organic_jobs.miner_client import MinerClient
 from compute_horde_validator.validator.organic_jobs.miner_driver import (
-    drive_organic_job,
     execute_organic_job_request,
 )
 from compute_horde_validator.validator.routing.types import JobRoute
@@ -52,7 +48,7 @@ from .collateral.types import (
     ReplacementUnderpricedCollateralException,
 )
 from .dynamic_config import aget_config
-from .models import AdminJobRequest, MinerManifest
+from .models import MinerManifest
 from .scoring import tasks as scoring_tasks  # noqa
 
 if False:
@@ -80,61 +76,8 @@ class ScheduleError(Exception):
     pass
 
 
-@shared_task
-def trigger_run_admin_job_request(job_request_id: int):
-    async_to_sync(run_admin_job_request)(job_request_id)
-
-
 def get_keypair():
     return settings.BITTENSOR_WALLET().get_hotkey()
-
-
-async def run_admin_job_request(job_request_id: int, callback=None):
-    job_request: AdminJobRequest = await AdminJobRequest.objects.prefetch_related("miner").aget(
-        id=job_request_id
-    )
-    try:
-        miner = job_request.miner
-
-        async with turbobt.Bittensor(settings.BITTENSOR_NETWORK) as bittensor:
-            current_block = await bittensor.blocks.head()
-
-        job = await OrganicJob.objects.acreate(
-            job_uuid=str(job_request.uuid),
-            miner=miner,
-            miner_address=miner.address,
-            miner_address_ip_version=miner.ip_version,
-            miner_port=miner.port,
-            executor_class=job_request.executor_class,
-            job_description="Validator Job from Admin Panel",
-            block=current_block.number,
-        )
-
-        my_keypair = get_keypair()
-        miner_client = MinerClient(
-            miner_hotkey=miner.hotkey,
-            miner_address=miner.address,
-            miner_port=miner.port,
-            job_uuid=str(job.job_uuid),
-            my_keypair=my_keypair,
-        )
-
-        job_request.status_message = "Job successfully triggered"
-        print(job_request.status_message)
-        await job_request.asave()
-    except Exception as e:
-        job_request.status_message = f"Job failed to trigger due to: {e}"
-        print(job_request.status_message)
-        await job_request.asave()
-        return
-
-    print(f"\nProcessing job request: {job_request}")
-    await drive_organic_job(
-        miner_client,
-        job,
-        job_request,
-        notify_callback=callback,
-    )
 
 
 def save_receipt_event(subtype: str, long_description: str, data: JsonValue):
