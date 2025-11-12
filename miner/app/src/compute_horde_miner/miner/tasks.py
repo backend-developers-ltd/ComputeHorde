@@ -12,7 +12,6 @@ from django.conf import settings
 
 from compute_horde_miner.celery import app
 from compute_horde_miner.miner import eviction, quasi_axon
-from compute_horde_miner.miner.executor_manager import current
 from compute_horde_miner.miner.manifest_commitment import commit_manifest_to_subtensor
 from compute_horde_miner.miner.models import Validator
 from compute_horde_miner.miner.receipts import current_store
@@ -107,6 +106,8 @@ def commit_manifest_to_chain():
     Commits manifest to chain.
     """
     try:
+        from compute_horde_miner.miner.executor_manager import current
+
         manifest = async_to_sync(current.executor_manager.get_manifest)()
 
         wallet = settings.BITTENSOR_WALLET()
