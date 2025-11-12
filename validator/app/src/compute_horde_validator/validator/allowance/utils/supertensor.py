@@ -347,6 +347,20 @@ class SuperTensor(BaseSuperTensor):
 
     @archive_fallback
     @make_sync
+    async def _get_commitments(self, block_number: int) -> dict[str, bytes]:
+        bittensor = bittensor_context.get()
+        subnet = subnet_context.get()
+        async with bittensor.block(block_number):
+            result: dict[str, bytes] = await subnet.commitments.fetch()
+            logger.debug(f"Commitments for block {block_number}: {result}")
+            return result
+
+    @RETRY_ON_TIMEOUT
+    def get_commitments(self, block_number: int) -> dict[str, bytes]:
+        return self._get_commitments(block_number)
+
+    @archive_fallback
+    @make_sync
     async def _get_block_hash(self, block_number: int) -> str:
         bittensor = bittensor_context.get()
         async with bittensor.block(block_number) as block:
@@ -420,6 +434,7 @@ class TaskType(enum.Enum):
     BLOCK_HASH = "BLOCK_HASH"
     SUBNET_STATE = "SUBNET_STATE"
     VALIDATORS = "VALIDATORS"
+    COMMITMENTS = "COMMITMENTS"
     THE_END = "THE_END"
 
 
@@ -454,6 +469,12 @@ class BaseCache(abc.ABC):
     @abc.abstractmethod
     def get_validators(self, block_number: int) -> list[ValidatorModel] | None: ...
 
+    @abc.abstractmethod
+    def put_commitments(self, block_number: int, commitments: dict[str, bytes]): ...
+
+    @abc.abstractmethod
+    def get_commitments(self, block_number: int) -> dict[str, bytes] | None: ...
+
 
 class InMemoryCache(BaseCache):
     def __init__(self):
@@ -462,6 +483,7 @@ class InMemoryCache(BaseCache):
         self._block_hash_cache: dict[int, str] = {}
         self._subnet_state_cache: dict[int, turbobt.subnet.SubnetState] = {}
         self._validators_cache: dict[int, list[ValidatorModel]] = {}
+        self._commitments_cache: dict[int, dict[str, bytes]] = {}
 
     def put_neurons(self, block_number: int, neurons: list[turbobt.Neuron]):
         self._neuron_cache[block_number] = neurons
@@ -492,6 +514,12 @@ class InMemoryCache(BaseCache):
 
     def get_validators(self, block_number: int) -> list[ValidatorModel] | None:
         return self._validators_cache.get(block_number)
+
+    def put_commitments(self, block_number: int, commitments: dict[str, bytes]):
+        self._commitments_cache[block_number] = commitments
+
+    def get_commitments(self, block_number: int) -> dict[str, bytes] | None:
+        return self._commitments_cache.get(block_number)
 
 
 class PrecachingSuperTensorCacheMiss(SuperTensorError):
@@ -592,6 +620,15 @@ class PrecachingSuperTensor(SuperTensor):
                         self.cache.put_validators(
                             block_number, super_tensor.list_validators(block_number)
                         )
+                    elif task == TaskType.COMMITMENTS:
+                        if self.cache.get_commitments(block_number) is not None:
+                            logger.debug(
+                                f"Worker {ind} skipping task {task} for block {block_number} (cached)"
+                            )
+                            continue
+                        self.cache.put_commitments(
+                            block_number, super_tensor.get_commitments(block_number)
+                        )
                     else:
                         assert_never(task)
                     logger.debug(f"Worker {ind} finished task {task} for block {block_number}")
@@ -630,6 +667,7 @@ class PrecachingSuperTensor(SuperTensor):
                 self.task_queue.put((TaskType.BLOCK_HASH, block_to_submit))
                 self.task_queue.put((TaskType.SUBNET_STATE, block_to_submit))
                 self.task_queue.put((TaskType.VALIDATORS, block_to_submit))
+                self.task_queue.put((TaskType.COMMITMENTS, block_to_submit))
                 self.highest_block_submitted = block_to_submit
             except CannotGetCurrentBlock:
                 time.sleep(1)

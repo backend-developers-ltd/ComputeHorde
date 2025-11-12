@@ -352,11 +352,12 @@ wheels = [
 
 [[package]]
 name = "bt-ddos-shield-client"
-version = "0.3.1"
+version = "0.3.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "bittensor", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "boto3", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
+    { name = "cryptography", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "eciespy", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "pydantic", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "pydantic-settings", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
@@ -364,9 +365,9 @@ dependencies = [
     { name = "route53", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "sqlalchemy", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/3c/45/dcbc462f1385a62529f7fe2086f201a1cb3a38d1bfb0127a7b26d45d4631/bt_ddos_shield_client-0.3.1.tar.gz", hash = "sha256:6e254b828dec98e2d365b77e193686f094e31bc15c60071fbd5dff083b0abd14", size = 49470, upload-time = "2025-08-13T06:32:07.965Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/17/76/cf1bb9d7a3f1b93d6e2d726b11459121141645b2968b1c96508192878e64/bt_ddos_shield_client-0.3.3.tar.gz", hash = "sha256:8aa89f601a5dba96366bd89a8e0f4f091be18b405824f7c3e0fc0bdba5fedfe4", size = 51305, upload-time = "2025-11-07T07:58:53.294Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/be/30/1dce8b23f33231f484fd2dcb100dbc98abbe328b91ff95dbd385ca2eedf4/bt_ddos_shield_client-0.3.1-py3-none-any.whl", hash = "sha256:3ea34a9119d82ca0b080f9d9b4ed41400676a996da11057de8da225dbd1285d0", size = 41600, upload-time = "2025-08-13T06:32:06.479Z" },
+    { url = "https://files.pythonhosted.org/packages/5a/53/715013171a6a5711725eca1235d7690716afdb1e5ef979daffc5d77007d1/bt_ddos_shield_client-0.3.3-py3-none-any.whl", hash = "sha256:a10ade4932be4d0267a425ee7dc4b677c21e03c65691cfc4149d5a36d4722367", size = 43362, upload-time = "2025-11-07T07:58:51.866Z" },
 ]
 
 [[package]]
@@ -1039,15 +1040,16 @@ compatible-mypy = [
 
 [[package]]
 name = "eciespy"
-version = "0.4.4"
+version = "0.4.6"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "coincurve", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "pycryptodome", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
+    { name = "typing-extensions", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/8f/2f/fc9837edd0e7c1701f7675bfdf60141d01e336abb5793996f4a48fa7c4f7/eciespy-0.4.4.tar.gz", hash = "sha256:dfd3832314a8c2ba9c8b7c1b79990f5849fb29e7ad1fd842e17984ac4b1bec11", size = 9464, upload-time = "2025-03-10T15:30:10.417Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/39/d1/29e6cab7060dd41d8f8cada139da58d843f3f4a950e3747691c56c196fd3/eciespy-0.4.6.tar.gz", hash = "sha256:aa981bf3da70de8cdca477ab65e9c9e2d133fd60ec84fa9d3187999bcb958f9c", size = 12373, upload-time = "2025-07-21T05:28:14.913Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/ac/6c/44e3777272a352e0c725b49d0566c4c215d0e1b9d3a5f59c1f6a00933650/eciespy-0.4.4-py3-none-any.whl", hash = "sha256:5f09954122b83afadf34d317b72d3c61dec0daecda94617cc3274d11c8b563af", size = 11468, upload-time = "2025-03-10T15:30:09.522Z" },
+    { url = "https://files.pythonhosted.org/packages/36/d2/a1ffc809daae895ba6abfcbcdc2336f72169150ed6538d24c328392c4deb/eciespy-0.4.6-py3-none-any.whl", hash = "sha256:5329e6f4a79e67eb060f03474fa04ebc76da1a277ff9cec0a71a5f7f4efdfd01", size = 15107, upload-time = "2025-07-21T05:28:13.499Z" },
 ]
 
 [[package]]
@@ -2772,7 +2774,7 @@ type-check = [
 requires-dist = [
     { name = "aiohttp", specifier = ">=3.12.0" },
     { name = "boto3", specifier = ">=1.35.11" },
-    { name = "bt-ddos-shield-client", specifier = "~=0.3.1" },
+    { name = "bt-ddos-shield-client", specifier = "~=0.3.3" },
     { name = "celery", extras = ["redis"], specifier = "~=5.3.1" },
     { name = "channels", extras = ["daphne"], specifier = "==4.*" },
     { name = "channels-redis", specifier = "==4.2.0" },
