@@ -8,6 +8,7 @@ import socket
 from collections import deque
 from collections.abc import AsyncGenerator
 from datetime import datetime, timedelta
+from functools import cached_property
 from pathlib import Path
 from typing import Annotated, Any, Literal, TypeAlias, cast
 
@@ -165,15 +166,19 @@ class DockerExecutorManager(BaseExecutorManager):
         super().__init__()
         self._server_manager = ServerManager(settings.DOCKER_EXECUTORS_CONFIG_PATH)
 
+    @cached_property
+    def executor_image(self) -> str:
+        executor_image: str = settings.EXECUTOR_IMAGE
+        if ":" not in executor_image:
+            # aiodocker pulls all tags by default, so we need to specify the tag explicitly
+            logger.warning("Executor image %s does not have a tag, using 'latest'", executor_image)
+            executor_image += ":latest"
+        return executor_image
+
     async def start_new_executor(
         self, token: str, executor_class: ExecutorClass, timeout: float
     ) -> DockerExecutor:
         server_name, server_config = self._server_manager.reserve_server(executor_class)
-
-        executor_image = settings.EXECUTOR_IMAGE
-        if ":" not in executor_image:
-            # aiodocker pulls all tags by default, so we need to specify the tag explicitly
-            executor_image += ":latest"
 
         env = [
             f"MINER_ADDRESS=ws://{settings.ADDRESS_FOR_EXECUTORS}:{settings.PORT_FOR_EXECUTORS}",
@@ -201,23 +206,11 @@ class DockerExecutorManager(BaseExecutorManager):
 
         try:
             async with tunneled_docker_client(server_config) as docker:
-                # TODO: the executor image should already be on the server. Remove pulling from here?
-                if not settings.DEBUG_SKIP_PULLING_EXECUTOR_IMAGE:
-                    try:
-                        await docker.images.pull(executor_image, timeout=PULLING_TIMEOUT)
-                    except TimeoutError as e:
-                        logger.error(
-                            "Pulling executor container timed out, pulling it from shell might provide more details"
-                        )
-                        raise DockerExecutorFailedToStart("Failed to pull executor image") from e
-                    except aiodocker.exceptions.DockerError as e:
-                        logger.error("Failed to pull executor image: %r", e)
-                        raise DockerExecutorFailedToStart("Failed to pull executor image") from e
-
                 try:
+                    # run() pulls the image if it doesn't already exist
                     container = await docker.containers.run(
                         config={
-                            "Image": executor_image,
+                            "Image": self.executor_image,
                             "Cmd": ["python", "manage.py", "run_executor", *cmdline_args],
                             "Env": env,
                             "HostConfig": {
@@ -305,6 +298,36 @@ class DockerExecutorManager(BaseExecutorManager):
         except Exception:
             logger.exception("Failed to get miner public address")
             return None
+
+    async def prepare_executor_image(self) -> None:
+        # TODO: also pull images for DYNAMIC_PRELOAD_DOCKER_JOB_IMAGES
+        async def _pull_image(server_name: ServerName, server_config: ServerConfig) -> None:
+            logger.info("Pulling executor image on executor %s", server_name)
+            async with tunneled_docker_client(server_config) as docker:
+                await docker.images.pull(self.executor_image, timeout=PULLING_TIMEOUT)
+            logger.info("Pulling executor image done on executor %s", server_name)
+
+        server_names = []
+        tasks = []
+        for server_configs in self._server_manager.fetch_config().values():
+            for server_name, server_config in server_configs.items():
+                server_names.append(server_name)
+                tasks.append(_pull_image(server_name, server_config))
+
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        for server_name, result in zip(server_names, results):
+            if not isinstance(result, BaseException):
+                continue
+
+            log_msg = (
+                "Pulling executor image %s on executor %s."
+                " Pulling it using `docker pull` from shell might provide more details."
+            )
+            if isinstance(result, TimeoutError):
+                logger.error(log_msg, "timed out", server_name)
+            else:
+                logger.error(log_msg, "failed", server_name, exc_info=result)
 
 
 @contextlib.asynccontextmanager

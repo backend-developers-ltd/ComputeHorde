@@ -301,6 +301,13 @@ SHARED_CELERY_BEAT_SCHEDULE = {
             "expires": timedelta(minutes=5).total_seconds(),
         },
     },
+    "prepare_executor_image": {
+        "task": "compute_horde_miner.miner.tasks.prepare_executor_image",
+        "schedule": timedelta(minutes=10),
+        "options": {
+            "expires": timedelta(minutes=10).total_seconds(),
+        },
+    },
 }
 
 PROD_CELERY_BEAT_SCHEDULE = {
@@ -433,7 +440,6 @@ HOTKEYS_FOR_MAIN_HOTKEY_SELECTION = env.list("HOTKEYS_FOR_MAIN_HOTKEY_SELECTION"
 EXECUTOR_IMAGE = env.str(
     "EXECUTOR_IMAGE", default="backenddevelopersltd/compute-horde-executor:v1-latest"
 )
-DEBUG_SKIP_PULLING_EXECUTOR_IMAGE = env.bool("DEBUG_SKIP_PULLING_EXECUTOR_IMAGE", default=False)
 DEBUG_NO_GPU_MODE = env.bool("DEBUG_NO_GPU_MODE", default=False)
 # Path pointing to the file containing custom job runner classes.
 CUSTOM_JOB_RUNNERS_PATH = ""

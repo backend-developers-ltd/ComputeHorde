@@ -276,6 +276,13 @@ class BaseExecutorManager(metaclass=abc.ABCMeta):
         cycle_number = _get_cycle_number(current_block, settings.BITTENSOR_NETUID)
         return hotkeys[cycle_number % len(hotkeys)]
 
+    async def prepare_executor_image(self) -> None:
+        """
+        Prepare the executor image (i.e., docker pull) on all the executor machines.
+        This method is periodically called in a scheduled task to ensure all executors
+        are up to date.
+        """
+
 
 async def _get_current_block(subtensor: bittensor.AsyncSubtensor) -> int | None:
     # NOTE: bittensor.AsyncSubtensor auto-reconnects on connection failure,
