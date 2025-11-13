@@ -141,14 +141,14 @@ class TestCommitManifestToSubtensor:
 class TestCommitManifestToChainTask:
     @patch("compute_horde_miner.miner.tasks.commit_manifest_to_subtensor")
     @patch("compute_horde_miner.miner.tasks.async_to_sync")
-    @patch("compute_horde_miner.miner.tasks.current")
+    @patch("compute_horde_miner.miner.executor_manager.current.executor_manager")
     @patch("compute_horde_miner.miner.tasks.settings")
     @patch("compute_horde_miner.miner.tasks.bittensor")
     def test_commit_manifest_to_chain_task_manifest_changed(
         self,
         mock_bittensor,
         mock_settings,
-        mock_current,
+        mock_executor_manager,
         mock_async_to_sync,
         mock_commit,
     ):
@@ -184,11 +184,11 @@ class TestCommitManifestToChainTask:
 
     @patch("compute_horde_miner.miner.tasks.commit_manifest_to_subtensor")
     @patch("compute_horde_miner.miner.tasks.async_to_sync")
-    @patch("compute_horde_miner.miner.tasks.current")
+    @patch("compute_horde_miner.miner.executor_manager.current.executor_manager")
     @patch("compute_horde_miner.miner.tasks.settings")
     @patch("compute_horde_miner.miner.tasks.bittensor")
     def test_commit_manifest_to_chain_task_empty_manifest(
-        self, mock_bittensor, mock_settings, mock_current, mock_async_to_sync, mock_commit
+        self, mock_bittensor, mock_settings, mock_executor_manager, mock_async_to_sync, mock_commit
     ):
         from compute_horde_miner.miner.tasks import commit_manifest_to_chain
 
