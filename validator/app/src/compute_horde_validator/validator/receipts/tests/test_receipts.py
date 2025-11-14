@@ -197,31 +197,6 @@ def test_create_job_finished_receipt_returns_expected_values(settings):
 
 
 @pytest.mark.django_db(transaction=True)
-def test_get_job_started_receipt_by_uuid(settings):
-    job_uuid_present = str(uuid.uuid4())
-    job_uuid_missing = str(uuid.uuid4())
-
-    JobStartedReceipt.objects.create(
-        job_uuid=job_uuid_present,
-        miner_hotkey="miner_xyz",
-        validator_hotkey=settings.BITTENSOR_WALLET().get_hotkey().ss58_address,
-        validator_signature="sig",
-        timestamp=timezone.now(),
-        executor_class="always_on.gpu-24gb",
-        is_organic=True,
-        ttl=60,
-    )
-
-    found = receipts().get_job_started_receipt_by_uuid(job_uuid_present)
-
-    assert found is not None
-    assert str(found.job_uuid) == job_uuid_present
-
-    with pytest.raises(JobStartedReceipt.DoesNotExist):
-        receipts().get_job_started_receipt_by_uuid(job_uuid_missing)
-
-
-@pytest.mark.django_db(transaction=True)
 def test_get_finished_jobs_for_block_range_returns_only_in_range(settings):
     # Setup block timestamps
     start_block = 100

@@ -27,7 +27,6 @@ from django.conf import settings
 from django.db.models import Count, Exists, OuterRef, Subquery
 from django.utils import timezone
 from prometheus_client import Counter, Gauge, Histogram
-from typing_extensions import deprecated
 
 from compute_horde_validator.validator.allowance.default import allowance
 from compute_horde_validator.validator.allowance.utils.supertensor import supertensor
@@ -216,10 +215,6 @@ class Receipts(ReceiptsBase):
         validator_signature = sign_blob(validator_kp, payload.blob_for_signing())
 
         return payload, validator_signature
-
-    @deprecated("Use database queries instead")
-    def get_job_started_receipt_by_uuid(self, job_uuid: str) -> JobStartedReceipt:
-        return JobStartedReceipt.objects.get(job_uuid=job_uuid)
 
     def get_finished_jobs_for_block_range(
         self, start_block: int, end_block: int, executor_class: ExecutorClass, organic_only=False
