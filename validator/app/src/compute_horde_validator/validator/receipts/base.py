@@ -1,10 +1,9 @@
 import datetime
 from abc import ABC, abstractmethod
 
-from compute_horde.receipts.models import JobFinishedReceipt, JobStartedReceipt
+from compute_horde.receipts.models import JobFinishedReceipt
 from compute_horde.receipts.schemas import JobStartedReceiptPayload
 from compute_horde_core.executor_class import ExecutorClass
-from typing_extensions import deprecated
 
 from .types import JobSpendingInfo
 
@@ -84,20 +83,6 @@ class ReceiptsBase(ABC):
 
         Returns:
             Created JobFinishedReceipt
-        """
-        pass
-
-    @deprecated("Use database queries instead")
-    @abstractmethod
-    def get_job_started_receipt_by_uuid(self, job_uuid: str) -> JobStartedReceipt | None:
-        """
-        Get a job started receipt by UUID.
-
-        Args:
-            job_uuid: UUID of the job
-
-        Returns:
-            JobStartedReceipt if found, None otherwise
         """
         pass
 

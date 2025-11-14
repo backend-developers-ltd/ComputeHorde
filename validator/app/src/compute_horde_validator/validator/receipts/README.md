@@ -54,10 +54,6 @@ finished = receipts().create_job_finished_receipt(
 - Query receipts:
 
 ```python
-# JobStarted by job UUID
-receipt: JobStartedReceipt = receipts().get_job_started_receipt_by_uuid(job_uuid: str)
-# Raises: JobStartedReceipt.DoesNotExist if receipt not found
-
 # Finished jobs for block range [start_block, end_block) - including the allowance spending info and job cost
 rows: list[JobSpendingInfo] = receipts().get_finished_jobs_for_block_range(
     start_block: int,
@@ -107,5 +103,3 @@ counts: dict[str, int] = receipts().get_busy_executor_count(
 - `receipttransfer_transfer_errors_total{exc_type}` — per-exception count of transfer errors
 - `receipttransfer_transfer_duration` — histogram of total loop duration
 - `receipttransfer_catchup_pages_left` — gauge of pages left to catch up
-
-
