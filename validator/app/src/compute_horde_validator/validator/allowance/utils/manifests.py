@@ -5,10 +5,8 @@ import logging
 import operator
 from functools import reduce
 
-from compute_horde.manifest_utils import extract_manifest_payload, parse_commitment_string
 from compute_horde.miner_client.organic import OrganicMinerClient
 from compute_horde_core.executor_class import ExecutorClass
-from constance import config
 from django.db import transaction
 from django.db.models import Min, Q
 
@@ -20,35 +18,6 @@ from ..types import ss58_address
 from ..utils.supertensor import supertensor
 
 logger = logging.getLogger(__name__)
-
-
-def parse_commitments_to_manifests(
-    commitments: dict[str, bytes],
-) -> dict[ss58_address, dict[ExecutorClass, int]]:
-    """
-    Parse blockchain commitments into manifest format.
-
-    Args:
-        commitments: Dictionary mapping ss58_address to raw commitment bytes
-
-    Returns:
-        Dictionary mapping ss58_address to dict of ExecutorClass and executor_count
-    """
-    result: dict[ss58_address, dict[ExecutorClass, int]] = {}
-
-    for hotkey, commitment_bytes in commitments.items():
-        try:
-            commitment_str = commitment_bytes.decode("utf-8")
-            _, manifest_payload = extract_manifest_payload(commitment_str)
-            manifest = parse_commitment_string(manifest_payload)
-
-            if manifest:
-                result[hotkey] = manifest
-        except Exception as e:
-            logger.debug(f"Failed to parse commitment for {hotkey}: {e}")
-            continue
-
-    return result
 
 
 def get_manifests(
@@ -105,34 +74,31 @@ def get_current_manifests() -> dict[ss58_address, dict[ExecutorClass, int]]:
     Returns:
         Dictionary mapping hotkey to dict of ExecutorClass and executor_count
     """
-    if config.DYNAMIC_MANIFESTS_USE_KNOWLEDGE_COMMITMENTS:
-        current_block = supertensor().get_current_block()
-        commitments = supertensor().get_commitments(current_block)
-        return parse_commitments_to_manifests(commitments or {})
-    else:
-        manifests = (
-            AllowanceMinerManifest.objects.values(
-                "miner_ss58address", "executor_class", "executor_count", "block_number"
-            )
-            .order_by("miner_ss58address", "executor_class", "-block_number")
-            .distinct("miner_ss58address", "executor_class")
+    # Get the newest manifest for each hotkey-executor_class combination
+    manifests = (
+        AllowanceMinerManifest.objects.values(
+            "miner_ss58address", "executor_class", "executor_count", "block_number"
         )
+        .order_by("miner_ss58address", "executor_class", "-block_number")
+        .distinct("miner_ss58address", "executor_class")
+    )
 
-        result: dict[ss58_address, dict[ExecutorClass, int]] = {}
+    result: dict[ss58_address, dict[ExecutorClass, int]] = {}
 
-        for manifest in manifests:
-            hotkey = manifest["miner_ss58address"]
-            executor_class = ExecutorClass(manifest["executor_class"])
-            executor_count = manifest["executor_count"]
+    # Fill in the manifest data
+    for manifest in manifests:
+        hotkey = manifest["miner_ss58address"]
+        executor_class = ExecutorClass(manifest["executor_class"])
+        executor_count = manifest["executor_count"]
 
-            try:
-                executor_dict = result[hotkey]
-            except KeyError:
-                result[hotkey] = {}
-                executor_dict = result[hotkey]
-            executor_dict[executor_class] = executor_count
+        try:
+            executor_dict = result[hotkey]
+        except KeyError:
+            result[hotkey] = {}
+            executor_dict = result[hotkey]
+        executor_dict[executor_class] = executor_count
 
-        return result
+    return result
 
 
 def get_manifest_drops(
@@ -185,11 +151,6 @@ def event_loop():
 
 
 def sync_manifests():
-    # Only sync manifests via websocket when knowledge commitments are disabled
-    if config.DYNAMIC_MANIFESTS_USE_KNOWLEDGE_COMMITMENTS:
-        logger.info("Skipping manifest sync - knowledge commitments mode enabled")
-        return
-
     block = supertensor().get_current_block()
     neurons = supertensor().get_shielded_neurons()
     max_executors_per_class = get_miner_max_executors_per_class_sync()
