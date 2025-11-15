@@ -287,11 +287,6 @@ CONSTANCE_CONFIG = {
         "Seconds between consecutive receipt polling",
         int,
     ),
-    "DYNAMIC_MANIFESTS_USE_KNOWLEDGE_COMMITMENTS": (
-        False,
-        "Use Bittensor knowledge commitments instead of websocket for manifest fetching",
-        bool,
-    ),
     "DYNAMIC_JOB_FAILURE_BLACKLIST_TIME_SECONDS": (
         int(timedelta(hours=4).total_seconds()),
         "Amount of time a miner will be temporarily blacklisted for after failing an organic job.",
