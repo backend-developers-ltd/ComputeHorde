@@ -1,7 +1,9 @@
 import uuid
+from contextlib import suppress
 from pathlib import Path
 from textwrap import dedent
 
+import aiodocker
 import asyncssh
 import pytest
 import pytest_asyncio
@@ -118,3 +120,25 @@ async def test_docker_executor_manager_ssh_tunnel(settings, config_path):
 
         exit_code = await executor_manager.wait_for_executor(executor, 10)
         assert exit_code is not None
+
+
+@pytest_asyncio.fixture
+async def docker_client():
+    async with aiodocker.Docker() as docker:
+        yield docker
+
+
+@pytest.mark.asyncio
+@pytest.mark.django_db
+async def test_docker_executor_manager_prepare_executor_image(settings, docker_client):
+    settings.ADDRESS_FOR_EXECUTORS = "127.0.0.1"
+    settings.DEBUG_AUTO_REMOVE_EXECUTOR_CONTAINERS = True
+    settings.EXECUTOR_IMAGE = "alpine:latest"
+
+    with suppress(aiodocker.DockerError):
+        await docker_client.images.delete("alpine:latest")
+
+    executor_manager = DockerExecutorManager()
+    await executor_manager.prepare_executor_image()
+
+    await docker_client.images.inspect("alpine:latest")  # this should not raise

@@ -126,3 +126,10 @@ def commit_manifest_to_chain():
 
     except Exception as e:
         logger.error(f"Error in commit_manifest_to_chain: {e}", exc_info=True)
+
+
+@app.task
+def prepare_executor_image():
+    from compute_horde_miner.miner.executor_manager import current
+
+    async_to_sync(current.executor_manager.prepare_executor_image)()
