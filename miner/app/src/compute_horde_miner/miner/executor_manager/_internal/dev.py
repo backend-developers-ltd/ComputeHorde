@@ -3,7 +3,6 @@ import os
 import pathlib
 import subprocess
 
-from compute_horde_core.executor_class import ExecutorClass
 from django.conf import settings
 
 from compute_horde_miner.miner.executor_manager._internal.base import (
@@ -59,8 +58,7 @@ class DevExecutorManager(BaseExecutorManager):
             pass
 
     async def get_manifest(self):
-        executor_class = ExecutorClass(settings.DEFAULT_EXECUTOR_CLASS)
-        return {executor_class: 1}
+        return {settings.DEFAULT_EXECUTOR_CLASS: 1}
 
     async def get_executor_public_address(self, executor: str) -> str | None:
         return "127.0.0.1"

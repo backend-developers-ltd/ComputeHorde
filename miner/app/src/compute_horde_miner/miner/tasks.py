@@ -1,6 +1,5 @@
 import datetime
 
-import bittensor
 from asgiref.sync import async_to_sync
 from celery.utils.log import get_task_logger
 from compute_horde.dynamic_config import fetch_dynamic_configs_from_contract, sync_dynamic_config
@@ -12,7 +11,6 @@ from django.conf import settings
 
 from compute_horde_miner.celery import app
 from compute_horde_miner.miner import eviction, quasi_axon
-from compute_horde_miner.miner.manifest_commitment import commit_manifest_to_subtensor
 from compute_horde_miner.miner.models import Validator
 from compute_horde_miner.miner.receipts import current_store
 
@@ -98,34 +96,6 @@ def archive_receipt_pages():
         return
 
     store.archive_old_pages()
-
-
-@app.task
-def commit_manifest_to_chain():
-    """
-    Commits manifest to chain.
-    """
-    try:
-        from compute_horde_miner.miner.executor_manager import current
-
-        manifest = async_to_sync(current.executor_manager.get_manifest)()
-
-        wallet = settings.BITTENSOR_WALLET()
-        subtensor = bittensor.subtensor(network=settings.BITTENSOR_NETWORK)
-
-        success = commit_manifest_to_subtensor(
-            manifest,
-            wallet,
-            subtensor,
-            settings.BITTENSOR_NETUID,
-        )
-        if success:
-            logger.info("Successfully committed manifest to chain")
-        else:
-            logger.warning("Failed to commit manifest to chain")
-
-    except Exception as e:
-        logger.error(f"Error in commit_manifest_to_chain: {e}", exc_info=True)
 
 
 @app.task
