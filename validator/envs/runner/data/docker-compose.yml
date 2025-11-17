@@ -219,8 +219,10 @@ services:
       - BITTENSOR_WALLET_NAME=${BITTENSOR_WALLET_NAME}
       - BITTENSOR_WALLET_HOTKEY_NAME=${BITTENSOR_WALLET_HOTKEY_NAME}
       - SENTRY_DSN=${SENTRY_DSN}
+      - PROMETHEUS_MULTIPROC_DIR=/prometheus-multiproc-dir/prometheus-proxy
     volumes:
       - ${HOST_WALLET_DIR}:/root/.bittensor/wallets
+      - ./prometheus-metrics:/prometheus-multiproc-dir
 
   celery-flower:
     image: backenddevelopersltd/${VALIDATOR_IMAGE_REPO}:v0-latest
