@@ -26,7 +26,7 @@ services:
       <<: *logging
 
   pylon:
-    image: docker.io/backenddevelopersltd/bittensor-pylon:git-0d2c4f8d3888ef395abab239b39619af84119c94@sha256:65a14854cd95a79afbd1ecac1f4d1aec7ddc50b3f3b418e6443074e415e41885
+    image: docker.io/backenddevelopersltd/bittensor-pylon:shield-hotfix@sha256:291f7891a490021c2eeddc2d86b5853d244f88dfd49b0cf8d8499faf7180b1d9
     init: true
     restart: unless-stopped
     env_file: ./.env
