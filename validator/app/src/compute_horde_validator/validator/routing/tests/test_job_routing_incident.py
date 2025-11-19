@@ -1,5 +1,4 @@
 import asyncio
-import contextlib
 import datetime as dt
 import uuid
 from collections.abc import Iterable
@@ -12,13 +11,11 @@ from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.fv_protocol.facilitator_requests import V2JobRequest
 from compute_horde.miner_client.organic import OrganicMinerClient
 from compute_horde.protocol_messages import V0DeclineJobRequest
-from compute_horde.transport import AbstractTransport
 from compute_horde_core.executor_class import ExecutorClass as CoreExecutorClass
 from django.conf import settings
 from django.db.models import Sum as DjangoSum
 
 from compute_horde_validator.validator.allowance.default import allowance
-from compute_horde_validator.validator.allowance.types import Miner as AllowanceMiner
 from compute_horde_validator.validator.allowance.types import ValidatorModel
 from compute_horde_validator.validator.allowance.utils import blocks, manifests
 from compute_horde_validator.validator.allowance.utils import supertensor as st_mod
@@ -32,10 +29,14 @@ from compute_horde_validator.validator.models.allowance.internal import (
 from compute_horde_validator.validator.models.allowance.internal import (
     BlockAllowance as _DbgBlockAllowance,
 )
-from compute_horde_validator.validator.organic_jobs.facilitator_client import FacilitatorClient
+from compute_horde_validator.validator.organic_jobs.facilitator_client.facilitator_connector import (
+    FacilitatorClient,
+)
+from compute_horde_validator.validator.organic_jobs.facilitator_client.job_request_manager import (
+    JobRequestManager,
+)
 from compute_horde_validator.validator.organic_jobs.miner_driver import drive_organic_job
 from compute_horde_validator.validator.routing.default import routing
-from compute_horde_validator.validator.routing.types import JobRoute
 from compute_horde_validator.validator.tests.transport import SimulationTransport
 
 
@@ -356,55 +357,13 @@ async def test_excused_job_no_incident(monkeypatch):
     )
     await faci_transport.add_message(request, send_before=0)
 
-    # Patch routing to return a deterministic miner; we bypass full allowance + miner driver.
-
-    async def fake_pick_miner(request):  # noqa: D401
-        # Ensure Miner ORM row so later code linking incidents / status updates works
+    # Patch job execution to directly create an EXCUSED OrganicJob without invoking miner driver / celery
+    async def fake_execute(job_request):  # noqa: D401
         orm_miner, _ = await Miner.objects.aget_or_create(
             hotkey="excused_miner_hotkey",
             defaults={"address": "127.0.0.1", "port": 4321, "ip_version": 4},
         )
-        return JobRoute(
-            miner=AllowanceMiner(
-                address=orm_miner.address or "127.0.0.1",
-                ip_version=orm_miner.ip_version or 4,
-                port=orm_miner.port or 4321,
-                hotkey_ss58=orm_miner.hotkey,
-            ),
-            allowance_blocks=[],
-            allowance_reservation_id=1,
-            allowance_job_value=0,
-        )
-
-    class _FakeRouting:
-        async def pick_miner_for_job_request(self, request):  # noqa: D401
-            return await fake_pick_miner(request)
-
-    monkeypatch.setattr(
-        "compute_horde_validator.validator.organic_jobs.facilitator_client.routing",  # where it's imported
-        lambda: _FakeRouting(),
-    )
-
-    class _SimulationTransportWsAdapter:
-        def __init__(self, transport: AbstractTransport):
-            self.transport = transport
-
-        async def send(self, msg: str):  # noqa: D401
-            await self.transport.send(msg)
-
-        async def recv(self) -> str:  # noqa: D401
-            data = await self.transport.receive()
-            if isinstance(data, (bytes, bytearray, memoryview)):  # noqa: UP038
-                return bytes(data).decode()
-            return str(data)
-
-        def __aiter__(self):
-            return self.transport
-
-    # Patch job execution to directly create an EXCUSED OrganicJob without invoking miner driver / celery
-    async def fake_execute(job_request, job_route):  # noqa: D401
-        orm_miner = await Miner.objects.aget(hotkey="excused_miner_hotkey")
-        job = await OrganicJob.objects.acreate(
+        await OrganicJob.objects.acreate(
             job_uuid=job_request.uuid,
             miner=orm_miner,
             miner_address=orm_miner.address or "127.0.0.1",
@@ -415,27 +374,32 @@ async def test_excused_job_no_incident(monkeypatch):
             block=0,
             status=OrganicJob.Status.EXCUSED,
         )
-        return job
 
     with (
-        patch.object(FacilitatorClient, "heartbeat", AsyncMock()),
-        patch.object(FacilitatorClient, "wait_for_specs", AsyncMock()),
         patch(
-            "compute_horde_validator.validator.organic_jobs.facilitator_client.verify_request_or_fail",
+            "compute_horde_validator.validator.organic_jobs.facilitator_client.jobs_task.verify_request_or_fail",
             AsyncMock(),
         ),
         patch(
-            "compute_horde_validator.validator.organic_jobs.facilitator_client.execute_organic_job_request_on_worker",
+            "compute_horde_validator.validator.organic_jobs.facilitator_client.job_request_manager.verify_and_submit_organic_job_request",
             fake_execute,
         ),
     ):
-        faci_client = FacilitatorClient(settings.BITTENSOR_WALLET().hotkey, "")
+        faci_client = FacilitatorClient(
+            keypair=settings.BITTENSOR_WALLET().hotkey, transport_layer=faci_transport
+        )
+        job_request_manager = JobRequestManager()
+
+        # Set retry intervals to 0 as this is all simulated
+        faci_client.message_manager.MSG_RETRY_DELAY = 0
+        faci_client.message_manager.EMPTY_MSG_QUEUE_BACKOFF_INTERVAL = 0
+
+        await faci_client.start()
+        await job_request_manager.start()
+        await asyncio.sleep(0.1)
 
         async def run_until():
-            async with faci_client, asyncio.timeout(2):
-                task = asyncio.create_task(
-                    faci_client.handle_connection(_SimulationTransportWsAdapter(faci_transport))
-                )
+            async with asyncio.timeout(10):
                 # Wait until job recorded as EXCUSED
                 while True:
                     try:
@@ -445,11 +409,11 @@ async def test_excused_job_no_incident(monkeypatch):
                     except OrganicJob.DoesNotExist:  # noqa: PERF203
                         pass
                     await asyncio.sleep(0.05)
-                task.cancel()
-                with contextlib.suppress(asyncio.CancelledError):
-                    await task
 
         await run_until()
+
+        await faci_client.stop()
+        await job_request_manager.stop()
 
     job = await OrganicJob.objects.aget(job_uuid=job_uuid)
     assert job.status == OrganicJob.Status.EXCUSED

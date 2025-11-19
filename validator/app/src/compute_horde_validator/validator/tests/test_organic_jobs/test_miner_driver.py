@@ -18,8 +18,7 @@ from compute_horde.protocol_messages import (
     V0VolumesReadyRequest,
 )
 
-from compute_horde_validator.validator.models import Miner
-from compute_horde_validator.validator.organic_jobs.facilitator_client import OrganicJob
+from compute_horde_validator.validator.models import Miner, OrganicJob
 from compute_horde_validator.validator.organic_jobs.miner_driver import drive_organic_job
 
 from ..helpers import (

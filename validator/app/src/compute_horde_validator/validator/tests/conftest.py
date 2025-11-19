@@ -8,10 +8,15 @@ import bittensor_wallet
 import pytest
 import turbobt
 from compute_horde.executor_class import EXECUTOR_CLASS
+from compute_horde.fv_protocol.facilitator_requests import OrganicJobRequest
 from compute_horde_core.executor_class import ExecutorClass
 from pytest_mock import MockerFixture
 
-from ..organic_jobs.miner_driver import execute_organic_job_request
+from compute_horde_validator.validator.organic_jobs.miner_driver import (
+    execute_organic_job_request,
+)
+from compute_horde_validator.validator.routing.default import routing
+
 from .helpers import MockNeuron, MockSyntheticMinerClient
 
 logger = logging.getLogger(__name__)
@@ -41,11 +46,31 @@ def _patch_current_block():
         yield
 
 
+async def _execute_organic_job_skip_celery(job_request: OrganicJobRequest):
+    """
+    Replaces the execute function with one that runs the job without Celery.
+
+    NOTE: This is a poor workaround to the current issue:
+        - Tests use asyncio primitives (like Conditions) to control the flow
+          of the test but Celery tasks don't play nicely with asyncio and don't
+          receive the messages sent by the mock transports.
+        - This workaround means that the error actions taken by the Celery task
+          if the job fails can't be properly tested.
+        - This can be fixed by ensuring that the Celery task doesn't need to run
+          async_to_sync, i.e. making everything in 'execute_organic_job_request'
+          synchronous, and then just replacing the .apply_async() call with an
+          .apply() call.
+    """
+    job_route = await routing().pick_miner_for_job_request(job_request)
+    logger.info(f"Selected miner {job_route.miner.hotkey_ss58} for job {job_request.uuid}")
+    await execute_organic_job_request(job_request, job_route)
+
+
 @pytest.fixture(autouse=True)
 def _patch_celery_job_execution():
     with patch(
-        "compute_horde_validator.validator.organic_jobs.facilitator_client.jobs_task.execute_organic_job_request_on_worker",
-        execute_organic_job_request,
+        "compute_horde_validator.validator.organic_jobs.facilitator_client.jobs_task.execute_organic_job",
+        _execute_organic_job_skip_celery,
     ):
         yield
 

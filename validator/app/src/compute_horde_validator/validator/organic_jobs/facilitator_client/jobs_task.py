@@ -1,6 +1,5 @@
 import logging
 
-import pydantic
 from compute_horde.fv_protocol.facilitator_requests import (
     OrganicJobRequest,
     V0JobCheated,
@@ -23,10 +22,8 @@ from compute_horde_validator.validator.models import (
     ValidatorWhitelist,
 )
 from compute_horde_validator.validator.organic_jobs import blacklist
-from compute_horde_validator.validator.organic_jobs.blacklist import report_miner_failed_job
-from compute_horde_validator.validator.routing.default import routing
 from compute_horde_validator.validator.tasks import (
-    execute_organic_job_request_on_worker,
+    execute_organic_job,
     slash_collateral_task,
 )
 
@@ -43,16 +40,16 @@ class JobRequestVerificationFailed(Exception):
         super().__init__(message)
 
 
-class InvalidJobRequestFormat(Exception):
-    def __init__(self, message: str):
-        self.message = message
-        super().__init__(message)
-
-
 async def verify_request_or_fail(job_request: SignedRequest) -> None:
     """
     Check that the signer is in validator whitelist and that the signature is
     valid.
+
+    Args:
+        job_request (SignedRequest): The signed job request.
+
+    Raises:
+        JobRequestVerificationFailed: If the job request is not valid.
     """
     if job_request.signature is None:
         raise JobRequestVerificationFailed("Signature is empty")
@@ -76,6 +73,9 @@ async def verify_request_or_fail(job_request: SignedRequest) -> None:
 async def process_miner_cheat_report(cheated_job_request: V0JobCheated) -> None:
     """
     Process a cheated job report and blacklist the miner.
+
+    Args:
+        cheated_job_request (V0JobCheated): The cheated job request.
     """
     try:
         await verify_request_or_fail(cheated_job_request)
@@ -122,40 +122,27 @@ async def process_miner_cheat_report(cheated_job_request: V0JobCheated) -> None:
         slash_collateral_task.delay(str(job.job_uuid))
 
 
-async def job_request_task(job_request: str) -> None:
+async def verify_and_submit_organic_job_request(job_request: OrganicJobRequest) -> None:
     """
-    Select an appropriate miner for the task and submit the task to it.
+    Verify and submit an organic job request as a Celery task.
 
     Args:
-        job_request (str): The job request as a JSON string.
-    """
-    try:
-        organic_job_request: OrganicJobRequest = pydantic.TypeAdapter(
-            OrganicJobRequest
-        ).validate_json(job_request)
-    except pydantic.ValidationError:
-        raise InvalidJobRequestFormat(f"Invalid job request format: {job_request}")
+        job_request (OrganicJobRequest): The organic job request.
 
-    logger.debug(f"Received signed job request: {organic_job_request}")
-    await verify_request_or_fail(organic_job_request)
+    Raises:
+        JobRequestVerificationFailed: If the job request cannot be verified.
+    """
+    await verify_request_or_fail(job_request)
+    logger.debug(f"Received signed job request: {job_request}")
 
     # Notify facilitator that the job request has been received
     try:
         await safe_send_local_message(
             channel=JOB_STATUS_UPDATE_CHANNEL,
-            message=JobStatusUpdate(uuid=organic_job_request.uuid, status=JobStatus.RECEIVED),
+            message=JobStatusUpdate(uuid=job_request.uuid, status=JobStatus.RECEIVED),
         )
     except LocalChannelSendError as exc:
-        # Not sending a job update shouldn't abort the job itself
+        # Not sending this job update shouldn't abort the job itself
         logger.error(str(exc))
 
-    # Select an appropriate miner for the task and submit the task to it
-    job_route = await routing().pick_miner_for_job_request(organic_job_request)
-    logger.info(f"Selected miner {job_route.miner.hotkey_ss58} for job {organic_job_request.uuid}")
-    job = await execute_organic_job_request_on_worker(organic_job_request, job_route)
-    logger.info(
-        f"Job {organic_job_request.uuid} finished with status: {job.status} (comment={job.comment})"
-    )
-
-    if job.status == OrganicJob.Status.FAILED:
-        await report_miner_failed_job(job)
+    await execute_organic_job(job_request=job_request)

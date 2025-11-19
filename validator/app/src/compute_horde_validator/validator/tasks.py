@@ -5,19 +5,32 @@ import time
 import uuid
 from datetime import timedelta
 from math import ceil, floor
+from typing import Any
 
 import billiard.exceptions
 import requests
+import sentry_sdk
 import tenacity
 import turbobt
-import turbobt.substrate.exceptions
 from asgiref.sync import async_to_sync, sync_to_async
-from celery import shared_task
+from celery import Task, shared_task
 from celery.result import AsyncResult
 from celery.utils.log import get_task_logger
 from compute_horde.dynamic_config import fetch_dynamic_configs_from_contract, sync_dynamic_config
 from compute_horde.fv_protocol.facilitator_requests import OrganicJobRequest
+from compute_horde.fv_protocol.validator_requests import (
+    HordeFailureDetails,
+    JobRejectionDetails,
+    JobStatusMetadata,
+    JobStatusUpdate,
+)
+from compute_horde.job_errors import HordeError
 from compute_horde.miner_client.organic import OrganicMinerClient
+from compute_horde.protocol_consts import (
+    JobParticipantType,
+    JobRejectionReason,
+    JobStatus,
+)
 from compute_horde.smart_contracts.map_contract import get_dynamic_config_types_from_settings
 from compute_horde.utils import turbobt_get_validators
 from compute_horde_core.executor_class import ExecutorClass
@@ -28,6 +41,7 @@ from django.utils.timezone import now
 from pydantic import JsonValue, TypeAdapter
 
 from compute_horde_validator.celery import app
+from compute_horde_validator.validator.allowance.types import NotEnoughAllowanceException
 from compute_horde_validator.validator.collateral.default import collateral
 from compute_horde_validator.validator.cross_validation.prompt_answering import answer_prompts
 from compute_horde_validator.validator.cross_validation.prompt_generation import generate_prompts
@@ -43,12 +57,23 @@ from compute_horde_validator.validator.models import (
     SyntheticJobBatch,
     SystemEvent,
 )
+from compute_horde_validator.validator.organic_jobs.blacklist import report_miner_failed_job
+from compute_horde_validator.validator.organic_jobs.facilitator_client.constants import (
+    JOB_STATUS_UPDATE_CHANNEL,
+)
+from compute_horde_validator.validator.organic_jobs.facilitator_client.exceptions import (
+    LocalChannelSendError,
+)
+from compute_horde_validator.validator.organic_jobs.facilitator_client.util import (
+    safe_send_local_message,
+)
 from compute_horde_validator.validator.organic_jobs.miner_client import MinerClient
 from compute_horde_validator.validator.organic_jobs.miner_driver import (
     drive_organic_job,
     execute_organic_job_request,
 )
-from compute_horde_validator.validator.routing.types import JobRoute
+from compute_horde_validator.validator.routing.default import routing
+from compute_horde_validator.validator.routing.types import JobRoute, JobRoutingException
 from compute_horde_validator.validator.s3 import (
     download_prompts_from_s3_url,
     generate_upload_url,
@@ -866,30 +891,96 @@ def wait_for_celery_result(task_id: str, timeout: float | None = None) -> None:
     return future_result.get(timeout=timeout)
 
 
-async def execute_organic_job_request_on_worker(
-    job_request: OrganicJobRequest, job_route: JobRoute
-) -> OrganicJob:
+async def execute_organic_job(job_request: OrganicJobRequest) -> None:
     """
-    Sends the job request to be executed on a celery worker and waits for the result.
-    Returns the OrganicJob created for the request (success or not).
-    Hint: the task also sends job status updates to a django channel:
-        ```
-        while True:
-            msg = await get_channel_layer().receive(JOB_STATUS_UPDATE_CHANNEL)
-        ```
+    Select an appropriate miner for the job request and run the job on a Celery worker.
+
+    Args:
+        job_request (OrganicJobRequest): The job request.
     """
-    timeout = await aget_config("ORGANIC_JOB_CELERY_WAIT_TIMEOUT")
-    future_result: AsyncResult[None] = _execute_organic_job_on_worker.apply_async(
+    job_route = await routing().pick_miner_for_job_request(job_request)
+    logger.info(f"Selected miner {job_route.miner.hotkey_ss58} for job {job_request.uuid}")
+    _execute_organic_job_on_worker.apply_async(
         args=(job_request.model_dump(), job_route.model_dump()),
-        expires=timeout,
+        expires=await aget_config("ORGANIC_JOB_CELERY_WAIT_TIMEOUT"),
     )
-    await sync_to_async(wait_for_celery_result, thread_sensitive=False)(
-        future_result.id, timeout=timeout
-    )
-    return await OrganicJob.objects.aget(job_uuid=job_request.uuid)
 
 
-@app.task
+class OrganicJobTask(Task):  # type: ignore[type-arg]
+    """
+    A custom task base class for organic jobs that defines callbacks in case a job fails or ends
+    with a FAILED status.
+
+    Any task that uses this base class MUST have the job request as a keyword argument or the first
+    non-keyword argument!
+    """
+
+    def _extract_job_uuid(self, args: tuple[Any], kwargs: dict[str, Any]) -> str:
+        """
+        Obtain the job uuid from the original task arguments.
+        """
+        try:
+            job_request = kwargs.get("job_request") or args[0]
+            return job_request["uuid"]  # type: ignore[no-any-return]
+        except (AttributeError, IndexError, KeyError):
+            return "UNKNOWN"  # uuid can't be parsed if the job request was mangled
+
+    def on_failure(self, exc, task_id, args, kwargs, einfo):
+        """
+        Inform the facilitator in the event of the job failing.
+        """
+        job_uuid = self._extract_job_uuid(args, kwargs)
+        if isinstance(exc, (NotEnoughAllowanceException, JobRoutingException)):  # noqa: UP038
+            message = JobStatusUpdate(
+                uuid=job_uuid,
+                status=JobStatus.REJECTED,
+                metadata=JobStatusMetadata(
+                    job_rejection_details=JobRejectionDetails(
+                        rejected_by=JobParticipantType.VALIDATOR,
+                        reason=JobRejectionReason.NO_MINER_FOR_JOB,
+                        message="Job could not be routed to a miner",
+                        context={"exception_type": type(exc).__qualname__},
+                    ),
+                ),
+            )
+        else:
+            sentry_sdk.capture_exception(exc)
+            wrapped_exc = HordeError.wrap_unhandled(exc)
+            message = JobStatusUpdate(
+                uuid=job_uuid,
+                status=JobStatus.HORDE_FAILED,
+                metadata=JobStatusMetadata(
+                    horde_failure_details=HordeFailureDetails(
+                        reported_by=JobParticipantType.VALIDATOR,
+                        reason=wrapped_exc.reason,
+                        message=wrapped_exc.message,
+                        context=wrapped_exc.context,
+                    ),
+                ),
+            )
+
+        try:
+            async_to_sync(safe_send_local_message)(
+                channel=JOB_STATUS_UPDATE_CHANNEL,
+                message=message,
+            )
+        except LocalChannelSendError as exc:
+            logger.error(str(exc))
+
+    def on_success(self, retval, task_id, args, kwargs):
+        """
+        Report that a miner has failed if the task completes successfully but the job has a FAILED
+        status.
+        """
+        job_uuid = self._extract_job_uuid(args, kwargs)
+        job = OrganicJob.objects.get(job_uuid=job_uuid)
+        logger.info(f"Job {job_uuid} finished with status: {job.status} (comment={job.comment})")
+
+        if job.status == OrganicJob.Status.FAILED:
+            async_to_sync(report_miner_failed_job)(job)
+
+
+@app.task(base=OrganicJobTask)
 def _execute_organic_job_on_worker(job_request: JsonValue, job_route: JsonValue) -> None:
     request: OrganicJobRequest = TypeAdapter(OrganicJobRequest).validate_python(job_request)
     route: JobRoute = TypeAdapter(JobRoute).validate_python(job_route)

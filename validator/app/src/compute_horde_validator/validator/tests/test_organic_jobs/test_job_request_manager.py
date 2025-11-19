@@ -29,9 +29,14 @@ async def wait_until_async(predicate, timeout: float = 10.0, interval: float = 0
 @pytest.mark.asyncio
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 @patch(
-    "compute_horde_validator.validator.organic_jobs.facilitator_client.job_request_manager.job_request_task.delay"
+    # "compute_horde_validator.validator.tasks._execute_organic_job_on_worker.apply_async"
+    "compute_horde_validator.validator.organic_jobs.facilitator_client.jobs_task.execute_organic_job"
 )
-async def test_job_request_manager_submits_job_request(mock_delay, job_request):
+@patch(
+    "compute_horde_validator.validator.organic_jobs.facilitator_client.jobs_task.verify_request_or_fail",
+)
+async def test_job_request_manager_submits_job_request(mock_exec, verify_mock, job_request):
+    verify_mock.return_value = True
     job_request_manager = JobRequestManager()
     await job_request_manager.start()
     await asyncio.sleep(0.1)
@@ -42,10 +47,10 @@ async def test_job_request_manager_submits_job_request(mock_delay, job_request):
     await asyncio.sleep(0.1)
 
     # Assert that job_request_task.delay was called with the correct argument
-    mock_delay.assert_called_once()
-    call_args = mock_delay.call_args[0]
+    mock_exec.assert_called_once()
+    call_args = mock_exec.call_args.args
     assert len(call_args) == 1
-    assert call_args[0] == job_request.model_dump_json()
+    assert call_args[0] == job_request
 
     await job_request_manager.stop()
 
