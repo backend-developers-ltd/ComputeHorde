@@ -51,13 +51,14 @@ def _enqueue_send_job_to_validator(job: Job) -> None:
 
 
 def timeout_sent_jobs() -> None:
-    """Timeout Jobs that are "SENT" but not accepted."""
+    """Timeout Jobs that are "SENT" by setting their status to "HORDE_FAILED."""
     cutoff = timezone.now() - timedelta(seconds=60)
 
     latest_job_statuses_qs = JobStatus.objects.filter(job=OuterRef("pk")).order_by("-created_at")
-    jobs = Job.objects.annotate(latest_status=Subquery(latest_job_statuses_qs.values("status")[:1])).filter(
-        created_at__lte=cutoff, latest_status__in=[protocol_consts.JobStatus.SENT.value]
-    )
+    jobs = Job.objects.annotate(
+        latest_status=Subquery(latest_job_statuses_qs.values("status")[:1]),
+        latest_status_created_at=Subquery(latest_job_statuses_qs.values("created_at")[:1]),
+    ).filter(latest_status_created_at__lte=cutoff, latest_status__in=[protocol_consts.JobStatus.SENT.value])
 
     for job in jobs:
         JobStatus.objects.create(job=job, status=protocol_consts.JobStatus.HORDE_FAILED.value)
