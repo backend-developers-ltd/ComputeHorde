@@ -201,30 +201,6 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
         log.debug("sending cheated report", payload=payload)
         self.send_to_validator(payload)
 
-    def select_validator(self) -> Validator:
-        """
-        Select a validator for the job.
-
-        Currently the one with least recent job request is selected.
-        This method is expected to be run within a transaction.
-        """
-
-        # select validators which are currently connected via WS
-        validator_ids: set[int] = set(
-            Channel.objects.filter(last_heartbeat__gte=now() - timedelta(minutes=3)).values_list(
-                "validator_id", flat=True
-            )
-        )
-        log.debug("connected validators", validator_ids=validator_ids)
-
-        if self.signature is None:
-            raise ValueError("Request must be signed when target_validator_hotkey is set")
-        validator = Validator.objects.filter(ss58_address=self.target_validator_hotkey).first()
-        if validator and validator.id in validator_ids:
-            log.debug("selected (targeted) validator", validator=validator)
-            return validator
-        raise Validator.DoesNotExist
-
     @property
     def sender(self) -> str:
         return self.hotkey or self.user.username

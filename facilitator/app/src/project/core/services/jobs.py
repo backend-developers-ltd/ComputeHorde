@@ -26,13 +26,19 @@ def create_job(*, validated_data: dict) -> Job:
        request to the validator using a Celery task
     """
     job = Job(**validated_data)
-    job.validator = Validator.objects.get(ss58_address=job.target_validator_hotkey)
+    job.validator = _get_validator(ss58_address=job.target_validator_hotkey)
     job.save()
     JobStatus.objects.create(job=job, status=protocol_consts.JobStatus.PENDING.value)
 
     transaction.on_commit(partial(_enqueue_send_job_to_validator, job=job))
 
     return job
+
+
+def _get_validator(ss58_address: str) -> Validator:
+    """Returns the connected Validator matching the given `ss58_address`."""
+    cutoff = timezone.now() - timedelta(minutes=3)
+    return Validator.objects.filter(ss58_address=ss58_address, channels__last_heartbeat__gte=cutoff).distinct().get()
 
 
 def _enqueue_send_job_to_validator(job: Job) -> None:
