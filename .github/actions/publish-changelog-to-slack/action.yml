@@ -1,0 +1,24 @@
+name: Publish Changelog to Slack
+description: Post changelog to Slack webhook
+
+inputs:
+  changelog-file:
+    description: 'Path to changelog JSON file'
+    required: true
+  message-title:
+    description: 'Title/header for the Slack message'
+    required: true
+  webhook-url:
+    description: 'Slack webhook URL'
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Publish to Slack
+      shell: bash
+      run: |
+        uv run ${{ github.action_path }}/publish.py \
+          --title "${{ inputs.message-title }}" \
+          --webhook-url "${{ inputs.webhook-url }}" \
+          < "${{ inputs.changelog-file }}"
