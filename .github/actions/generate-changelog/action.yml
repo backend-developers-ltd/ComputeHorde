@@ -1,0 +1,32 @@
+name: Generate Changelog
+description: Generate changelog between two release tags
+
+inputs:
+  current-tag:
+    description: 'Current release tag'
+    required: true
+  previous-tag:
+    description: 'Previous release tag'
+    required: true
+  output-file:
+    description: 'Path to write changelog JSON'
+    required: true
+  project:
+    description: 'Project name to filter commits by Impacts trailer'
+    required: false
+  exclude-types:
+    description: 'Comma-separated list of commit types to exclude from changelog'
+    required: false
+
+runs:
+  using: composite
+  steps:
+    - name: Generate changelog
+      shell: bash
+      run: |
+        uv run ${{ github.action_path }}/generate.py \
+          --new-ref "${{ inputs.current-tag }}" \
+          --previous-ref "${{ inputs.previous-tag }}" \
+          ${{ inputs.project && format('--project "{0}"', inputs.project) || '' }} \
+          ${{ inputs.exclude-types && format('--exclude "{0}"', inputs.exclude-types) || '' }} \
+          > "${{ inputs.output-file }}"

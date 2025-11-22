@@ -74,3 +74,29 @@ jobs:
                 ref: `refs/tags/${DIST_VERSION}`,
                 sha: context.sha
             })
+      - name: Find tags for changelog
+        id: tags
+        run: |
+          current="${DIST_VERSION}"
+          previous=$(git tag -l "${DIST_VERSION_PREFIX}-*" --sort=-refname | head -2 | tail -1)
+          echo "current=$current" >> $GITHUB_OUTPUT
+          echo "previous=$previous" >> $GITHUB_OUTPUT
+      - name: Generate changelog
+        uses: ./.github/actions/generate-changelog
+        with:
+          current-tag: ${{ steps.tags.outputs.current }}
+          previous-tag: ${{ steps.tags.outputs.previous }}
+          output-file: changelog.json
+          project: miner-runner
+          exclude-types: "chore,ci,style,build,test,doc"
+      - name: Upload changelog artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: changelog
+          path: changelog.json
+      - name: Publish to Slack
+        uses: ./.github/actions/publish-changelog-to-slack
+        with:
+          changelog-file: changelog.json
+          message-title: "*miner-runner* was just released to *prod*!"
+          webhook-url: ${{ secrets.CHANGELOG_SLACK_WEBHOOK_URL }}
