@@ -170,6 +170,7 @@ def test_docker_job_viewset_create(api_client, user, connected_validator, mock_s
     assert job.env == {"MY_ENV": "my value"}
     assert job.use_gpu is True
     assert job.user == user
+    assert job.validator == connected_validator
 
 
 @pytest.mark.django_db
@@ -192,6 +193,7 @@ def test_docker_job_viewset_create_streaming(api_client, user, connected_validat
     job = Job.objects.first()
     assert job.docker_image == "hello-world"
     assert job.streaming_client_cert == "dummy-client-cert"
+    assert job.validator == connected_validator
 
     job.streaming_server_cert = "dummy-server-cert"
     job.streaming_server_address = "127.0.0.1"
@@ -305,6 +307,7 @@ def test_hotkey_authentication__job_create(
     assert job.use_gpu is False
     assert job.user is None
     assert job.hotkey == wallet.hotkey.ss58_address
+    assert job.validator == connected_validator
 
 
 @pytest.mark.django_db
