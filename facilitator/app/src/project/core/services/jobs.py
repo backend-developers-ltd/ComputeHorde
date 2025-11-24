@@ -13,6 +13,9 @@ from project.core.tasks import send_job_to_validator_task
 logger = structlog.get_logger(__name__)
 
 
+TIMEOUT_SENT_JOB_CUTOFF_SECONDS = 60
+
+
 @transaction.atomic()
 def create_job(*, validated_data: dict) -> Job:
     """
@@ -52,7 +55,7 @@ def _enqueue_send_job_to_validator(job: Job) -> None:
 
 def timeout_sent_jobs() -> None:
     """Timeout Jobs that are "SENT" by setting their status to "HORDE_FAILED."""
-    cutoff = timezone.now() - timedelta(seconds=60)
+    cutoff = timezone.now() - timedelta(seconds=TIMEOUT_SENT_JOB_CUTOFF_SECONDS)
 
     latest_job_statuses_qs = JobStatus.objects.filter(job=OuterRef("pk")).order_by("-created_at")
     jobs = Job.objects.annotate(
