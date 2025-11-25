@@ -2,6 +2,7 @@ import asyncio
 from unittest import mock
 
 import pytest
+from asgiref.sync import sync_to_async
 from more_itertools import one
 
 from ..models import JobStatus
@@ -158,5 +159,6 @@ async def test__websocket__new_job__no_broadcasting__unauth(communicator, job):
 async def test__websocket__new_job__received(communicator, authenticated, job):
     """Check that new job message is received by connected validator"""
 
+    await sync_to_async(job.send_to_validator)(payload=job.as_job_request().model_dump())
     received_job_request = await communicator.receive_json_from()
     assert received_job_request == job.as_job_request().dict()
