@@ -18,7 +18,9 @@ logger = logging.getLogger(__name__)
 
 @app.task
 def sync_miners(block_number: int | None = None) -> None:
-    """Sync Miner models."""
+    """
+    Sync Miner models.
+    """
     if block_number is None:
         block_number = allowance().get_current_block()
 
