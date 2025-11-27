@@ -10,6 +10,7 @@ env:
   TAG_VERSION: "v0-latest"
   DOCKER_REPO_NAME: "backenddevelopersltd/compute-horde-validator-staging"
   DIST_VERSION_PREFIX: "validator-staging"
+  PROJECT_NAME: "validator"
 
 jobs:
   deploy:

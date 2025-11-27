@@ -50,6 +50,7 @@ jobs:
       - name: Find tags for changelog
         id: tags
         run: |
+          git fetch --tags
           current="${DIST_VERSION}"
           previous=$(git tag -l "${DIST_VERSION_PREFIX}-*" --sort=-refname | head -2 | tail -1)
           echo "current=$current" >> $GITHUB_OUTPUT
@@ -71,5 +72,5 @@ jobs:
         uses: ./.github/actions/publish-changelog-to-slack
         with:
           changelog-file: changelog.json
-          message-title: "*validator* was just released to *preprod*!"
+          message-title: "validator was just released to preprod!"
           webhook-url: ${{ secrets.CHANGELOG_SLACK_WEBHOOK_URL }}
