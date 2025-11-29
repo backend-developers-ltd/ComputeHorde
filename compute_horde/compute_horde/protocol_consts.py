@@ -33,6 +33,7 @@ class JobStatus(StrEnum):
 
     UNKNOWN = "unknown"
 
+    PENDING = "pending"
     SENT = "sent"
     RECEIVED = "received"
     ACCEPTED = "accepted"

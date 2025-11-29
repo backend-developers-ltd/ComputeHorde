@@ -22,14 +22,13 @@ from compute_horde_core.volume import MultiVolume
 from django.conf import settings
 from django.contrib.postgres.fields import ArrayField
 from django.core.exceptions import ValidationError
-from django.db import models, transaction
+from django.db import models
 from django.db.models import CheckConstraint, Max, Prefetch, Q, QuerySet, UniqueConstraint
 from django.urls import reverse
 from django.utils.timezone import now
 from django_prometheus.models import ExportModelOperationsMixin
 from django_pydantic_field import SchemaField
 from structlog import get_logger
-from structlog.contextvars import bound_contextvars
 
 from .schemas import (
     MuliVolumeAllowedVolume,
@@ -123,7 +122,7 @@ class JobQuerySet(models.QuerySet):
 
 
 class Job(ExportModelOperationsMixin("job"), models.Model):
-    uuid = models.UUIDField(primary_key=True, editable=False, blank=True)
+    uuid = models.UUIDField(primary_key=True, editable=False, default=uuid4)
     user = models.ForeignKey("auth.User", on_delete=models.PROTECT, blank=True, null=True, related_name="jobs")
     hotkey = models.CharField(blank=True, help_text="hotkey of job sender if hotkey authentication was used")
     validator = models.ForeignKey(Validator, blank=True, on_delete=models.PROTECT, related_name="jobs")
@@ -186,32 +185,6 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
         assert self.uuid
         return f"{self.uuid}.zip"
 
-    def save(self, *args, **kwargs) -> None:
-        is_new = self.pk is None
-
-        self.uuid = self.uuid or uuid4()
-
-        # if there is no validator selected -> we need a transaction for locking
-        # active validators during selection process
-        with transaction.atomic(), bound_contextvars(job=self):
-            self.validator = getattr(self, "validator", None) or self.select_validator()
-            super().save(*args, **kwargs)
-            if is_new:
-                job_request = self.as_job_request().model_dump()
-                JobStatus.objects.create(
-                    job=self,
-                    status=protocol_consts.JobStatus.SENT.value,
-                )
-
-                def dispatch_job_on_commit() -> None:
-                    try:
-                        self.send_to_validator(job_request)
-                    except Exception:
-                        self.delete()
-                        raise
-
-                transaction.on_commit(dispatch_job_on_commit)
-
     def report_cheated(
         self,
         signature: Signature,
@@ -227,30 +200,6 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
         ).model_dump(exclude_none=True)
         log.debug("sending cheated report", payload=payload)
         self.send_to_validator(payload)
-
-    def select_validator(self) -> Validator:
-        """
-        Select a validator for the job.
-
-        Currently the one with least recent job request is selected.
-        This method is expected to be run within a transaction.
-        """
-
-        # select validators which are currently connected via WS
-        validator_ids: set[int] = set(
-            Channel.objects.filter(last_heartbeat__gte=now() - timedelta(minutes=3)).values_list(
-                "validator_id", flat=True
-            )
-        )
-        log.debug("connected validators", validator_ids=validator_ids)
-
-        if self.signature is None:
-            raise ValueError("Request must be signed when target_validator_hotkey is set")
-        validator = Validator.objects.filter(ss58_address=self.target_validator_hotkey).first()
-        if validator and validator.id in validator_ids:
-            log.debug("selected (targeted) validator", validator=validator)
-            return validator
-        raise Validator.DoesNotExist
 
     @property
     def sender(self) -> str:
@@ -359,6 +308,7 @@ class JobStatus(ExportModelOperationsMixin("job_status"), models.Model):
         - The HORDE_FAILED status is new and will not be accepted
         """
         status_display = {
+            protocol_consts.JobStatus.PENDING.value: "Pending",
             protocol_consts.JobStatus.SENT.value: "Sent",
             protocol_consts.JobStatus.RECEIVED.value: "Received",
             protocol_consts.JobStatus.ACCEPTED.value: "Accepted",

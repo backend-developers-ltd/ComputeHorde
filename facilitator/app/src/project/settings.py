@@ -285,6 +285,11 @@ CELERY_BEAT_SCHEDULE = {
         "schedule": timedelta(days=1),
         "options": {},
     },
+    "timeout_sent_jobs_task": {
+        "task": "project.core.tasks.timeout_sent_jobs_task",
+        "schedule": timedelta(minutes=1),
+        "options": {},
+    },
 }
 CELERY_TASK_ROUTES = ["project.celery.route_task"]
 CELERY_TASK_TIME_LIMIT = int(timedelta(minutes=5).total_seconds())

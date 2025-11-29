@@ -4,16 +4,17 @@ import time
 import pytest
 import pytest_asyncio
 import responses
+from asgiref.sync import sync_to_async
 from bittensor import Keypair
 from bittensor_wallet import Wallet
 from channels.testing import WebsocketCommunicator
+from compute_horde import protocol_consts
 from compute_horde.fv_protocol.validator_requests import (
     JobResultDetails,
     JobStatusMetadata,
     JobStatusUpdate,
     V0AuthenticationRequest,
 )
-from compute_horde.protocol_consts import JobStatus
 from compute_horde_core.signature import Signature
 from django.contrib.auth.models import User
 
@@ -136,6 +137,7 @@ def job_with_hotkey(job, wallet):
 async def ignore_job_request(communicator, job):
     """Make validator ignore job request from the app"""
 
+    await sync_to_async(job.send_to_validator)(payload=job.as_job_request().model_dump())
     response = await communicator.receive_json_from()
     assert response["type"] == "job.new"
 
@@ -144,7 +146,7 @@ async def ignore_job_request(communicator, job):
 def job_status_update(job):
     return JobStatusUpdate(
         uuid=str(job.uuid),
-        status=JobStatus.ACCEPTED,
+        status=protocol_consts.JobStatus.ACCEPTED,
         metadata=JobStatusMetadata(
             miner_response=JobResultDetails(
                 docker_process_stderr="some stderr",
