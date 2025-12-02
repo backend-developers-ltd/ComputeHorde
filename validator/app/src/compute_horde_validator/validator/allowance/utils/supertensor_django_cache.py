@@ -110,3 +110,23 @@ class DjangoCache(BaseCache):
         except Exception:
             logger.error("Error deserializing validators:", exc_info=True)
             return None
+
+    def put_commitments(self, block_number: int, commitments: dict[str, bytes]):
+        key = self._get_key("commitments", block_number)
+        try:
+            pickled_data = pickle.dumps(commitments)
+            cache.set(key, pickled_data, self.cache_timeout)
+        except Exception:
+            logger.error("Error serializing commitments:", exc_info=True)
+
+    def get_commitments(self, block_number: int) -> dict[str, bytes] | None:
+        key = self._get_key("commitments", block_number)
+        pickled_data = cache.get(key)
+        if pickled_data is None:
+            return None
+        try:
+            unpickled: dict[str, bytes] = pickle.loads(pickled_data)
+            return unpickled
+        except Exception:
+            logger.error("Error deserializing commitments:", exc_info=True)
+            return None

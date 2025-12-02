@@ -2774,7 +2774,7 @@ type-check = [
 requires-dist = [
     { name = "aiohttp", specifier = ">=3.12.0" },
     { name = "boto3", specifier = ">=1.35.11" },
-    { name = "bt-ddos-shield-client", specifier = "~=0.3.1" },
+    { name = "bt-ddos-shield-client", specifier = "~=0.3.3" },
     { name = "celery", extras = ["redis"], specifier = "~=5.3.1" },
     { name = "channels", extras = ["daphne"], specifier = "==4.*" },
     { name = "channels-redis", specifier = "==4.2.0" },
