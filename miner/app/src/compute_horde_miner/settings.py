@@ -313,9 +313,9 @@ SHARED_CELERY_BEAT_SCHEDULE = {
 PROD_CELERY_BEAT_SCHEDULE = {
     "announce_address_and_port": {
         "task": "compute_horde_miner.miner.tasks.announce_address_and_port",
-        "schedule": 60,
+        "schedule": timedelta(minutes=30),
         "options": {
-            "expires": 60,
+            "expires": timedelta(minutes=30).total_seconds(),
         },
     },
     "evict_old_data": {
