@@ -275,11 +275,6 @@ CELERY_BEAT_SCHEDULE = {
         "schedule": timedelta(minutes=30),
         "options": {"time_limit": 60},
     },
-    "refresh_specs_materialized_view": {
-        "task": "project.core.tasks.refresh_specs_materialized_view",
-        "schedule": timedelta(minutes=60),
-        "options": {},
-    },
     "evict_old_data": {
         "task": "project.core.tasks.evict_old_data",
         "schedule": timedelta(days=1),
