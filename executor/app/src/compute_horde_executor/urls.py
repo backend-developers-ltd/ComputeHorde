@@ -7,7 +7,6 @@ from .executor.metrics import metrics_view
 
 urlpatterns = [
     path("admin/", site.urls),
-    path("", include("django.contrib.auth.urls")),
     path("metrics", metrics_view, name="prometheus-django-metrics"),
     path("business-metrics", metrics_manager.view, name="prometheus-business-metrics"),
 ]
