@@ -2,10 +2,12 @@ import logging
 from datetime import timedelta
 
 from compute_horde.receipts.models import JobAcceptedReceipt, JobFinishedReceipt, JobStartedReceipt
+from django.db.models import Q
 from django.utils.timezone import now
 
 from project.core.models import (
     GPU,
+    CheatedJobReport,
     CpuSpecs,
     HardwareState,
     Job,
@@ -41,7 +43,9 @@ def evict_receipts() -> None:
 def evict_jobs() -> None:
     logger.info("Evicting old jobs")
     cutoff = now() - JOBS_RETENTION_PERIOD
-    Job.objects.filter(created_at__lt=cutoff).delete()
+    old_jobs = Job.objects.filter(created_at__lt=cutoff)
+    CheatedJobReport.objects.filter(Q(job__in=old_jobs) | Q(trusted_job__in=old_jobs)).delete()
+    old_jobs.delete()
 
 
 def evict_miner_versions() -> None:
