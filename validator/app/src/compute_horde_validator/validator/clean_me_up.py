@@ -1,10 +1,5 @@
 import asyncio
-import functools
-from collections.abc import Callable
-from typing import ParamSpec, TypeVar
 
-from asgiref.sync import async_to_sync, sync_to_async
-from bt_ddos_shield.turbobt import ShieldedBittensor
 from celery.utils.log import get_task_logger
 from compute_horde.miner_client.organic import OrganicMinerClient
 from compute_horde.transport.base import TransportConnectionError
@@ -68,25 +63,3 @@ async def get_single_manifest(
         )
         logger.warning(msg)
         return hotkey, None
-
-
-P = ParamSpec("P")
-R = TypeVar("R")
-
-
-def bittensor_client(func: Callable[P, R]) -> Callable[..., R]:
-    @async_to_sync
-    async def synced_bittensor(*args, bittensor=None, **kwargs):
-        async with ShieldedBittensor(
-            settings.BITTENSOR_NETWORK,
-            ddos_shield_netuid=settings.BITTENSOR_NETUID,
-            ddos_shield_options=settings.BITTENSOR_SHIELD_METAGRAPH_OPTIONS(),
-            wallet=settings.BITTENSOR_WALLET(),
-        ) as bittensor:
-            return await sync_to_async(func)(*args, bittensor=bittensor, **kwargs)
-
-    @functools.wraps(func)
-    def wrapper(*args, **kwargs):
-        return synced_bittensor(*args, **kwargs)
-
-    return wrapper
