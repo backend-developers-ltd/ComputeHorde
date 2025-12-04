@@ -21,6 +21,7 @@ from bt_ddos_shield.shield_metagraph import ShieldMetagraphOptions
 from bt_ddos_shield.turbobt import ShieldedBittensor
 from compute_horde.blockchain.block_cache import get_current_block
 from compute_horde.utils import MIN_VALIDATOR_STAKE, VALIDATORS_LIMIT
+from turbobt.subtensor.runtime.subnet_info import SubnetHyperparams
 
 from compute_horde_validator.validator.allowance.types import MetagraphData, ValidatorModel
 
@@ -361,6 +362,20 @@ class SuperTensor(BaseSuperTensor):
 
     @archive_fallback
     @make_sync
+    async def _get_hyperparameters(self, block_number: int) -> SubnetHyperparams | None:
+        bittensor = bittensor_context.get()
+        subnet = subnet_context.get()
+        async with bittensor.block(block_number):
+            result: SubnetHyperparams | None = await subnet.get_hyperparameters()
+            logger.debug(f"Hyperparameters for block {block_number}: {result}")
+            return result
+
+    @RETRY_ON_TIMEOUT
+    def get_hyperparameters(self, block_number: int) -> SubnetHyperparams | None:
+        return self._get_hyperparameters(block_number)
+
+    @archive_fallback
+    @make_sync
     async def _get_block_hash(self, block_number: int) -> str:
         bittensor = bittensor_context.get()
         async with bittensor.block(block_number) as block:
@@ -386,12 +401,15 @@ class SuperTensor(BaseSuperTensor):
     def wallet(self) -> bittensor_wallet.Wallet:
         return self._wallet
 
-    def get_current_block(self) -> int:
+    def get_current_exact_block(self) -> int:
         try:
             current_block = get_current_block()
         except websockets.exceptions.ConcurrencyError as ex:
             raise CannotGetCurrentBlock("Cannot get current block from blockchain") from ex
-        return current_block - 5
+        return current_block
+
+    def get_current_block(self) -> int:
+        return self.get_current_exact_block() - 5
 
     def close(self):
         if self._closed or self.loop is None or self._background_thread is None:

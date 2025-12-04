@@ -136,20 +136,6 @@ class _BittensorWrapper:
         return instance.subnet(netuid)
 
 
-class _ShieldedBittensorFactory:
-    def __init__(self, facade: Any) -> None:
-        self._facade = facade
-
-    def __call__(
-        self,
-        _network: str,
-        *,
-        ddos_shield_netuid: int,
-        **_kwargs: Any,
-    ) -> _ShieldedBittensorInstance:
-        return _ShieldedBittensorInstance(self._facade, ddos_shield_netuid)
-
-
 class _ShieldedBittensorInstance:
     def __init__(self, facade: CollateralTestEnvironment, netuid: int) -> None:
         self._facade = facade
@@ -170,5 +156,4 @@ __all__ = [
     "SystemEventRecorder",
     "BittensorStub",
     "_BittensorWrapper",
-    "_ShieldedBittensorFactory",
 ]
