@@ -16,7 +16,6 @@ from .stubs import (
     Web3Call,
     Web3Stub,
     _BittensorWrapper,
-    _ShieldedBittensorFactory,
 )
 
 
@@ -93,13 +92,6 @@ class CollateralTestEnvironment:
             patch(
                 "compute_horde_validator.validator.collateral.default.turbobt.Bittensor",
                 new=bittensor_wrapper,
-            )
-        )
-        shielded_wrapper = _ShieldedBittensorFactory(self)
-        self._stack.enter_context(
-            patch(
-                "compute_horde_validator.validator.clean_me_up.ShieldedBittensor",
-                new=shielded_wrapper,
             )
         )
         self.collateral = Collateral()

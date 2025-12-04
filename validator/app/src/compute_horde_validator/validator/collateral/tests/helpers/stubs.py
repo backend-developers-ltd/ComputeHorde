@@ -136,33 +136,6 @@ class _BittensorWrapper:
         return instance.subnet(netuid)
 
 
-class _ShieldedBittensorFactory:
-    def __init__(self, facade: Any) -> None:
-        self._facade = facade
-
-    def __call__(
-        self,
-        _network: str,
-        *,
-        ddos_shield_netuid: int,
-        **_kwargs: Any,
-    ) -> _ShieldedBittensorInstance:
-        return _ShieldedBittensorInstance(self._facade, ddos_shield_netuid)
-
-
-class _ShieldedBittensorInstance:
-    def __init__(self, facade: CollateralTestEnvironment, netuid: int) -> None:
-        self._facade = facade
-        self.ddos_shield = Mock()
-        self.ddos_shield.netuid = netuid
-
-    async def __aenter__(self) -> BittensorStub:
-        return BittensorStub(self._facade)
-
-    async def __aexit__(self, exc_type: Any, exc: BaseException | None, tb: Any) -> None:
-        return None
-
-
 __all__ = [
     "Web3Call",
     "HttpStub",
@@ -170,5 +143,4 @@ __all__ = [
     "SystemEventRecorder",
     "BittensorStub",
     "_BittensorWrapper",
-    "_ShieldedBittensorFactory",
 ]

@@ -9,7 +9,6 @@ from typing import Union
 import bittensor
 import numpy as np
 import turbobt.substrate
-from asgiref.sync import async_to_sync
 from bittensor import u16_normalized_float
 from bittensor.utils.weight_utils import process_weights
 from constance import config
@@ -19,7 +18,7 @@ from numpy._typing import NDArray
 from pydantic import JsonValue
 
 from compute_horde_validator.celery import app
-from compute_horde_validator.validator.clean_me_up import bittensor_client
+from compute_horde_validator.validator.allowance.utils.supertensor import supertensor
 from compute_horde_validator.validator.dynamic_config import get_config
 from compute_horde_validator.validator.locks import Locked, LockType, get_advisory_lock
 from compute_horde_validator.validator.models import SystemEvent
@@ -55,23 +54,22 @@ class MaximumNumberOfAttemptsExceeded(Exception):
     SystemEvent.EventSubType.SUBTENSOR_CONNECTIVITY_ERROR,
     turbobt.substrate.exceptions.SubstrateException,
 )
-@bittensor_client
-def set_scores(bittensor: turbobt.Bittensor):
+def set_scores() -> None:
     if not config.SERVING:
         logger.warning("Not setting scores, SERVING is disabled in constance config")
         return
 
     commit_reveal_weights_enabled = get_config("DYNAMIC_COMMIT_REVEAL_WEIGHTS_ENABLED")
 
-    current_block = async_to_sync(bittensor.blocks.head)()
+    current_block_number = supertensor().get_current_exact_block()
 
     if commit_reveal_weights_enabled:
-        interval = CommitRevealInterval(current_block.number)
+        interval = CommitRevealInterval(current_block_number)
 
-        if current_block.number not in interval.commit_window:
+        if current_block_number not in interval.commit_window:
             logger.debug(
                 "Outside of commit window, skipping, current block: %s, window: %s",
-                current_block.number,
+                current_block_number,
                 interval.commit_window,
             )
             return
@@ -85,16 +83,15 @@ def set_scores(bittensor: turbobt.Bittensor):
                     logger.debug("Another thread already setting weights")
                     return
 
-                subnet = bittensor.subnet(settings.BITTENSOR_NETUID)
-                hyperparameters = async_to_sync(subnet.get_hyperparameters)(current_block.hash)
-                neurons = async_to_sync(subnet.list_neurons)(current_block.hash)
-                # TODO: refactor to use neurons from `allowance`
+                hyperparameters = supertensor().get_hyperparameters(current_block_number)
+                assert hyperparameters is not None
+                neurons = supertensor().list_neurons(current_block_number)
                 wsfe, created = WeightSettingFinishedEvent.from_block(
-                    current_block.number, settings.BITTENSOR_NETUID
+                    current_block_number, settings.BITTENSOR_NETUID
                 )
                 if not created:
                     logger.debug(
-                        f"Weights already set for cycle {wsfe.block_from}-{wsfe.block_to} (current_block={current_block.number})"
+                        f"Weights already set for cycle {wsfe.block_from}-{wsfe.block_to} (current_block={current_block_number})"
                     )
                     return
                 save_weight_setting_event(
@@ -117,11 +114,11 @@ def set_scores(bittensor: turbobt.Bittensor):
                         "DYNAMIC_COMMIT_REVEAL_WEIGHTS_ENABLED": get_config(
                             "DYNAMIC_COMMIT_REVEAL_WEIGHTS_ENABLED"
                         ),
-                        "current_block_number": current_block.number,
+                        "current_block_number": current_block_number,
                     },
                 )
 
-                hotkey_scores = _score_cycles(current_block.number)
+                hotkey_scores = _score_cycles(current_block_number)
 
                 if not hotkey_scores:
                     logger.warning("No scores calculated")
