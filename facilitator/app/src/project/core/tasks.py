@@ -4,14 +4,18 @@ from datetime import timedelta
 import requests
 import structlog
 from asgiref.sync import async_to_sync
+from celery.exceptions import MaxRetriesExceededError
 from celery.utils.log import get_task_logger
+from celery.utils.time import get_exponential_backoff_interval
 from channels.layers import get_channel_layer
+from compute_horde import protocol_consts
 from compute_horde.utils import get_validators
 from django.conf import settings
-from django.db import connection
+from django.db import connection, transaction
 from django.utils.timezone import now
 from pydantic import BaseModel, ValidationError, parse_obj_as
 from requests import RequestException
+from structlog.contextvars import bound_contextvars
 
 from project.celery import app
 
@@ -21,6 +25,8 @@ from .models import (
     Channel,
     GpuCount,
     HardwareState,
+    Job,
+    JobStatus,
     Miner,
     Subnet,
     Validator,
@@ -33,6 +39,10 @@ from .utils import fetch_compute_subnet_hardware
 log = structlog.wrap_logger(get_task_logger(__name__))
 
 RECEIPTS_CUTOFF_TOLERANCE = timedelta(minutes=30)
+
+SEND_JOB_TO_VALIDATOR_TASK_MAX_RETRIES = 5
+SEND_JOB_TO_VALIDATOR_TASK_RETRY_FACTOR_SECONDS = 2
+SEND_JOB_TO_VALIDATOR_TASK_RETRY_MAXIMUM_SECONDS = 120
 
 
 @app.task
@@ -211,3 +221,53 @@ def refresh_specs_materialized_view():
 @app.task
 def evict_old_data():
     eviction.evict_all()
+
+
+@app.task(bind=True, max_retries=SEND_JOB_TO_VALIDATOR_TASK_MAX_RETRIES)
+def send_job_to_validator_task(self, job_uuid: str) -> None:
+    with transaction.atomic(), bound_contextvars(job_uuid=job_uuid):
+        log.info("sending job to validator")
+
+        try:
+            job = Job.objects.with_statuses().select_related("validator").get(uuid=job_uuid)
+        except Job.DoesNotExist:
+            log.debug("job no longer exists; not sending it to validator.")
+            return
+        else:
+            if job.status and job.status.status != protocol_consts.JobStatus.PENDING.value:
+                log.debug("job not in PENDING status; not sending to validator", job_status=job.status.status)
+                return
+
+        job_request = job.as_job_request().model_dump()
+        try:
+            job.send_to_validator(job_request)
+        except Exception as e:
+            countdown = get_exponential_backoff_interval(
+                factor=SEND_JOB_TO_VALIDATOR_TASK_RETRY_FACTOR_SECONDS,
+                retries=self.request.retries,
+                maximum=SEND_JOB_TO_VALIDATOR_TASK_RETRY_MAXIMUM_SECONDS,
+                full_jitter=False,
+            )
+            log.warning(
+                "retriable error while sending job to validator",
+                error=str(e),
+                retries=self.request.retries + 1,
+                countdown=countdown,
+            )
+
+            try:
+                raise self.retry(countdown=countdown) from e
+            except MaxRetriesExceededError:
+                JobStatus.objects.create(job=job, status=protocol_consts.JobStatus.HORDE_FAILED.value)
+                log.exception("max retries reached for job", error=str(e))
+                return
+        else:
+            JobStatus.objects.create(job=job, status=protocol_consts.JobStatus.SENT.value)
+            log.debug("job successfully sent to validator")
+
+
+@app.task
+def timeout_sent_jobs_task() -> None:
+    from project.core.services import jobs as jobs_services
+
+    jobs_services.timeout_sent_jobs()

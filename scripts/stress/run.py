@@ -36,6 +36,7 @@ JOB_COUNT = 25
 JOB_TIMEOUT = 600
 
 JOB_BOARD_STATE = {
+    ComputeHordeJobStatus.PENDING: "P",
     ComputeHordeJobStatus.SENT: "S",
     ComputeHordeJobStatus.RECEIVED: "R",
     ComputeHordeJobStatus.ACCEPTED: "A",
