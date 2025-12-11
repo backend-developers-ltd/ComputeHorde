@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 def parse_commitments_to_manifests(
     commitments: dict[str, bytes],
-) -> dict[ss58_address, dict[ExecutorClass, int]]:
+) -> dict[tuple[ss58_address, ExecutorClass], int]:
     """
     Parse blockchain commitments into manifest format.
 
@@ -34,7 +34,7 @@ def parse_commitments_to_manifests(
     Returns:
         Dictionary mapping ss58_address to dict of ExecutorClass and executor_count
     """
-    result: dict[ss58_address, dict[ExecutorClass, int]] = {}
+    result: dict[tuple[ss58_address, ExecutorClass], int] = {}
 
     for hotkey, commitment_bytes in commitments.items():
         try:
@@ -42,8 +42,8 @@ def parse_commitments_to_manifests(
             _, manifest_payload = extract_manifest_payload(commitment_str)
             manifest = parse_commitment_string(manifest_payload)
 
-            if manifest:
-                result[hotkey] = manifest
+            for executor_class, executor_count in manifest.items():
+                result[(hotkey, executor_class)] = executor_count
         except Exception as e:
             logger.debug(f"Failed to parse commitment for {hotkey}: {e}")
             continue
@@ -105,34 +105,29 @@ def get_current_manifests() -> dict[ss58_address, dict[ExecutorClass, int]]:
     Returns:
         Dictionary mapping hotkey to dict of ExecutorClass and executor_count
     """
-    if config.DYNAMIC_MANIFESTS_USE_KNOWLEDGE_COMMITMENTS:
-        current_block = supertensor().get_current_block()
-        commitments = supertensor().get_commitments(current_block)
-        return parse_commitments_to_manifests(commitments or {})
-    else:
-        manifests = (
-            AllowanceMinerManifest.objects.values(
-                "miner_ss58address", "executor_class", "executor_count", "block_number"
-            )
-            .order_by("miner_ss58address", "executor_class", "-block_number")
-            .distinct("miner_ss58address", "executor_class")
+    manifests = (
+        AllowanceMinerManifest.objects.values(
+            "miner_ss58address", "executor_class", "executor_count", "block_number"
         )
+        .order_by("miner_ss58address", "executor_class", "-block_number")
+        .distinct("miner_ss58address", "executor_class")
+    )
 
-        result: dict[ss58_address, dict[ExecutorClass, int]] = {}
+    result: dict[ss58_address, dict[ExecutorClass, int]] = {}
 
-        for manifest in manifests:
-            hotkey = manifest["miner_ss58address"]
-            executor_class = ExecutorClass(manifest["executor_class"])
-            executor_count = manifest["executor_count"]
+    for manifest in manifests:
+        hotkey = manifest["miner_ss58address"]
+        executor_class = ExecutorClass(manifest["executor_class"])
+        executor_count = manifest["executor_count"]
 
-            try:
-                executor_dict = result[hotkey]
-            except KeyError:
-                result[hotkey] = {}
-                executor_dict = result[hotkey]
-            executor_dict[executor_class] = executor_count
+        try:
+            executor_dict = result[hotkey]
+        except KeyError:
+            result[hotkey] = {}
+            executor_dict = result[hotkey]
+        executor_dict[executor_class] = executor_count
 
-        return result
+    return result
 
 
 def get_manifest_drops(
@@ -185,11 +180,6 @@ def event_loop():
 
 
 def sync_manifests():
-    # Only sync manifests via websocket when knowledge commitments are disabled
-    if config.DYNAMIC_MANIFESTS_USE_KNOWLEDGE_COMMITMENTS:
-        logger.info("Skipping manifest sync - knowledge commitments mode enabled")
-        return
-
     block = supertensor().get_current_block()
     neurons = supertensor().get_shielded_neurons()
     max_executors_per_class = get_miner_max_executors_per_class_sync()
@@ -202,7 +192,14 @@ def sync_manifests():
         for n in neurons
         if n.axon_info.port
     ]
-    new_manifests = event_loop().run_until_complete(fetch_manifests_from_miners(miners))
+
+    if config.DYNAMIC_MANIFESTS_USE_KNOWLEDGE_COMMITMENTS:
+        current_block = supertensor().get_current_block()
+        commitments = supertensor().get_commitments(current_block)
+        new_manifests = parse_commitments_to_manifests(commitments or {})
+    else:
+        new_manifests = event_loop().run_until_complete(fetch_manifests_from_miners(miners))
+
     with transaction.atomic():
         with Lock(LockType.ALLOWANCE_BLOCK_INJECTION, 10.0):
             # This will throw an error if the lock cannot be obtained in 10.0s and that's correct
