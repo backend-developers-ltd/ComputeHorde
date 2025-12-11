@@ -70,6 +70,7 @@ EXECUTOR_CLASSES = [
     ExecutorClass.always_on__gpu_24gb,
     ExecutorClass.always_on__llm__a6000,
     ExecutorClass.always_on__test,
+    ExecutorClass.always_on__cpu__8c__16gb,
 ]
 
 EXECUTOR_CAP = {
@@ -77,6 +78,7 @@ EXECUTOR_CAP = {
     ExecutorClass.always_on__gpu_24gb: 5,
     ExecutorClass.always_on__llm__a6000: 3,
     ExecutorClass.always_on__test: 1,
+    ExecutorClass.always_on__cpu__8c__16gb: 1,
 }
 
 
