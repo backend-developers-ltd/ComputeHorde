@@ -101,9 +101,10 @@ Executor classes represent different types of computational resources and have c
 ### Configuration
 ```python
 DYNAMIC_EXECUTOR_CLASS_WEIGHTS = {
-    "spin_up-4min.gpu-24gb": 99,    # GPU instances with 24GB memory
+    "spin_up-4min.gpu-24gb": 98,    # GPU instances with 24GB memory
     "always_on.llm.a6000": 1,       # Always-on LLM instances
     "always_on.test": 0,            # Test instances
+    "always_on.cpu.8c.16gb": 1,     # Test instances
 }
 ```
 
@@ -185,7 +186,7 @@ The scoring system is configured through Django settings:
 
 ```python
 # Executor class weights
-DYNAMIC_EXECUTOR_CLASS_WEIGHTS = "spin_up-4min.gpu-24gb=99,always_on.llm.a6000=1,always_on.test=0"
+DYNAMIC_EXECUTOR_CLASS_WEIGHTS = "spin_up-4min.gpu-24gb=98,always_on.llm.a6000=1,always_on.test=0,always_on.cpu.8c.16gb=1"
 
 # Organic job scoring
 DYNAMIC_ORGANIC_JOB_SCORE = 1.0  # Score per organic job
