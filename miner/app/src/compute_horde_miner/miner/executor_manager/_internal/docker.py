@@ -17,6 +17,7 @@ import aiohttp
 import asyncssh
 import pydantic
 import yaml
+from compute_horde.executor_class import EXECUTOR_CLASS
 from compute_horde_core.executor_class import ExecutorClass
 from django.conf import settings
 from pydantic import Field, field_validator
@@ -184,7 +185,7 @@ class DockerExecutorManager(BaseExecutorManager):
             f"MINER_ADDRESS=ws://{settings.ADDRESS_FOR_EXECUTORS}:{settings.PORT_FOR_EXECUTORS}",
             f"EXECUTOR_TOKEN={token}",
         ]
-        if settings.DEBUG_NO_GPU_MODE:
+        if settings.DEBUG_NO_GPU_MODE or (not EXECUTOR_CLASS[executor_class].has_gpu):
             env.append("DEBUG_NO_GPU_MODE=1")
         if settings.HF_ACCESS_TOKEN is not None:
             env.append(f"HF_ACCESS_TOKEN={settings.HF_ACCESS_TOKEN}")
