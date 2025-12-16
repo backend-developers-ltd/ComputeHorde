@@ -36,7 +36,7 @@ def patch_current_block():
 
 
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
-def test_debug_run_organic_job_command__job_completed(bittensor):
+def test_debug_run_organic_job_command__job_completed():
     # random miner to be picked
     Miner.objects.create(hotkey="miner_client")
 
@@ -61,7 +61,7 @@ def test_debug_run_organic_job_command__job_completed(bittensor):
     throw_error,
 )
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
-def test_debug_run_organic_job_command__job_created_but_not_triggered(bittensor):
+def test_debug_run_organic_job_command__job_created_but_not_triggered():
     Miner.objects.create(hotkey="miner_client")
 
     with redirect_stdout(io.StringIO()) as buf, pytest.raises(SystemExit) as exit_info:

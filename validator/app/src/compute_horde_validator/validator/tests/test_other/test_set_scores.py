@@ -7,6 +7,7 @@ from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from constance.test.pytest import override_config
 from django.test import override_settings
 
+from compute_horde_validator.validator.allowance.tests.mockchain import set_block_number
 from compute_horde_validator.validator.models import (
     Miner,
     SystemEvent,
@@ -47,9 +48,9 @@ def _default_commit_reveal_params():
 @contextmanager
 def setup_db_and_scores(hotkey_to_score=None):
     if hotkey_to_score is None:
-        hotkey_to_score = {f"hotkey_{i}": i for i in range(NUM_NEURONS)}
+        hotkey_to_score = {f"stable_miner_{i:03d}": i for i in range(NUM_NEURONS)}
     for i in range(NUM_NEURONS):
-        Miner.objects.update_or_create(hotkey=f"hotkey_{i}")
+        Miner.objects.update_or_create(hotkey=f"stable_miner_{i:03d}")
 
     with patch(
         "compute_horde_validator.validator.scoring.engine.calculate_allowance_paid_job_scores",
@@ -69,18 +70,16 @@ def test_normalize_scores():
 
 
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
-def test_set_scores__already_done(settings, bittensor):
-    bittensor.blocks.head.return_value.number = 361
-    WeightSettingFinishedEvent.from_block(361, settings.BITTENSOR_NETUID)
-    set_scores()
+def test_set_scores__already_done(settings):
+    WeightSettingFinishedEvent.from_block(1337, settings.BITTENSOR_NETUID)
+    with set_block_number(1337):
+        set_scores()
     assert SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 0
 
 
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
-def test_set_scores__too_early(settings, bittensor):
-    bittensor.blocks.head.return_value.number = 359
-
-    with setup_db_and_scores():
+def test_set_scores__too_early(settings):
+    with setup_db_and_scores(), set_block_number(1000):
         set_scores()
     assert SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 0
 
@@ -94,88 +93,107 @@ def test_set_scores__too_early(settings, bittensor):
         # no burn, either effectively or by configuration:
         (0, 0.0, 0.0, "", None, {1: 16384, 2: 32768, 3: 49151, 4: 65535}),
         (0, 0.5, 0.5, "", None, {1: 16384, 2: 32768, 3: 49151, 4: 65535}),
-        (0, 0.0, 0.5, "hotkey_1", None, {1: 16384, 2: 32768, 3: 49151, 4: 65535}),
-        (0, 0.5, 0.5, "hotkey_100", None, {1: 16384, 2: 32768, 3: 49151, 4: 65535}),
-        (0, 0.5, 0.5, "hotkey_100,hotkey_200", None, {1: 16384, 2: 32768, 3: 49151, 4: 65535}),
+        (0, 0.0, 0.5, "stable_miner_001", None, {1: 16384, 2: 32768, 3: 49151, 4: 65535}),
+        (0, 0.5, 0.5, "non_existent_miner_100", None, {1: 16384, 2: 32768, 3: 49151, 4: 65535}),
+        (
+            0,
+            0.5,
+            0.5,
+            "non_existent_miner_100,non_existent_miner_200",
+            None,
+            {1: 16384, 2: 32768, 3: 49151, 4: 65535},
+        ),
         # burn burn:
         (
             0,
             0.9,
             0.9,
-            "hotkey_1,hotkey_2",
-            {"hotkey_0": 70, "hotkey_3": 70, "hotkey_4": 100},
+            "stable_miner_001,stable_miner_002",
+            {"stable_miner_000": 70, "stable_miner_003": 70, "stable_miner_004": 100},
             {0: 2360, 1: 7282, 2: 65535, 3: 2360, 4: 3371},
         ),
         (
             0,
             0.9,
             0.9,
-            "hotkey_1,hotkey_2",
-            {"hotkey_0": 140, "hotkey_3": 140, "hotkey_4": 200},
+            "stable_miner_001,stable_miner_002",
+            {"stable_miner_000": 140, "stable_miner_003": 140, "stable_miner_004": 200},
             {0: 2360, 1: 7282, 2: 65535, 3: 2360, 4: 3371},
         ),
         (
             1,
             0.9,
             0.9,
-            "hotkey_1,hotkey_2",
-            {"hotkey_0": 70, "hotkey_3": 70, "hotkey_4": 100},
+            "stable_miner_001,stable_miner_002",
+            {"stable_miner_000": 70, "stable_miner_003": 70, "stable_miner_004": 100},
             {0: 2360, 1: 65535, 2: 7282, 3: 2360, 4: 3371},
         ),
         (
             1,
             0.9,
             0.9,
-            "hotkey_1,hotkey_200",
-            {"hotkey_0": 70, "hotkey_3": 70, "hotkey_4": 100},
+            "stable_miner_001,non_existent_miner_200",
+            {"stable_miner_000": 70, "stable_miner_003": 70, "stable_miner_004": 100},
             {0: 2124, 1: 65535, 3: 2124, 4: 3034},
         ),
         (
             0,
             0.9,
             0.9,
-            "hotkey_1,hotkey_3",
-            {"hotkey_0": 70, "hotkey_3": 70, "hotkey_4": 100},
+            "stable_miner_001,stable_miner_003",
+            {"stable_miner_000": 70, "stable_miner_003": 70, "stable_miner_004": 100},
             {0: 2278, 1: 7029, 3: 65535, 4: 3254},
         ),
         (
             0,
             0.9,
             0.9,
-            "hotkey_1,hotkey_3",
-            {"hotkey_0": 70, "hotkey_1": 70, "hotkey_2": 70, "hotkey_3": 70, "hotkey_4": 100},
+            "stable_miner_001,stable_miner_003",
+            {
+                "stable_miner_000": 70,
+                "stable_miner_001": 70,
+                "stable_miner_002": 70,
+                "stable_miner_003": 70,
+                "stable_miner_004": 100,
+            },
             {0: 1457, 1: 8577, 2: 1457, 3: 65535, 4: 2082},
         ),
         (
             0,
             0.9,
             0.9,
-            "hotkey_1,hotkey_2,hotkey_3",
-            {"hotkey_0": 70, "hotkey_1": 70, "hotkey_2": 70, "hotkey_3": 70, "hotkey_4": 100},
+            "stable_miner_001,stable_miner_002,stable_miner_003",
+            {
+                "stable_miner_000": 70,
+                "stable_miner_001": 70,
+                "stable_miner_002": 70,
+                "stable_miner_003": 70,
+                "stable_miner_004": 100,
+            },
             {0: 1457, 1: 5017, 2: 65535, 3: 5017, 4: 2082},
         ),
         (
             0,
             0.9,
             0.9,
-            "hotkey_1,hotkey_2,hotkey_3",
-            {"hotkey_0": 70, "hotkey_4": 100},
+            "stable_miner_001,stable_miner_002,stable_miner_003",
+            {"stable_miner_000": 70, "stable_miner_004": 100},
             {0: 3331, 1: 3641, 2: 65535, 3: 3641, 4: 4759},
         ),
         (
             0,
             0.9,
             0.9,
-            "hotkey_1,hotkey_3,hotkey_200",
-            {"hotkey_0": 70, "hotkey_3": 70, "hotkey_4": 100},
+            "stable_miner_001,stable_miner_003,non_existent_miner_200",
+            {"stable_miner_000": 70, "stable_miner_003": 70, "stable_miner_004": 100},
             {0: 2278, 1: 7029, 3: 65535, 4: 3254},
         ),
         (
             0,
             0.9,
             0.9,
-            "hotkey_1,hotkey_3,hotkey_200",
-            {"hotkey_0": 70, "hotkey_3": 70, "hotkey_4": 100},
+            "stable_miner_001,stable_miner_003,non_existent_miner_200",
+            {"stable_miner_000": 70, "stable_miner_003": 70, "stable_miner_004": 100},
             {0: 2278, 1: 7029, 3: 65535, 4: 3254},
         ),
         # burn burn again but params are different
@@ -183,40 +201,46 @@ def test_set_scores__too_early(settings, bittensor):
             0,
             0.7,
             0.8,
-            "hotkey_1,hotkey_2",
-            {"hotkey_0": 70, "hotkey_3": 70, "hotkey_4": 100},
+            "stable_miner_001,stable_miner_002",
+            {"stable_miner_000": 70, "stable_miner_003": 70, "stable_miner_004": 100},
             {0: 10240, 1: 16384, 2: 65535, 3: 10240, 4: 14628},
         ),
         (
             0,
             0.7,
             0.8,
-            "hotkey_1,hotkey_2",
-            {"hotkey_0": 140, "hotkey_3": 140, "hotkey_4": 200},
+            "stable_miner_001,stable_miner_002",
+            {"stable_miner_000": 140, "stable_miner_003": 140, "stable_miner_004": 200},
             {0: 10240, 1: 16384, 2: 65535, 3: 10240, 4: 14628},
         ),
         (
             1,
             0.7,
             0.8,
-            "hotkey_1,hotkey_200",
-            {"hotkey_0": 70, "hotkey_3": 70, "hotkey_4": 100},
+            "stable_miner_001,non_existent_miner_200",
+            {"stable_miner_000": 70, "stable_miner_003": 70, "stable_miner_004": 100},
             {0: 8192, 1: 65535, 3: 8192, 4: 11703},
         ),
         (
             0,
             0.7,
             0.8,
-            "hotkey_1,hotkey_2,hotkey_3",
-            {"hotkey_0": 70, "hotkey_1": 70, "hotkey_2": 70, "hotkey_3": 70, "hotkey_4": 100},
+            "stable_miner_001,stable_miner_002,stable_miner_003",
+            {
+                "stable_miner_000": 70,
+                "stable_miner_001": 70,
+                "stable_miner_002": 70,
+                "stable_miner_003": 70,
+                "stable_miner_004": 100,
+            },
             {0: 5886, 1: 13342, 2: 65535, 3: 13342, 4: 8409},
         ),
         (
             0,
             0.7,
             0.8,
-            "hotkey_1,hotkey_2,hotkey_3",
-            {"hotkey_0": 70, "hotkey_4": 100},
+            "stable_miner_001,stable_miner_002,stable_miner_003",
+            {"stable_miner_000": 70, "stable_miner_004": 100},
             {0: 14456, 1: 8192, 2: 65535, 3: 8192, 4: 20652},
         ),
     ],
@@ -228,7 +252,6 @@ def test_set_scores__too_early(settings, bittensor):
 # in order to get the expected values we need to meddle with the NETUID
 def test_set_scores__set_weight_success(
     settings,
-    bittensor,
     cycle_number,
     burn_rate,
     burn_partition,
@@ -240,9 +263,10 @@ def test_set_scores__set_weight_success(
         total = sum(weights.values())
         return {uid: LF(w / total) for uid, w in weights.items()}
 
-    bittensor.blocks.head.return_value.number = 723 + cycle_number * 722
-
-    with setup_db_and_scores(hotkey_to_score=hotkey_to_score):
+    with (
+        setup_db_and_scores(hotkey_to_score=hotkey_to_score),
+        set_block_number(1000 + cycle_number * 722),
+    ):
         with override_config(
             DYNAMIC_BURN_TARGET_SS58ADDRESSES=burn_targets,
             DYNAMIC_BURN_RATE=burn_rate,
@@ -254,7 +278,7 @@ def test_set_scores__set_weight_success(
 
         assert mock_pylon_client.weights_submitted == [
             {
-                f"hotkey_{uid}": weight
+                f"stable_miner_{uid:03d}": weight
                 for uid, weight in _normalize_weights(expected_weights_set).items()
             }
         ]
@@ -283,10 +307,8 @@ def test_set_scores__set_weight_success(
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 @patch_constance({"DYNAMIC_COMMIT_REVEAL_WEIGHTS_ENABLED": False})
 @setup_mock_pylon_client([MockPylonBehaviour.raise_])
-def test_set_scores__set_weight_failure(settings, bittensor):
-    bittensor.blocks.head.return_value.number = 723
-
-    with setup_db_and_scores():
+def test_set_scores__set_weight_failure(settings):
+    with setup_db_and_scores(), set_block_number(1000):
         set_scores()
 
     assert SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 4
@@ -319,10 +341,8 @@ def test_set_scores__set_weight_failure(settings, bittensor):
         MockPylonBehaviour.work_fine_forever,
     ]
 )
-def test_set_scores__set_weight_eventual_success(settings, bittensor):
-    bittensor.blocks.head.return_value.number = 723
-
-    with setup_db_and_scores():
+def test_set_scores__set_weight_eventual_success(settings):
+    with setup_db_and_scores(), set_block_number(1000):
         set_scores()
 
     assert SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 5
@@ -347,10 +367,8 @@ def test_set_scores__set_weight_eventual_success(settings, bittensor):
         MockPylonBehaviour.raise_,
     ]
 )
-def test_set_scores__set_weight__exception(settings, bittensor):
-    bittensor.blocks.head.return_value.number = 723
-
-    with setup_db_and_scores():
+def test_set_scores__set_weight__exception(settings):
+    with setup_db_and_scores(), set_block_number(1000):
         set_scores()
 
     assert SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 4
@@ -365,14 +383,13 @@ def test_set_scores__set_weight__exception(settings, bittensor):
     )
 
 
-@pytest.mark.parametrize("current_block", [723, 999, 1082, 1430, 1443])
+@pytest.mark.parametrize("current_block", [1000, 1082, 1430, 1443])
 @patch("compute_horde_validator.validator.scoring.tasks.WEIGHT_SETTING_ATTEMPTS", 1)
 @patch("compute_horde_validator.validator.scoring.tasks.WEIGHT_SETTING_FAILURE_BACKOFF", 0)
 @patch("compute_horde_validator.validator.scoring.tasks.WEIGHT_SETTING_HARD_TTL", 1)
 @patch("compute_horde_validator.validator.scoring.tasks.WEIGHT_SETTING_TTL", 1)
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
-def test_set_scores__set_weight__commit__too_early_or_too_late(bittensor, current_block: int):
-    bittensor.blocks.head.return_value.number = current_block
+def test_set_scores__set_weight__commit__too_early_or_too_late(current_block: int):
     subtensor_ = MockSubtensor(
         override_block_number=current_block,
         hyperparameters=MockHyperparameters(
@@ -383,6 +400,7 @@ def test_set_scores__set_weight__commit__too_early_or_too_late(bittensor, curren
     with (
         setup_db_and_scores(),
         patch("bittensor.subtensor", return_value=subtensor_),
+        set_block_number(current_block),
     ):
         set_scores()
 
@@ -397,9 +415,7 @@ def test_set_scores__set_weight__commit__too_early_or_too_late(bittensor, curren
 @patch("compute_horde_validator.validator.scoring.tasks.WEIGHT_SETTING_HARD_TTL", 1)
 @patch("compute_horde_validator.validator.scoring.tasks.WEIGHT_SETTING_TTL", 1)
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
-def test_set_scores__multiple_starts(settings, bittensor):
-    bittensor.blocks.head.return_value.number = 1234
-
+def test_set_scores__multiple_starts(settings):
     # to ensure the other tasks will be run at the same time
     settings.CELERY_TASK_ALWAYS_EAGER = False
     threads = 5
@@ -407,9 +423,12 @@ def test_set_scores__multiple_starts(settings, bittensor):
     with (
         setup_db_and_scores(),
         concurrent.futures.ThreadPoolExecutor(max_workers=threads) as pool,
+        setup_mock_pylon_client([MockPylonBehaviour.raise_]),
+        set_block_number(1234),
     ):
         for _ in range(threads):
             pool.submit(set_scores)
+        pool.shutdown()
 
     assert SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 4
 

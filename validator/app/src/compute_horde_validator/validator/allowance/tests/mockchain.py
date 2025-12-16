@@ -9,6 +9,7 @@ from compute_horde.protocol_messages import V0ExecutorManifestRequest
 from compute_horde.test_wallet import get_test_validator_wallet
 from compute_horde_core.executor_class import ExecutorClass
 from pydantic import BaseModel
+from turbobt.subtensor.runtime.subnet_info import SubnetHyperparams
 
 from compute_horde_validator.validator.allowance.types import MetagraphData, ValidatorModel
 from compute_horde_validator.validator.allowance.utils import supertensor
@@ -290,6 +291,9 @@ def set_block_number(block_number_, oldest_reachable_block: float | int = float(
         def inc_block_number(self):
             self.block_number += 1
 
+        def get_current_exact_block(self):
+            return self.block_number
+
         def get_current_block(self):
             return self.block_number
 
@@ -362,6 +366,12 @@ def set_block_number(block_number_, oldest_reachable_block: float | int = float(
                     if n.axon_info and str(n.axon_info.ip) != "0.0.0.0"
                 ],
             )
+
+        def get_commitments(self, block_number: int) -> dict[str, bytes]:
+            return {}
+
+        def get_hyperparameters(self, block_number: int) -> SubnetHyperparams | None:
+            return {"min_allowed_weights": 0, "max_weights_limit": 65535}
 
     # Create transport map from manifest responses
     def create_transport_map():
