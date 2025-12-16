@@ -3,7 +3,7 @@ name: "CD: validator (pre-prod)"
 on:
   push:
     branches:
-      - 'deploy-validator-preprod'
+      - "deploy-validator-preprod"
 
 env:
   TAG_VERSION: "v0-latest"
@@ -63,6 +63,7 @@ jobs:
           output-file: changelog.json
           project: validator
           exclude-types: "chore,ci,style,build,test,doc"
+          triggered-by: ${{ github.triggering_actor }}
       - name: Upload changelog artifact
         uses: actions/upload-artifact@v4
         with:

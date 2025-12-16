@@ -3,7 +3,7 @@ name: "CD: miner runner (pre-prod)"
 on:
   push:
     branches:
-      - 'deploy-miner-runner-preprod'
+      - "deploy-miner-runner-preprod"
 
 env:
   BUILD_DIRECTORY: "miner/envs/runner"
@@ -90,6 +90,7 @@ jobs:
           output-file: changelog.json
           project: miner-runner
           exclude-types: "chore,ci,style,build,test,doc"
+          triggered-by: ${{ github.triggering_actor }}
       - name: Upload changelog artifact
         uses: actions/upload-artifact@v4
         with:
