@@ -6,6 +6,7 @@ from functools import partial
 import sentry_sdk
 from asgiref.sync import sync_to_async
 from channels.layers import get_channel_layer
+from compute_horde.executor_class import EXECUTOR_CLASS
 from compute_horde.fv_protocol.facilitator_requests import OrganicJobRequest
 from compute_horde.fv_protocol.validator_requests import (
     HordeFailureDetails,
@@ -299,11 +300,14 @@ async def drive_organic_job(
     miner_client.notify_streaming_readiness = streaming_ready_callback  # type: ignore[method-assign]
     # TODO: remove method assignment above and properly handle notify_* cases
 
+    executor_class = ExecutorClass(job_request.executor_class)
+    has_gpu = EXECUTOR_CLASS[executor_class].has_gpu
+
     job_details = OrganicJobDetails(
         job_uuid=str(job.job_uuid),
-        executor_class=ExecutorClass(job_request.executor_class),
+        executor_class=executor_class,
         docker_image=job_request.docker_image,
-        docker_run_options_preset="nvidia_all" if job_request.use_gpu else "none",
+        docker_run_options_preset="nvidia_all" if has_gpu else "none",
         docker_run_cmd=job_request.get_args(),
         env=job_request.env,
         total_job_timeout=OrganicJobDetails.total_job_timeout,

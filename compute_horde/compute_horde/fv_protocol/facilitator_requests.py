@@ -61,7 +61,7 @@ class V2JobRequest(SignedRequest, BaseModel, extra="forbid"):
     docker_image: str
     args: list[str]
     env: dict[str, str]
-    use_gpu: bool
+    use_gpu: bool = True  # DEPRECATED: this field has no effect
     volume: Volume | None = None
     output_upload: OutputUpload | None = None
     artifacts_dir: str | None = None

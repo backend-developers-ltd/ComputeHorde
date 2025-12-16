@@ -158,7 +158,6 @@ def job_request():
         docker_image="doesntmatter",
         args=[],
         env={},
-        use_gpu=False,
         download_time_limit=1,
         execution_time_limit=1,
         streaming_start_time_limit=1,
