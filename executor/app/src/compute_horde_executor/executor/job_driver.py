@@ -3,6 +3,7 @@ import logging
 
 import packaging.version
 import sentry_sdk
+from compute_horde.executor_class import EXECUTOR_CLASS
 from compute_horde.job_errors import HordeError, JobError
 from compute_horde.protocol_consts import (
     HordeFailureReason,
@@ -151,8 +152,9 @@ class JobDriver:
         self._enter_stage(JobStage.EXECUTOR_STARTUP)
         if not settings.DEBUG_NO_GPU_MODE:
             self.specs = await get_machine_specs()
-        await self.run_security_checks_or_fail()
         initial_job_request = await self.miner_client.initial_msg
+        has_gpu = EXECUTOR_CLASS[initial_job_request.executor_class].has_gpu
+        await self.run_security_checks_or_fail(has_gpu)
         await self.runner.prepare_initial(initial_job_request)
         await self.miner_client.send_executor_ready()
         if initial_job_request.streaming_details is not None:
@@ -189,9 +191,9 @@ class JobDriver:
         job_result.specs = self.specs
         await self.miner_client.send_result(job_result)
 
-    async def run_security_checks_or_fail(self):
+    async def run_security_checks_or_fail(self, has_gpu: bool):
         await self.run_cve_2022_0492_check_or_fail()
-        if not settings.DEBUG_NO_GPU_MODE:
+        if has_gpu and not settings.DEBUG_NO_GPU_MODE:
             await self.run_nvidia_toolkit_version_check_or_fail()
 
     async def run_cve_2022_0492_check_or_fail(self):

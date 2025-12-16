@@ -57,7 +57,7 @@ class SignedFields(BaseModel):
     docker_image: str
     args: list[str]
     env: dict[str, str]
-    use_gpu: bool
+    use_gpu: bool  # DEPRECATED: this field has no effect
     artifacts_dir: str
     on_trusted_miner: bool
     download_time_limit: int
