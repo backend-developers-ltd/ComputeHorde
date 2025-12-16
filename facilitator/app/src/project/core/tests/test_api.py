@@ -113,7 +113,6 @@ def check_docker_job(job_result):
     assert job_result["docker_image"] == "hello-world"
     assert job_result["args"] == ["my", "args"]
     assert job_result["env"] == {"MY_ENV": "my value"}
-    assert job_result["use_gpu"] is True
     assert set(job_result.keys()) & generated_fields == generated_fields
 
 
@@ -168,7 +167,6 @@ def test_docker_job_viewset_create(api_client, user, connected_validator, mock_s
     assert job.docker_image == "hello-world"
     assert job.args == ["my", "args"]
     assert job.env == {"MY_ENV": "my value"}
-    assert job.use_gpu is True
     assert job.user == user
 
 

@@ -171,7 +171,6 @@ def get_dummy_job_request_v2(uuid: str, on_trusted_miner: bool = False) -> V2Job
         executor_class=DEFAULT_EXECUTOR_CLASS,
         args=[],
         env={},
-        use_gpu=False,
         volume={
             "volume_type": "multi_volume",
             "volumes": [

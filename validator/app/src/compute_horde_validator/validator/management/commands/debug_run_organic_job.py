@@ -65,7 +65,6 @@ class Command(BaseCommand):
         parser.add_argument(
             "--cmd_args", default="", help="arguments passed to the script or docker image"
         )
-        parser.add_argument("--use_gpu", action="store_true", help="use gpu for job execution")
 
         parser.add_argument(
             "--download_time_limit", default=10, type=int, help="download time limit in seconds"
@@ -120,7 +119,6 @@ class Command(BaseCommand):
             docker_image=options["docker_image"],
             args=shlex.split(options["cmd_args"]),
             env={},
-            use_gpu=options["use_gpu"],
             download_time_limit=options["download_time_limit"],
             execution_time_limit=options["execution_time_limit"],
             upload_time_limit=options["upload_time_limit"],
