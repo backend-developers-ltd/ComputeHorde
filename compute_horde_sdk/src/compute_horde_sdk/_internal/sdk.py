@@ -528,7 +528,7 @@ class ComputeHordeClient:
             "job_namespace": job_spec.job_namespace,
             "args": job_spec.args or [],  # type: ignore
             "env": job_spec.env or {},  # type: ignore
-            "use_gpu": True,
+            "use_gpu": True,  # DEPRECATED: this field has no effect
             "artifacts_dir": job_spec.artifacts_dir,
             "on_trusted_miner": on_trusted_miner,
             "download_time_limit": job_spec.download_time_limit_sec,

@@ -151,7 +151,7 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
         help_text="arguments passed to the script or docker image",
     )
     env = models.JSONField(blank=True, default=dict, help_text="environment variables for the job")
-    use_gpu = models.BooleanField(default=False, help_text="Whether to use GPU for the job")
+    use_gpu = models.BooleanField(default=False, help_text="DEPRECATED: Whether to use GPU for the job")
     target_validator_hotkey = models.TextField(help_text="target validator")
     volumes = SchemaField(schema=list[MuliVolumeAllowedVolume], blank=True, default=list)
     uploads = SchemaField(schema=list[SingleFileUpload], blank=True, default=list)
