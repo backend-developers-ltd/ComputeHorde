@@ -3,19 +3,22 @@ description: Generate changelog between two release tags
 
 inputs:
   current-tag:
-    description: 'Current release tag'
+    description: "Current release tag"
     required: true
   previous-tag:
-    description: 'Previous release tag'
+    description: "Previous release tag"
     required: true
   output-file:
-    description: 'Path to write changelog JSON'
+    description: "Path to write changelog JSON"
     required: true
   project:
-    description: 'Project name to filter commits by Impacts trailer'
+    description: "Project name to filter commits by Impacts trailer"
     required: false
   exclude-types:
-    description: 'Comma-separated list of commit types to exclude from changelog'
+    description: "Comma-separated list of commit types to exclude from changelog"
+    required: false
+  triggered-by:
+    description: "GitHub username of the user who triggered the release"
     required: false
 
 runs:
@@ -34,4 +37,5 @@ runs:
           --previous-ref "${{ inputs.previous-tag }}" \
           ${{ inputs.project && format('--project "{0}"', inputs.project) || '' }} \
           ${{ inputs.exclude-types && format('--exclude "{0}"', inputs.exclude-types) || '' }} \
+          ${{ inputs.triggered-by && format('--triggered-by "{0}"', inputs.triggered-by) || '' }} \
           > "${{ inputs.output-file }}"

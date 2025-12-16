@@ -3,7 +3,7 @@ name: "CD: validator runner (prod)"
 on:
   push:
     branches:
-      - 'deploy-validator-runner-prod'
+      - "deploy-validator-runner-prod"
 
 env:
   BUILD_DIRECTORY: "validator/envs/runner"
@@ -71,6 +71,7 @@ jobs:
           output-file: changelog.json
           project: validator-runner
           exclude-types: "chore,ci,style,build,test,doc"
+          triggered-by: ${{ github.triggering_actor }}
       - name: Upload changelog artifact
         uses: actions/upload-artifact@v4
         with:

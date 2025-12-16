@@ -30,6 +30,7 @@ class ChangeEntry(TypedDict):
 class Changelog(TypedDict):
     new_ref: str
     previous_ref: str | None
+    triggered_by: str | None
     new_changes: dict[str, list[ChangeEntry]]
     dropped_changes: dict[str, list[ChangeEntry]]
     deduplicated_groups: list[list[ChangeEntry]]
@@ -114,10 +115,12 @@ def deduplicate(
 
     deduplicated_groups = []
     for overlap in overlapping:
-        deduplicated_groups.append([
-            *(change for change in new if change["patch_id"] == overlap),
-            *(change for change in dropped if change["patch_id"] == overlap),
-        ])
+        deduplicated_groups.append(
+            [
+                *(change for change in new if change["patch_id"] == overlap),
+                *(change for change in dropped if change["patch_id"] == overlap),
+            ]
+        )
 
     filtered_new = [e for e in new if e["patch_id"] not in overlapping]
     filtered_dropped = [e for e in dropped if e["patch_id"] not in overlapping]
@@ -138,20 +141,37 @@ def filter_changes(
 
     if project is not None:
         # Limit to the specific project
-        changes = (change for change in changes if project in change["impacted_projects"])
+        changes = (
+            change for change in changes if project in change["impacted_projects"]
+        )
 
     # Filter out unwanted commit types
-    changes = (change for change in changes if change["type"] not in set(exclude_commit_types))
+    changes = (
+        change for change in changes if change["type"] not in set(exclude_commit_types)
+    )
 
     return list(changes)
 
 
 @click.command()
-@click.option("--new-ref", default="HEAD", help="New ref (commit, branch, tag) to compare")
-@click.option("--previous-ref", default=None, help="Previous ref to compare (defaults to first commit in repo)")
+@click.option(
+    "--new-ref", default="HEAD", help="New ref (commit, branch, tag) to compare"
+)
+@click.option(
+    "--previous-ref",
+    default=None,
+    help="Previous ref to compare (defaults to first commit in repo)",
+)
 @click.option("--project", help="Include only changes impacting this project")
 @click.option("--exclude", help="Comma-separated list of commit types to exclude")
-def main(new_ref: str, previous_ref: str | None, project: str | None, exclude: str | None) -> None:
+@click.option("--triggered-by", help="GitHub username who triggered the release")
+def main(
+    new_ref: str,
+    previous_ref: str | None,
+    project: str | None,
+    exclude: str | None,
+    triggered_by: str | None,
+) -> None:
     """
     Generate a changelog between given refs
     Outputs a JSON object containing new and dropped changes, grouped by conventional commit type.
@@ -186,7 +206,9 @@ def main(new_ref: str, previous_ref: str | None, project: str | None, exclude: s
     dropped_changes = [parse_commit(repo, c) for c in dropped_commits]
 
     # Detect commits that would be reported as both new and dropped (e.g., force pushing cherry-picks)
-    new_changes, dropped_changes, deduplicated_groups = deduplicate(new_changes, dropped_changes)
+    new_changes, dropped_changes, deduplicated_groups = deduplicate(
+        new_changes, dropped_changes
+    )
 
     # Filter by project and conventional commit type
     new_changes = filter_changes(new_changes, project, exclude_types)
@@ -204,6 +226,7 @@ def main(new_ref: str, previous_ref: str | None, project: str | None, exclude: s
     changelog: Changelog = {
         "new_ref": new_ref,
         "previous_ref": previous_ref,
+        "triggered_by": triggered_by,
         "new_changes": categorized_new,
         "dropped_changes": categorized_dropped,
         "deduplicated_groups": deduplicated_groups,
