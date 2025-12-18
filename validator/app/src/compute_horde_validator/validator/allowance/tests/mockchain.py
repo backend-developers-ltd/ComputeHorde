@@ -1,5 +1,6 @@
 import datetime
 from contextlib import contextmanager
+from ipaddress import IPv4Address
 from unittest import mock
 from unittest.mock import patch
 
@@ -9,6 +10,7 @@ from compute_horde.protocol_messages import V0ExecutorManifestRequest
 from compute_horde.test_wallet import get_test_validator_wallet
 from compute_horde_core.executor_class import ExecutorClass
 from pydantic import BaseModel
+from pylon.v1 import AxonInfo, AxonProtocol, Neuron, Stakes
 from turbobt.subtensor.runtime.subnet_info import SubnetHyperparams
 
 from compute_horde_validator.validator.allowance.types import MetagraphData, ValidatorModel
@@ -180,7 +182,37 @@ def manifest_responses(block_number) -> list[tuple[str, str | BaseModel, float]]
     ]
 
 
-def _make_neuron(uid, key, stake, is_miner: bool, is_shielded) -> turbobt.Neuron:
+def _make_neuron(uid, key, stake, is_miner: bool) -> Neuron:
+    if not is_miner:
+        ip = IPv4Address("0.0.0.0")
+    else:
+        ip = IPv4Address(f"192.168.1.{uid % 256}")
+    return Neuron(
+        uid=uid,
+        coldkey=key,
+        hotkey=key,
+        active=True,
+        axon_info=AxonInfo(
+            ip=ip,
+            port=8000 + uid if is_miner else 0,
+            protocol=AxonProtocol.HTTP,
+        ),
+        stake=stake,
+        rank=0.0,
+        emission=0.0,
+        incentive=0.0,
+        consensus=0.0,
+        trust=0.0,
+        validator_trust=0.0,
+        dividends=0.0,
+        last_update=0,
+        validator_permit=False,
+        pruning_score=0,
+        stakes=Stakes(alpha=0.0, tao=stake, total=stake),
+    )
+
+
+def _make_turbobt_neuron(uid, key, stake, is_miner: bool, is_shielded) -> turbobt.Neuron:
     return turbobt.Neuron(
         subnet=mock.MagicMock(),
         uid=uid,
@@ -230,18 +262,14 @@ def stake(block_number: int, ind: int, hotkey: str) -> float:
     return float(stake)
 
 
-def list_validators(block_number: int, filter_=True) -> list[turbobt.Neuron]:
+def list_validators(block_number: int, filter_=True) -> list[Neuron]:
     assert block_number >= START_BLOCK
     return list(
         filter(
             (lambda n: n.stake >= 1000) if filter_ else lambda n: True,
             [
                 _make_neuron(
-                    ind + NUM_MINERS,
-                    hotkey,
-                    stake=stake(block_number, ind, hotkey),
-                    is_miner=False,
-                    is_shielded=False,
+                    ind + NUM_MINERS, hotkey, stake=stake(block_number, ind, hotkey), is_miner=False
                 )
                 for ind, hotkey in VALIDATOR_HOTKEYS.items()
                 if (
@@ -254,11 +282,33 @@ def list_validators(block_number: int, filter_=True) -> list[turbobt.Neuron]:
     )
 
 
-def list_neurons(block_number: int, with_shield: bool) -> list[turbobt.Neuron]:
+def list_neurons(block_number: int, with_shield: bool) -> list[Neuron]:
     assert block_number >= START_BLOCK
     return [
         *[
             _make_neuron(
+                ind,
+                hotkey,
+                stake=float(ind),
+                is_miner=True,
+            )
+            for ind, hotkey in MINER_HOTKEYS.items()
+            if (
+                block_number < START_CHANGING_MANIFESTS_BLOCK
+                or not hotkey.startswith("deregging_miner_")
+                or block_number % 5
+            )
+        ],
+        *list_validators(block_number, filter_=False),
+    ]
+
+
+def list_turbobt_neurons(block_number: int, with_shield: bool) -> list[turbobt.Neuron]:
+    assert block_number >= START_BLOCK
+    validators = list_validators(block_number, filter_=False)
+    return [
+        *[
+            _make_turbobt_neuron(
                 ind,
                 hotkey,
                 stake=float(ind),
@@ -272,7 +322,16 @@ def list_neurons(block_number: int, with_shield: bool) -> list[turbobt.Neuron]:
                 or block_number % 5
             )
         ],
-        *list_validators(block_number, filter_=False),
+        *[
+            _make_turbobt_neuron(
+                v.uid,
+                v.hotkey,
+                stake=v.stake,
+                is_miner=False,
+                is_shielded=False,
+            )
+            for v in validators
+        ],
     ]
 
 
@@ -300,7 +359,7 @@ def set_block_number(block_number_, oldest_reachable_block: float | int = float(
             return self.block_number
 
         def get_shielded_neurons(self):
-            return list_neurons(block_number_, with_shield=False)
+            return list_turbobt_neurons(block_number_, with_shield=False)
 
         def list_neurons(self, block_number):
             return list_neurons(block_number, with_shield=False)
