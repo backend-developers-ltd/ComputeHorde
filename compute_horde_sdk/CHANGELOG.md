@@ -9,6 +9,12 @@ upcoming release can be found in [changelog.d](changelog.d).
 
 <!-- towncrier release notes start -->
 
+## [0.0.18](https://github.com/backend-developers-ltd/compute-horde-sdk/releases/tag/v0.0.18) - 2025-12-18
+
+
+Added a new CPU-only executor class.
+
+
 ## [0.0.17](https://github.com/backend-developers-ltd/compute-horde-sdk/releases/tag/v0.0.17) - 2025-10-21
 
 
