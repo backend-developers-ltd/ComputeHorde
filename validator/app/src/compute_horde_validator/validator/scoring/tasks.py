@@ -1,7 +1,6 @@
 import contextlib
 import logging
 import random
-import time
 import traceback
 from functools import cached_property
 from typing import Union
@@ -16,6 +15,8 @@ from django.conf import settings
 from django.db import transaction
 from numpy._typing import NDArray
 from pydantic import JsonValue
+from pylon.v1 import DEFAULT_RETRIES, BasePylonException, Hotkey, Weight
+from tenacity import stop_after_attempt, wait_fixed
 
 from compute_horde_validator.celery import app
 from compute_horde_validator.validator.allowance.utils.supertensor import supertensor
@@ -25,8 +26,8 @@ from compute_horde_validator.validator.models import SystemEvent
 from compute_horde_validator.validator.models.scoring.internal import (
     WeightSettingFinishedEvent,
 )
+from compute_horde_validator.validator.pylon import pylon_client
 from compute_horde_validator.validator.scoring import create_scoring_engine
-from compute_horde_validator.validator.scoring.pylon_client import PylonClientError, pylon_client
 
 if False:
     import torch
@@ -139,38 +140,35 @@ def set_scores() -> None:
                     max_weight_limit=hyperparameters["max_weights_limit"],
                 )
                 hk_by_uid = {n.uid: n.hotkey for n in neurons}
-                hk_weight_mapping = {hk_by_uid[uid]: weight for uid, weight in zip(uids, weights)}
-
-                for try_number in range(WEIGHT_SETTING_ATTEMPTS):
-                    logger.debug(
-                        f"Setting weights (attempt #{try_number}):\nuids={uids}\nscores={weights}"
-                    )
-                    try:
-                        pylon_client().set_weights(hk_weight_mapping)
-                        logger.info("Successfully set weights!!!")
-                        break
-                    except PylonClientError:
-                        logger.warning(
-                            "Encountered when setting weights (attempt #{try_number}): ",
-                            exc_info=True,
-                        )
-                        save_weight_setting_failure(
-                            subtype=SystemEvent.EventSubType.WRITING_TO_CHAIN_GENERIC_ERROR,
+                hk_weight_mapping = {
+                    Hotkey(hk_by_uid[uid]): Weight(weight) for uid, weight in zip(uids, weights)
+                }
+                logger.debug(f"Setting weights:\nuids={uids}\nscores={weights}")
+                with pylon_client(
+                    retries=DEFAULT_RETRIES.copy(
+                        stop=stop_after_attempt(WEIGHT_SETTING_ATTEMPTS),
+                        wait=wait_fixed(WEIGHT_SETTING_FAILURE_BACKOFF),
+                        after=lambda retry_state: save_weight_setting_failure(
+                            subtype=SystemEvent.EventSubType.SET_WEIGHTS_ERROR,
                             long_description=traceback.format_exc(),
-                            data={"try_number": try_number, "operation": "setting/committing"},
-                        )
-                    time.sleep(WEIGHT_SETTING_FAILURE_BACKOFF)
-                else:
-                    raise MaximumNumberOfAttemptsExceeded()
+                            data={
+                                "try_number": retry_state.attempt_number,
+                                "operation": "setting/committing",
+                            },
+                        ),
+                    )
+                ) as p_client:
+                    p_client.identity.put_weights(hk_weight_mapping)
+                logger.info("Setting weights successfully scheduled in Pylon service!")
                 save_weight_setting_event(
                     type_=SystemEvent.EventType.WEIGHT_SETTING_SUCCESS,
                     subtype=SystemEvent.EventSubType.SET_WEIGHTS_SUCCESS,
                     long_description="",
                     data={},
                 )
-        except MaximumNumberOfAttemptsExceeded:
-            msg = f"Failed to set weights after {WEIGHT_SETTING_ATTEMPTS} attempts"
-            logger.warning(msg)
+        except BasePylonException as e:
+            msg = f"Failed to schedule setting weights in Pylon service after {WEIGHT_SETTING_ATTEMPTS} attempts!"
+            logger.warning(msg, exc_info=e)
             save_weight_setting_failure(
                 subtype=SystemEvent.EventSubType.GIVING_UP,
                 long_description=msg,

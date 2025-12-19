@@ -26,12 +26,11 @@ services:
       <<: *logging
 
   pylon:
-    image: docker.io/backenddevelopersltd/bittensor-pylon:shield-hotfix@sha256:291f7891a490021c2eeddc2d86b5853d244f88dfd49b0cf8d8499faf7180b1d9
+    image: docker.io/backenddevelopersltd/bittensor-pylon:0.1.0
     init: true
     restart: unless-stopped
     env_file: ./.env
     environment:
-      - AUTH_TOKEN=abc
       - BITTENSOR_WALLET_PATH=/root/.bittensor/wallets
     volumes:
       - ${HOST_WALLET_DIR}:/root/.bittensor/wallets
@@ -201,6 +200,15 @@ services:
               labels:
                 hotkey: '{hotkey}'
                 bittensor_network: $${BITTENSOR_NETWORK:-finney}
+        - job_name: 'pylon'
+          static_configs:
+            - targets: ['pylon:8000']
+              labels:
+                hotkey: '{hotkey}'
+                bittensor_network: $${BITTENSOR_NETWORK:-finney}
+          authorization:
+            type: Bearer
+            credentials: $${PYLON_METRICS_TOKEN}
       remote_write:
         - url: "http://prometheus-proxy:8000/prometheus_outbound_proxy/"
       EOF

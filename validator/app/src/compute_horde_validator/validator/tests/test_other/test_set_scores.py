@@ -6,6 +6,7 @@ import pytest
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from constance.test.pytest import override_config
 from django.test import override_settings
+from pylon.v1 import PylonRequestException
 
 from compute_horde_validator.validator.allowance.tests.mockchain import set_block_number
 from compute_horde_validator.validator.models import (
@@ -14,10 +15,6 @@ from compute_horde_validator.validator.models import (
 )
 
 from ...models.scoring.internal import Weights, WeightSettingFinishedEvent
-from ...scoring.pylon_client import (
-    MockPylonBehaviour,
-    setup_mock_pylon_client,
-)
 from ...scoring.tasks import _normalize_weights_for_committing, set_scores
 from ..helpers import (
     NUM_NEURONS,
@@ -258,6 +255,7 @@ def test_set_scores__set_weight_success(
     burn_targets,
     hotkey_to_score,
     expected_weights_set,
+    pylon_client_mock,
 ):
     def _normalize_weights(weights: dict[int, int]) -> dict[int, float]:
         total = sum(weights.values())
@@ -272,16 +270,15 @@ def test_set_scores__set_weight_success(
             DYNAMIC_BURN_RATE=burn_rate,
             DYNAMIC_BURN_PARTITION=burn_partition,
         ):
-            with setup_mock_pylon_client() as mock_pylon_client:
-                set_scores()
+            set_scores()
         assert SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 3
 
-        assert mock_pylon_client.weights_submitted == [
+        pylon_client_mock.identity.put_weights.assert_called_once_with(
             {
                 f"stable_miner_{uid:03d}": weight
                 for uid, weight in _normalize_weights(expected_weights_set).items()
             }
-        ]
+        )
 
         check_system_events(
             SystemEvent.EventType.WEIGHT_SETTING_SUCCESS,
@@ -306,15 +303,17 @@ def test_set_scores__set_weight_success(
 @patch("compute_horde_validator.validator.scoring.tasks.WEIGHT_SETTING_FAILURE_BACKOFF", 0)
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 @patch_constance({"DYNAMIC_COMMIT_REVEAL_WEIGHTS_ENABLED": False})
-@setup_mock_pylon_client([MockPylonBehaviour.raise_])
-def test_set_scores__set_weight_failure(settings):
+def test_set_scores__set_weight_failure(settings, pylon_client_mock):
+    pylon_client_mock.identity.put_weights.side_effect = PylonRequestException(
+        "Mock pylon exception"
+    )
+
     with setup_db_and_scores(), set_block_number(1000):
         set_scores()
 
-    assert SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 4
     check_system_events(
-        SystemEvent.EventType.WEIGHT_SETTING_FAILURE,
-        SystemEvent.EventSubType.WRITING_TO_CHAIN_GENERIC_ERROR,
+        SystemEvent.EventType.WEIGHT_SETTING_INFO,
+        SystemEvent.EventSubType.SUCCESS,
         1,
     )
     # end of retries system event
@@ -330,51 +329,21 @@ def test_set_scores__set_weight_failure(settings):
     ] == []
 
 
-@patch("compute_horde_validator.validator.scoring.tasks.WEIGHT_SETTING_ATTEMPTS", 3)
-@patch("compute_horde_validator.validator.scoring.tasks.WEIGHT_SETTING_FAILURE_BACKOFF", 0)
-@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
-@patch_constance({"DYNAMIC_COMMIT_REVEAL_WEIGHTS_ENABLED": False})
-@setup_mock_pylon_client(
-    [
-        MockPylonBehaviour.raise_,
-        MockPylonBehaviour.raise_,
-        MockPylonBehaviour.work_fine_forever,
-    ]
-)
-def test_set_scores__set_weight_eventual_success(settings):
-    with setup_db_and_scores(), set_block_number(1000):
-        set_scores()
-
-    assert SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 5
-    check_system_events(
-        SystemEvent.EventType.WEIGHT_SETTING_FAILURE,
-        SystemEvent.EventSubType.WRITING_TO_CHAIN_GENERIC_ERROR,
-        2,
-    )
-    check_system_events(
-        SystemEvent.EventType.WEIGHT_SETTING_SUCCESS,
-        SystemEvent.EventSubType.SET_WEIGHTS_SUCCESS,
-        1,
-    )
-
-
 @patch("compute_horde_validator.validator.scoring.tasks.WEIGHT_SETTING_ATTEMPTS", 1)
 @patch("compute_horde_validator.validator.scoring.tasks.WEIGHT_SETTING_FAILURE_BACKOFF", 0)
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 @patch_constance({"DYNAMIC_COMMIT_REVEAL_WEIGHTS_ENABLED": False})
-@setup_mock_pylon_client(
-    [
-        MockPylonBehaviour.raise_,
-    ]
-)
-def test_set_scores__set_weight__exception(settings):
+def test_set_scores__set_weight__exception(settings, pylon_client_mock):
+    pylon_client_mock.identity.put_weights.side_effect = PylonRequestException(
+        "Mock pylon exception"
+    )
+
     with setup_db_and_scores(), set_block_number(1000):
         set_scores()
 
-    assert SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 4
     check_system_events(
-        SystemEvent.EventType.WEIGHT_SETTING_FAILURE,
-        SystemEvent.EventSubType.WRITING_TO_CHAIN_GENERIC_ERROR,
+        SystemEvent.EventType.WEIGHT_SETTING_INFO,
+        SystemEvent.EventSubType.SUCCESS,
         1,
     )
     # end of retries system event
@@ -415,7 +384,7 @@ def test_set_scores__set_weight__commit__too_early_or_too_late(current_block: in
 @patch("compute_horde_validator.validator.scoring.tasks.WEIGHT_SETTING_HARD_TTL", 1)
 @patch("compute_horde_validator.validator.scoring.tasks.WEIGHT_SETTING_TTL", 1)
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
-def test_set_scores__multiple_starts(settings):
+def test_set_scores__multiple_starts(settings, pylon_client_mock):
     # to ensure the other tasks will be run at the same time
     settings.CELERY_TASK_ALWAYS_EAGER = False
     threads = 5
@@ -423,21 +392,16 @@ def test_set_scores__multiple_starts(settings):
     with (
         setup_db_and_scores(),
         concurrent.futures.ThreadPoolExecutor(max_workers=threads) as pool,
-        setup_mock_pylon_client([MockPylonBehaviour.raise_]),
         set_block_number(1234),
     ):
         for _ in range(threads):
             pool.submit(set_scores)
         pool.shutdown()
 
-    assert SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 4
-
-    check_system_events(
-        SystemEvent.EventType.WEIGHT_SETTING_FAILURE,
-        SystemEvent.EventSubType.WRITING_TO_CHAIN_GENERIC_ERROR,
-        1,
-    )
+    pylon_client_mock.identity.put_weights.assert_called_once()
     # end of retries system event
     check_system_events(
-        SystemEvent.EventType.WEIGHT_SETTING_FAILURE, SystemEvent.EventSubType.GIVING_UP, 1
+        SystemEvent.EventType.WEIGHT_SETTING_SUCCESS,
+        SystemEvent.EventSubType.SET_WEIGHTS_SUCCESS,
+        1,
     )
