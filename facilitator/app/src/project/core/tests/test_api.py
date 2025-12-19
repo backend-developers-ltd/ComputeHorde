@@ -7,13 +7,14 @@ from unittest.mock import patch
 import jwt
 import pytest
 from bittensor_wallet import Wallet
+from compute_horde import protocol_consts
 from compute_horde_core.executor_class import ExecutorClass
 from django.conf import settings
 from django.contrib.auth.models import User
 from rest_framework.exceptions import ErrorDetail
 from rest_framework.test import APIClient
 
-from project.core.models import CheatedJobReport, HotkeyWhitelist, Job, JobFeedback, Validator
+from project.core.models import CheatedJobReport, HotkeyWhitelist, Job, JobFeedback, JobStatus, Validator
 
 
 @pytest.fixture
@@ -46,7 +47,7 @@ def mock_signature_from_request(signature):
 
 @pytest.fixture
 def job_docker(db, user, connected_validator, signature):
-    return Job.objects.create(
+    job = Job.objects.create(
         user=user,
         validator=connected_validator,
         target_validator_hotkey=connected_validator.ss58_address,
@@ -60,11 +61,14 @@ def job_docker(db, user, connected_validator, signature):
         streaming_start_time_limit=1,
         upload_time_limit=3,
     )
+    JobStatus.objects.create(job=job, status=protocol_consts.JobStatus.PENDING.value)
+
+    return job
 
 
 @pytest.fixture
 def another_user_job_docker(db, another_user, connected_validator, signature):
-    return Job.objects.create(
+    job = Job.objects.create(
         user=another_user,
         validator=connected_validator,
         target_validator_hotkey=connected_validator.ss58_address,
@@ -78,11 +82,14 @@ def another_user_job_docker(db, another_user, connected_validator, signature):
         streaming_start_time_limit=3,
         upload_time_limit=3,
     )
+    JobStatus.objects.create(job=job, status=protocol_consts.JobStatus.PENDING.value)
+
+    return job
 
 
 @pytest.fixture
 def trusted_job_docker(db, user, connected_validator, signature):
-    return Job.objects.create(
+    job = Job.objects.create(
         user=user,
         validator=connected_validator,
         target_validator_hotkey=connected_validator.ss58_address,
@@ -97,6 +104,9 @@ def trusted_job_docker(db, user, connected_validator, signature):
         streaming_start_time_limit=3,
         upload_time_limit=3,
     )
+    JobStatus.objects.create(job=job, status=protocol_consts.JobStatus.PENDING.value)
+
+    return job
 
 
 @pytest.fixture
@@ -168,6 +178,7 @@ def test_docker_job_viewset_create(api_client, user, connected_validator, mock_s
     assert job.args == ["my", "args"]
     assert job.env == {"MY_ENV": "my value"}
     assert job.user == user
+    assert job.validator == connected_validator
 
 
 @pytest.mark.django_db
@@ -190,6 +201,7 @@ def test_docker_job_viewset_create_streaming(api_client, user, connected_validat
     job = Job.objects.first()
     assert job.docker_image == "hello-world"
     assert job.streaming_client_cert == "dummy-client-cert"
+    assert job.validator == connected_validator
 
     job.streaming_server_cert = "dummy-server-cert"
     job.streaming_server_address = "127.0.0.1"
@@ -303,10 +315,13 @@ def test_hotkey_authentication__job_create(
     assert job.use_gpu is False
     assert job.user is None
     assert job.hotkey == wallet.hotkey.ss58_address
+    assert job.validator == connected_validator
 
 
 @pytest.mark.django_db
 def test_hotkey_authentication__job_details(api_client, wallet, job_with_hotkey, whitelisted_hotkey):
+    JobStatus.objects.create(job=job_with_hotkey, status=protocol_consts.JobStatus.PENDING.value)
+
     # No authentication returns 401.
     response = api_client.get(f"/api/v1/jobs/{job_with_hotkey.uuid}/")
     assert response.status_code == 401, response.content

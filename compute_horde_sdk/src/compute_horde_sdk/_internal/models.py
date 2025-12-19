@@ -30,6 +30,7 @@ class ComputeHordeJobStatus(StrEnum):
     Status of a ComputeHorde job.
     """
 
+    PENDING = "pending"
     SENT = "sent"
     RECEIVED = "received"
     ACCEPTED = "accepted"

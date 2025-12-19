@@ -19,6 +19,7 @@ from .authentication import JWTAuthentication
 from .middleware.signature_middleware import require_signature
 from .models import CheatedJobReport, Job, JobCreationDisabledError, JobFeedback, JobStatus
 from .schemas import MuliVolumeAllowedVolume
+from .services.jobs import create_job
 
 logger = get_logger(__name__)
 
@@ -156,6 +157,9 @@ class DockerJobSerializer(JobSerializer):
                 "upload_time_limit",
             }
         )
+
+    def create(self, validated_data: dict) -> Job:
+        return create_job(validated_data=validated_data)
 
 
 class CheatedJobReportSerializer(serializers.Serializer):
