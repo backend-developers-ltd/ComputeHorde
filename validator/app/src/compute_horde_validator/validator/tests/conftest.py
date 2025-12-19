@@ -1,12 +1,13 @@
 import logging
 import uuid
 from collections.abc import Generator
-from unittest.mock import patch
+from unittest.mock import create_autospec, patch
 
 import bittensor_wallet
 import pytest
 from compute_horde.executor_class import EXECUTOR_CLASS
 from compute_horde_core.executor_class import ExecutorClass
+from pylon._internal.client.sync.client import PylonClient
 
 from ..organic_jobs.miner_driver import execute_organic_job_request
 from .helpers import MockNeuron
@@ -94,3 +95,14 @@ def run_uuid():
 #         raise ValueError(
 #             "\n" + "\n".join(f"{task.get_name()}: {task.get_coro()}" for task in tasks)
 #         )
+
+
+@pytest.fixture
+def pylon_client_mock(mocker):
+    # This is a temporary solution until pylon client implements its own mocking utility.
+    mocked = create_autospec(PylonClient)
+    mocked.__enter__.return_value = mocked
+    mocked.open_access = create_autospec(PylonClient._open_access_api_cls, instance=True)
+    mocked.identity = create_autospec(PylonClient._identity_api_cls, instance=True)
+    mocker.patch("compute_horde_validator.validator.pylon.PylonClient", return_value=mocked)
+    return mocked

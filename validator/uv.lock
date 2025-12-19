@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 2
 requires-python = "==3.11.*"
 resolution-markers = [
     "sys_platform == 'linux'",
@@ -307,6 +307,22 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/83/18/8256905df075e64a28c84f63a62c39e3e26c2943ad45946093a333648a57/bittensor_drand-1.0.0-cp311-cp311-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:bd27a7e906c9fd58e4d158e7eb7c56c7026255516510223f4e964142b8f8010b", size = 2066528, upload-time = "2025-08-11T17:06:19.428Z" },
     { url = "https://files.pythonhosted.org/packages/88/d4/b088bc7bfba0841e8df53b22ef67c05eee89f7c7c35a89ca0139be4b2cf9/bittensor_drand-1.0.0-cp311-cp311-manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:4af4d55d1ac9e8c050ea4884afa6350f631b92673afa0b8fe65711f126d853bc", size = 2172674, upload-time = "2025-08-11T17:06:25.729Z" },
     { url = "https://files.pythonhosted.org/packages/fd/c5/f30ac01e2b1f2ea70ad90a567a91449f33c6bd4fcfd4b9423527b384363c/bittensor_drand-1.0.0-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:ac06a66b9435229befb54f7f7a6d22a16e179e8cbc26c3fab816d371bc17f41e", size = 2104748, upload-time = "2025-08-11T17:06:35.852Z" },
+]
+
+[[package]]
+name = "bittensor-pylon-client"
+version = "0.1.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "docker", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
+    { name = "httpx", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
+    { name = "pydantic", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
+    { name = "pydantic-settings", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
+    { name = "tenacity", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/6a/a2/7bfdefc681d54881bd263c056ebb04bf9fce3c3bc5ef6008b45e3479c1b5/bittensor_pylon_client-0.1.0.tar.gz", hash = "sha256:f475ae8290fa5b404f8b20c716a9d26549376c52fa9abca48a1d69569dd147cc", size = 154136, upload-time = "2025-12-16T09:18:13.387Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/39/c7/0d7d3a42645a43fd762f1c8ccc06d4b359cdcdc92f67483425f7da44fe3f/bittensor_pylon_client-0.1.0-py3-none-any.whl", hash = "sha256:c397a831ee44f5a04cda8f9bdbbab49f8839e161e6e343e0f9568310348a31ff", size = 31450, upload-time = "2025-12-16T09:18:12.096Z" },
 ]
 
 [[package]]
@@ -1036,6 +1052,19 @@ wheels = [
 compatible-mypy = [
     { name = "django-stubs", extra = ["compatible-mypy"], marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "mypy", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
+]
+
+[[package]]
+name = "docker"
+version = "7.1.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "requests", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
+    { name = "urllib3", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/91/9b/4a2ea29aeba62471211598dac5d96825bb49348fa07e906ea930394a83ce/docker-7.1.0.tar.gz", hash = "sha256:ad8c70e6e3f8926cb8a92619b832b4ea5299e2831c14284663184e200546fa6c", size = 117834, upload-time = "2024-05-23T11:13:57.216Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e3/26/57c6fb270950d476074c087527a558ccb6f4436657314bfb6cdf484114c4/docker-7.1.0-py3-none-any.whl", hash = "sha256:c96b93b7f0a746f9e77d325bcfb87422a3d8bd4f03136ae8a85b37f1898d5fc0", size = 147774, upload-time = "2024-05-23T11:13:55.01Z" },
 ]
 
 [[package]]
@@ -2697,6 +2726,7 @@ version = "0"
 source = { editable = "." }
 dependencies = [
     { name = "aiohttp", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
+    { name = "bittensor-pylon-client", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "boto3", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "bt-ddos-shield-client", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "celery", extra = ["redis"], marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
@@ -2773,6 +2803,7 @@ type-check = [
 [package.metadata]
 requires-dist = [
     { name = "aiohttp", specifier = ">=3.12.0" },
+    { name = "bittensor-pylon-client", specifier = "==0.1.0" },
     { name = "boto3", specifier = ">=1.35.11" },
     { name = "bt-ddos-shield-client", specifier = "~=0.3.3" },
     { name = "celery", extras = ["redis"], specifier = "~=5.3.1" },
