@@ -2,7 +2,7 @@ from compute_horde_sdk._internal.sdk import ComputeHordeJobSpec
 from compute_horde_sdk.v1 import ExecutorClass, InlineInputVolume, HuggingfaceInputVolume
 
 hello_world = ComputeHordeJobSpec(
-    executor_class=ExecutorClass.always_on__llm__a6000,
+    executor_class=ExecutorClass.always_on__cpu__8c__16gb,
     job_namespace="SN123.0",
     docker_image="alpine",
     args=["sh", "-c", "echo 'Hello, World!' > /artifacts/stuff"],
@@ -13,7 +13,7 @@ hello_world = ComputeHordeJobSpec(
 )
 
 huggingface = ComputeHordeJobSpec(
-    executor_class=ExecutorClass.always_on__llm__a6000,
+    executor_class=ExecutorClass.always_on__cpu__8c__16gb,
     job_namespace="SN56.0",
     docker_image="acreef/horde:volume_list",
     download_time_limit_sec=300,
