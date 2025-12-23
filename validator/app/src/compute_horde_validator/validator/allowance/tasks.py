@@ -1,4 +1,3 @@
-import contextlib
 import time
 from collections.abc import Callable
 from typing import Any
@@ -12,12 +11,10 @@ from compute_horde_validator.celery import app
 from compute_horde_validator.validator.allowance.utils import blocks, manifests
 from compute_horde_validator.validator.allowance.utils.supertensor import (
     ArchiveSubtensorNotConfigured,
-    PrecachingSuperTensor,
     SuperTensor,
     SuperTensorError,
     supertensor,
 )
-from compute_horde_validator.validator.allowance.utils.supertensor_django_cache import DjangoCache
 from compute_horde_validator.validator.locks import Lock, Locked, LockType, get_advisory_lock
 from compute_horde_validator.validator.models import (
     AllowanceBooking,
@@ -42,7 +39,6 @@ def _run_block_scan_with_lock(
     *,
     lock_type: LockType,
     max_run_time: float,
-    backfilling_supertensor: SuperTensor | None,
     scan: Callable[[int, SuperTensor, float, float], None],
     task_name: str,
     keep_running: bool,
@@ -54,7 +50,6 @@ def _run_block_scan_with_lock(
     Args:
         lock_type: Type of lock to acquire
         max_run_time: Maximum runtime for the scan
-        backfilling_supertensor: Optional pre-configured SuperTensor instance
         scan: Function to call with (current_block, supertensor, start_time, max_run_time) to perform the actual scanning
         task_name: Name of the task for logging
         keep_running: Whether to reschedule on timeout
@@ -63,20 +58,13 @@ def _run_block_scan_with_lock(
     if not AllowanceMinerManifest.objects.exists():
         logger.warning(f"No miner manifests found, skipping {task_name}")
         return
-    current_block = supertensor().get_current_block()
+    st = supertensor()
+    current_block = st.get_current_block()
     with transaction.atomic(using=settings.DEFAULT_DB_ALIAS):
         try:
             with Lock(lock_type, LOCK_WAIT_TIMEOUT, settings.DEFAULT_DB_ALIAS):
                 start_time = time.time()
-
-                cm: contextlib.AbstractContextManager[SuperTensor]
-                if backfilling_supertensor is None:
-                    cm = PrecachingSuperTensor(cache=DjangoCache(), enable_workers=True)
-                else:
-                    cm = contextlib.nullcontext(backfilling_supertensor)
-
-                with cm as st:
-                    scan(current_block, st, start_time, max_run_time)
+                scan(current_block, st, start_time, max_run_time)
 
         except Locked:
             logger.debug(f"Another thread already running {task_name}")
@@ -89,10 +77,7 @@ def _run_block_scan_with_lock(
 @app.task(
     time_limit=MAX_RUN_TIME + 60,
 )
-def scan_blocks_and_calculate_allowance(
-    backfilling_supertensor: SuperTensor | None = None,
-    keep_running: bool = True,
-):
+def scan_blocks_and_calculate_allowance(keep_running: bool = True):
     def _scan_live_blocks(
         current_block: int, st: SuperTensor, start_time: float, max_run_time: float
     ) -> None:
@@ -115,7 +100,6 @@ def scan_blocks_and_calculate_allowance(
     _run_block_scan_with_lock(
         lock_type=LockType.ALLOWANCE_FETCHING,
         max_run_time=MAX_RUN_TIME,
-        backfilling_supertensor=backfilling_supertensor,
         scan=_scan_live_blocks,
         task_name="live block scan",
         keep_running=keep_running,
@@ -187,15 +171,11 @@ def evict_old_data():
 @app.task(
     time_limit=allowance_settings.ARCHIVE_SCAN_MAX_RUN_TIME + 60,
 )
-def scan_archive_blocks_and_calculate_allowance(
-    backfilling_supertensor: SuperTensor | None = None,
-    keep_running: bool = True,
-):
+def scan_archive_blocks_and_calculate_allowance(keep_running: bool = True):
     """
     Scan and calculate allowances for historical blocks in the archive range.
 
     Args:
-        backfilling_supertensor: Optional pre-configured SuperTensor instance
         keep_running: Whether to reschedule itself if it times out or has more work
     """
 
@@ -289,7 +269,6 @@ def scan_archive_blocks_and_calculate_allowance(
     _run_block_scan_with_lock(
         lock_type=LockType.ALLOWANCE_ARCHIVE_FETCHING,
         max_run_time=allowance_settings.ARCHIVE_SCAN_MAX_RUN_TIME,
-        backfilling_supertensor=backfilling_supertensor,
         scan=_scan_archive_blocks,
         task_name="archive block scan",
         keep_running=keep_running,

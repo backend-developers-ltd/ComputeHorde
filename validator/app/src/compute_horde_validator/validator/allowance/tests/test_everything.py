@@ -378,7 +378,7 @@ def test_complete(caplog, configure_logs):
                         logger="compute_horde_validator.validator.allowance.utils.blocks",
                     ),
                 ):
-                    tasks.scan_blocks_and_calculate_allowance(supertensor(), keep_running=False)
+                    tasks.scan_blocks_and_calculate_allowance(keep_running=False)
             if block_number == 1026:
                 blocks.process_block_allowance_with_reporting(
                     1026, supertensor_=supertensor(), live=True

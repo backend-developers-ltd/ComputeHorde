@@ -30,9 +30,6 @@ def scan_blocks_prep(configure_logs):
     with set_block_number(1000, oldest_reachable_block=1005):
         manifests.sync_manifests()
 
-    with set_block_number(1013, oldest_reachable_block=1005):
-        backfilling_supertensor = supertensor()
-
     with (
         mock.patch("turbobt.Bittensor", side_effect=AssertionError("Should not init Bittensor")),
         freeze_time(datetime.datetime(2025, 1, 1, 12, 0, 0)) as freezer,
@@ -48,140 +45,112 @@ def scan_blocks_prep(configure_logs):
             side_effect=process_block_allowance_with_reporting_side_effect,
         ) as proc_mock,
     ):
-        livefilling_supertensor = supertensor()
-        assert (
-            livefilling_supertensor is not backfilling_supertensor
-        )  # this is useful in asserting which calls get which supertensor
-        yield proc_mock, livefilling_supertensor, backfilling_supertensor
+        st = supertensor()
+        yield proc_mock, st
 
 
 @pytest.mark.django_db(transaction=True, databases=["default_alias", "default"])
 def test_blocks_scan_blocks_timeout_on_backfilling(scan_blocks_prep):
-    proc_mock, livefilling_supertensor, backfilling_supertensor = scan_blocks_prep
-    with (
-        mock.patch.object(allowance_tasks, "MAX_RUN_TIME", new=7),
-    ):
-        allowance_tasks.scan_blocks_and_calculate_allowance(
-            backfilling_supertensor=backfilling_supertensor,
-            keep_running=False,
-        )
+    proc_mock, st = scan_blocks_prep
+    with mock.patch.object(allowance_tasks, "MAX_RUN_TIME", new=7):
+        allowance_tasks.scan_blocks_and_calculate_allowance(keep_running=False)
 
     assert proc_mock.call_args_list == [
-        mock.call(1005, backfilling_supertensor, blocks_behind=8),
-        mock.call(1006, backfilling_supertensor, blocks_behind=7),
-        mock.call(1007, backfilling_supertensor, blocks_behind=6),
-        mock.call(1008, backfilling_supertensor, blocks_behind=5),
-        mock.call(1009, backfilling_supertensor, blocks_behind=4),
-        mock.call(1010, backfilling_supertensor, blocks_behind=3),
-        mock.call(1011, backfilling_supertensor, blocks_behind=2),
-        mock.call(1012, backfilling_supertensor, blocks_behind=1),
+        mock.call(1005, st, blocks_behind=8),
+        mock.call(1006, st, blocks_behind=7),
+        mock.call(1007, st, blocks_behind=6),
+        mock.call(1008, st, blocks_behind=5),
+        mock.call(1009, st, blocks_behind=4),
+        mock.call(1010, st, blocks_behind=3),
+        mock.call(1011, st, blocks_behind=2),
+        mock.call(1012, st, blocks_behind=1),
     ]
 
 
 @pytest.mark.django_db(transaction=True, databases=["default_alias", "default"])
 def test_blocks_scan_blocks_timeout_on_livefilling(scan_blocks_prep):
-    proc_mock, livefilling_supertensor, backfilling_supertensor = scan_blocks_prep
-    with (
-        mock.patch.object(allowance_tasks, "MAX_RUN_TIME", new=9),
-    ):
-        allowance_tasks.scan_blocks_and_calculate_allowance(
-            backfilling_supertensor=backfilling_supertensor,
-            keep_running=False,
-        )
+    proc_mock, st = scan_blocks_prep
+    with mock.patch.object(allowance_tasks, "MAX_RUN_TIME", new=9):
+        allowance_tasks.scan_blocks_and_calculate_allowance(keep_running=False)
 
     assert proc_mock.call_args_list == [
-        mock.call(1005, backfilling_supertensor, blocks_behind=8),
-        mock.call(1006, backfilling_supertensor, blocks_behind=7),
-        mock.call(1007, backfilling_supertensor, blocks_behind=6),
-        mock.call(1008, backfilling_supertensor, blocks_behind=5),
-        mock.call(1009, backfilling_supertensor, blocks_behind=4),
-        mock.call(1010, backfilling_supertensor, blocks_behind=3),
-        mock.call(1011, backfilling_supertensor, blocks_behind=2),
-        mock.call(1012, backfilling_supertensor, blocks_behind=1),
-        mock.call(1013, backfilling_supertensor, blocks_behind=0),
-        mock.call(1014, livefilling_supertensor, live=True),
+        mock.call(1005, st, blocks_behind=8),
+        mock.call(1006, st, blocks_behind=7),
+        mock.call(1007, st, blocks_behind=6),
+        mock.call(1008, st, blocks_behind=5),
+        mock.call(1009, st, blocks_behind=4),
+        mock.call(1010, st, blocks_behind=3),
+        mock.call(1011, st, blocks_behind=2),
+        mock.call(1012, st, blocks_behind=1),
+        mock.call(1013, st, blocks_behind=0),
+        mock.call(1014, st, live=True),
     ]
 
 
 @pytest.mark.django_db(transaction=True, databases=["default_alias", "default"])
 def test_blocks_scan_blocks_timeout_on_livefilling_several_blocks_in(scan_blocks_prep):
-    proc_mock, livefilling_supertensor, backfilling_supertensor = scan_blocks_prep
-    with (
-        mock.patch.object(allowance_tasks, "MAX_RUN_TIME", new=12),
-    ):
-        allowance_tasks.scan_blocks_and_calculate_allowance(
-            backfilling_supertensor=backfilling_supertensor,
-            keep_running=False,
-        )
+    proc_mock, st = scan_blocks_prep
+    with mock.patch.object(allowance_tasks, "MAX_RUN_TIME", new=12):
+        allowance_tasks.scan_blocks_and_calculate_allowance(keep_running=False)
 
     assert proc_mock.call_args_list == [
-        mock.call(1005, backfilling_supertensor, blocks_behind=8),
-        mock.call(1006, backfilling_supertensor, blocks_behind=7),
-        mock.call(1007, backfilling_supertensor, blocks_behind=6),
-        mock.call(1008, backfilling_supertensor, blocks_behind=5),
-        mock.call(1009, backfilling_supertensor, blocks_behind=4),
-        mock.call(1010, backfilling_supertensor, blocks_behind=3),
-        mock.call(1011, backfilling_supertensor, blocks_behind=2),
-        mock.call(1012, backfilling_supertensor, blocks_behind=1),
-        mock.call(1013, backfilling_supertensor, blocks_behind=0),
-        mock.call(1014, livefilling_supertensor, live=True),
-        mock.call(1015, livefilling_supertensor, live=True),
-        mock.call(1016, livefilling_supertensor, live=True),
-        mock.call(1017, livefilling_supertensor, live=True),
+        mock.call(1005, st, blocks_behind=8),
+        mock.call(1006, st, blocks_behind=7),
+        mock.call(1007, st, blocks_behind=6),
+        mock.call(1008, st, blocks_behind=5),
+        mock.call(1009, st, blocks_behind=4),
+        mock.call(1010, st, blocks_behind=3),
+        mock.call(1011, st, blocks_behind=2),
+        mock.call(1012, st, blocks_behind=1),
+        mock.call(1013, st, blocks_behind=0),
+        mock.call(1014, st, live=True),
+        mock.call(1015, st, live=True),
+        mock.call(1016, st, live=True),
+        mock.call(1017, st, live=True),
     ]
 
 
 @pytest.mark.django_db(transaction=True, databases=["default_alias", "default"])
 def test_blocks_scan_blocks_timeout_on_livefilling_several_blocks_in_rerun(scan_blocks_prep):
-    proc_mock, livefilling_supertensor, backfilling_supertensor = scan_blocks_prep
-    with (
-        mock.patch.object(allowance_tasks, "MAX_RUN_TIME", new=12),
-    ):
-        allowance_tasks.scan_blocks_and_calculate_allowance(
-            backfilling_supertensor=backfilling_supertensor,
-            keep_running=False,
-        )
+    proc_mock, st = scan_blocks_prep
+    with mock.patch.object(allowance_tasks, "MAX_RUN_TIME", new=12):
+        allowance_tasks.scan_blocks_and_calculate_allowance(keep_running=False)
 
     assert proc_mock.call_args_list == [
-        mock.call(1005, backfilling_supertensor, blocks_behind=8),
-        mock.call(1006, backfilling_supertensor, blocks_behind=7),
-        mock.call(1007, backfilling_supertensor, blocks_behind=6),
-        mock.call(1008, backfilling_supertensor, blocks_behind=5),
-        mock.call(1009, backfilling_supertensor, blocks_behind=4),
-        mock.call(1010, backfilling_supertensor, blocks_behind=3),
-        mock.call(1011, backfilling_supertensor, blocks_behind=2),
-        mock.call(1012, backfilling_supertensor, blocks_behind=1),
-        mock.call(1013, backfilling_supertensor, blocks_behind=0),
-        mock.call(1014, livefilling_supertensor, live=True),
-        mock.call(1015, livefilling_supertensor, live=True),
-        mock.call(1016, livefilling_supertensor, live=True),
-        mock.call(1017, livefilling_supertensor, live=True),
+        mock.call(1005, st, blocks_behind=8),
+        mock.call(1006, st, blocks_behind=7),
+        mock.call(1007, st, blocks_behind=6),
+        mock.call(1008, st, blocks_behind=5),
+        mock.call(1009, st, blocks_behind=4),
+        mock.call(1010, st, blocks_behind=3),
+        mock.call(1011, st, blocks_behind=2),
+        mock.call(1012, st, blocks_behind=1),
+        mock.call(1013, st, blocks_behind=0),
+        mock.call(1014, st, live=True),
+        mock.call(1015, st, live=True),
+        mock.call(1016, st, live=True),
+        mock.call(1017, st, live=True),
     ]
 
     proc_mock.call_args_list = []
 
-    with (
-        mock.patch.object(allowance_tasks, "MAX_RUN_TIME", new=12),
-    ):
-        allowance_tasks.scan_blocks_and_calculate_allowance(
-            backfilling_supertensor=backfilling_supertensor,
-            keep_running=False,
-        )
+    with mock.patch.object(allowance_tasks, "MAX_RUN_TIME", new=12):
+        allowance_tasks.scan_blocks_and_calculate_allowance(keep_running=False)
 
     assert proc_mock.call_args_list == [
-        mock.call(1018, livefilling_supertensor, live=True),
-        mock.call(1019, livefilling_supertensor, live=True),
-        mock.call(1020, livefilling_supertensor, live=True),
-        mock.call(1021, livefilling_supertensor, live=True),
-        mock.call(1022, livefilling_supertensor, live=True),
-        mock.call(1023, livefilling_supertensor, live=True),
-        mock.call(1024, livefilling_supertensor, live=True),
-        mock.call(1025, livefilling_supertensor, live=True),
-        mock.call(1026, livefilling_supertensor, live=True),
-        mock.call(1027, livefilling_supertensor, live=True),
-        mock.call(1028, livefilling_supertensor, live=True),
-        mock.call(1029, livefilling_supertensor, live=True),
-        mock.call(1030, livefilling_supertensor, live=True),
+        mock.call(1018, st, live=True),
+        mock.call(1019, st, live=True),
+        mock.call(1020, st, live=True),
+        mock.call(1021, st, live=True),
+        mock.call(1022, st, live=True),
+        mock.call(1023, st, live=True),
+        mock.call(1024, st, live=True),
+        mock.call(1025, st, live=True),
+        mock.call(1026, st, live=True),
+        mock.call(1027, st, live=True),
+        mock.call(1028, st, live=True),
+        mock.call(1029, st, live=True),
+        mock.call(1030, st, live=True),
     ]
 
 
@@ -189,58 +158,48 @@ def test_blocks_scan_blocks_timeout_on_livefilling_several_blocks_in_rerun(scan_
 def test_blocks_scan_blocks_timeout_on_livefilling_several_blocks_in_rerun_with_blocks_in_between(
     scan_blocks_prep,
 ):
-    proc_mock, livefilling_supertensor, backfilling_supertensor = scan_blocks_prep
-    with (
-        mock.patch.object(allowance_tasks, "MAX_RUN_TIME", new=12),
-    ):
-        allowance_tasks.scan_blocks_and_calculate_allowance(
-            backfilling_supertensor=backfilling_supertensor,
-            keep_running=False,
-        )
+    proc_mock, st = scan_blocks_prep
+    with mock.patch.object(allowance_tasks, "MAX_RUN_TIME", new=12):
+        allowance_tasks.scan_blocks_and_calculate_allowance(keep_running=False)
 
     assert proc_mock.call_args_list == [
-        mock.call(1005, backfilling_supertensor, blocks_behind=8),
-        mock.call(1006, backfilling_supertensor, blocks_behind=7),
-        mock.call(1007, backfilling_supertensor, blocks_behind=6),
-        mock.call(1008, backfilling_supertensor, blocks_behind=5),
-        mock.call(1009, backfilling_supertensor, blocks_behind=4),
-        mock.call(1010, backfilling_supertensor, blocks_behind=3),
-        mock.call(1011, backfilling_supertensor, blocks_behind=2),
-        mock.call(1012, backfilling_supertensor, blocks_behind=1),
-        mock.call(1013, backfilling_supertensor, blocks_behind=0),
-        mock.call(1014, livefilling_supertensor, live=True),
-        mock.call(1015, livefilling_supertensor, live=True),
-        mock.call(1016, livefilling_supertensor, live=True),
-        mock.call(1017, livefilling_supertensor, live=True),
+        mock.call(1005, st, blocks_behind=8),
+        mock.call(1006, st, blocks_behind=7),
+        mock.call(1007, st, blocks_behind=6),
+        mock.call(1008, st, blocks_behind=5),
+        mock.call(1009, st, blocks_behind=4),
+        mock.call(1010, st, blocks_behind=3),
+        mock.call(1011, st, blocks_behind=2),
+        mock.call(1012, st, blocks_behind=1),
+        mock.call(1013, st, blocks_behind=0),
+        mock.call(1014, st, live=True),
+        mock.call(1015, st, live=True),
+        mock.call(1016, st, live=True),
+        mock.call(1017, st, live=True),
     ]
 
     proc_mock.call_args_list = []
-    livefilling_supertensor.inc_block_number()
-    livefilling_supertensor.inc_block_number()
-    livefilling_supertensor.inc_block_number()
+    st.inc_block_number()
+    st.inc_block_number()
+    st.inc_block_number()
 
-    with (
-        mock.patch.object(allowance_tasks, "MAX_RUN_TIME", new=12),
-    ):
-        allowance_tasks.scan_blocks_and_calculate_allowance(
-            backfilling_supertensor=backfilling_supertensor,
-            keep_running=False,
-        )
+    with mock.patch.object(allowance_tasks, "MAX_RUN_TIME", new=12):
+        allowance_tasks.scan_blocks_and_calculate_allowance(keep_running=False)
 
     assert proc_mock.call_args_list == [
-        mock.call(1018, backfilling_supertensor, blocks_behind=2),
-        mock.call(1019, backfilling_supertensor, blocks_behind=1),
-        mock.call(1020, backfilling_supertensor, blocks_behind=0),
-        mock.call(1021, livefilling_supertensor, live=True),
-        mock.call(1022, livefilling_supertensor, live=True),
-        mock.call(1023, livefilling_supertensor, live=True),
-        mock.call(1024, livefilling_supertensor, live=True),
-        mock.call(1025, livefilling_supertensor, live=True),
-        mock.call(1026, livefilling_supertensor, live=True),
-        mock.call(1027, livefilling_supertensor, live=True),
-        mock.call(1028, livefilling_supertensor, live=True),
-        mock.call(1029, livefilling_supertensor, live=True),
-        mock.call(1030, livefilling_supertensor, live=True),
+        mock.call(1018, st, blocks_behind=2),
+        mock.call(1019, st, blocks_behind=1),
+        mock.call(1020, st, blocks_behind=0),
+        mock.call(1021, st, live=True),
+        mock.call(1022, st, live=True),
+        mock.call(1023, st, live=True),
+        mock.call(1024, st, live=True),
+        mock.call(1025, st, live=True),
+        mock.call(1026, st, live=True),
+        mock.call(1027, st, live=True),
+        mock.call(1028, st, live=True),
+        mock.call(1029, st, live=True),
+        mock.call(1030, st, live=True),
     ]
 
 
@@ -260,7 +219,7 @@ def test_tasks_scan_blocks_and_calculate_allowance_uses_real_lock_allows_single_
         threads = [
             threading.Thread(
                 target=allowance_tasks.scan_blocks_and_calculate_allowance,
-                args=(MagicMock(), False),
+                kwargs={"keep_running": False},
             )
             for _ in range(3)
         ]
@@ -308,9 +267,6 @@ def test_archive_scan_stops_on_supertensor_error_to_prevent_gaps(configure_logs)
         with set_block_number(block_num, oldest_reachable_block=1000):
             blocks.process_block_allowance_with_reporting(block_num, supertensor_=supertensor())
 
-    with set_block_number(current_block, oldest_reachable_block=1000):
-        archive_supertensor = supertensor()
-
     call_count = 0
 
     def mock_process_with_error(block_number, *args, **kwargs):
@@ -329,10 +285,7 @@ def test_archive_scan_stops_on_supertensor_error_to_prevent_gaps(configure_logs)
             side_effect=mock_process_with_error,
         ) as proc_mock,
     ):
-        allowance_tasks.scan_archive_blocks_and_calculate_allowance(
-            backfilling_supertensor=archive_supertensor,
-            keep_running=False,
-        )
+        allowance_tasks.scan_archive_blocks_and_calculate_allowance(keep_running=False)
 
     assert call_count == 1
     assert proc_mock.call_args_list[0].args[0] == 2399
@@ -360,9 +313,6 @@ def test_archive_scan_respects_range_boundaries_and_oldest_reachable(configure_l
         with set_block_number(block_num, oldest_reachable_block=oldest_reachable):
             blocks.process_block_allowance_with_reporting(block_num, supertensor_=supertensor())
 
-    with set_block_number(current_block, oldest_reachable_block=oldest_reachable):
-        archive_supertensor = supertensor()
-
     def mock_process_noop(block_number, *args, **kwargs):
         pass
 
@@ -377,10 +327,7 @@ def test_archive_scan_respects_range_boundaries_and_oldest_reachable(configure_l
         mock.patch.object(allowance_settings, "ARCHIVE_SCAN_MAX_RUN_TIME", new=999999),
         mock.patch.object(allowance_settings, "ARCHIVE_MAX_LOOKBACK", new=500),
     ):
-        allowance_tasks.scan_archive_blocks_and_calculate_allowance(
-            backfilling_supertensor=archive_supertensor,
-            keep_running=False,
-        )
+        allowance_tasks.scan_archive_blocks_and_calculate_allowance(keep_running=False)
 
     called_blocks = [call.args[0] for call in proc_mock.call_args_list]
 
@@ -412,9 +359,6 @@ def test_archive_scan_completes_successfully_with_checkpoints(configure_logs):
         with set_block_number(block_num, oldest_reachable_block=1000):
             blocks.process_block_allowance_with_reporting(block_num, supertensor_=supertensor())
 
-    with set_block_number(current_block, oldest_reachable_block=1000):
-        archive_supertensor = supertensor()
-
     checkpoint_calls = []
 
     def mock_checkpoint(block_lt, block_gte):
@@ -440,10 +384,7 @@ def test_archive_scan_completes_successfully_with_checkpoints(configure_logs):
             MagicMock(delay=mock_checkpoint),
         ),
     ):
-        allowance_tasks.scan_archive_blocks_and_calculate_allowance(
-            backfilling_supertensor=archive_supertensor,
-            keep_running=False,
-        )
+        allowance_tasks.scan_archive_blocks_and_calculate_allowance(keep_running=False)
 
     called_blocks = [call.args[0] for call in proc_mock.call_args_list]
 
