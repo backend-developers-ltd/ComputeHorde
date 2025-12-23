@@ -4,6 +4,7 @@ import pickle
 
 import turbobt
 from django.core.cache import cache
+from pylon.v1 import Neuron
 
 from compute_horde_validator.validator.allowance.types import ValidatorModel
 from compute_horde_validator.validator.allowance.utils.supertensor import BaseCache
@@ -19,14 +20,8 @@ class DjangoCache(BaseCache):
     def _get_key(self, data_type: str, block_number: int) -> str:
         return f"{self.cache_key_prefix}:{data_type}:{block_number}"
 
-    def put_neurons(self, block_number: int, neurons: list[turbobt.Neuron]):
+    def put_neurons(self, block_number: int, neurons: list[Neuron]):
         key = self._get_key("neurons", block_number)
-        # Serialize the entire list of objects into a byte stream
-        for neuron in neurons:
-            neuron.subnet = None  # type_check: ignore
-            neuron.prometheus_info = None  # type_check: ignore
-            # TODO: fix this with something more clever. currently these neurons don't have the full
-            # capabilities of neurons but that shouldn't be a biggie rn
         pickled_data = pickle.dumps(neurons)
         cache.set(key, pickled_data, self.cache_timeout)
 
@@ -40,14 +35,13 @@ class DjangoCache(BaseCache):
         key = self._get_key("block_hash", block_number)
         cache.set(key, block_hash, self.cache_timeout)
 
-    def get_neurons(self, block_number: int) -> list[turbobt.Neuron] | None:
+    def get_neurons(self, block_number: int) -> list[Neuron] | None:
         key = self._get_key("neurons", block_number)
         pickled_data = cache.get(key)
         if pickled_data is None:
             return None
-        # Deserialize the byte stream back into the original list of objects
         try:
-            unpickled: list[turbobt.Neuron] = pickle.loads(pickled_data)
+            unpickled: list[Neuron] = pickle.loads(pickled_data)
             return unpickled
         except Exception:
             logger.error("Error deserializing neurons:", exc_info=True)

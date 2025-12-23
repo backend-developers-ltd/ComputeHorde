@@ -2,11 +2,11 @@ import time
 from collections.abc import Callable
 from typing import Any, cast
 
-import turbobt
 from celery.utils.log import get_task_logger
 from compute_horde_core.executor_class import ExecutorClass
 from django.db import IntegrityError, transaction
 from django.db.models import Case, Exists, Max, Min, OuterRef, Q, Sum, When
+from pylon.v1 import Neuron
 
 from compute_horde_validator.validator.dynamic_config import get_config
 from compute_horde_validator.validator.locks import Lock, LockType
@@ -109,7 +109,7 @@ def get_stake_share(
     return validator.effective_stake / total_stake_sum
 
 
-def save_neurons(neurons: list[turbobt.Neuron], block: int):
+def save_neurons(neurons: list[Neuron], block: int):
     NeuronModel.objects.bulk_create(
         [
             NeuronModel(

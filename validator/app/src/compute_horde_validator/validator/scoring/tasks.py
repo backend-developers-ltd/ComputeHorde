@@ -16,6 +16,7 @@ from django.db import transaction
 from numpy._typing import NDArray
 from pydantic import JsonValue
 from pylon.v1 import DEFAULT_RETRIES, BasePylonException, Hotkey, Weight
+from pylon.v1 import Neuron as Neuron
 from tenacity import stop_after_attempt, wait_fixed
 
 from compute_horde_validator.celery import app
@@ -353,7 +354,7 @@ def _score_cycles(current_block: int) -> dict[str, float]:
 
 def normalize_batch_scores(
     hotkey_scores: dict[str, float],
-    neurons: list[turbobt.Neuron],
+    neurons: list[Neuron],
     min_allowed_weights: int,
     max_weight_limit: int,
 ) -> tuple["torch.Tensor", "torch.FloatTensor"] | tuple[NDArray[np.int64], NDArray[np.float32]]:
@@ -391,7 +392,7 @@ def normalize_batch_scores(
 def apply_dancing_burners(
     uids: Union["torch.Tensor", NDArray[np.int64]],
     weights: Union["torch.FloatTensor", NDArray[np.float32]],
-    neurons: list[turbobt.Neuron],
+    neurons: list[Neuron],
     cycle_block_start: int,
     min_allowed_weights: int,
     max_weight_limit: int,

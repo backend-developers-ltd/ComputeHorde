@@ -191,11 +191,6 @@ def reliability_env(
         )
 
     def _patch_supertensor(_st, base_block, neurons):
-        if hasattr(_st, "_neuron_list_cache"):
-            try:
-                _st._neuron_list_cache.clear()  # type: ignore[attr-defined]
-            except Exception:
-                pass
         monkeypatch.setattr(_st, "list_neurons", lambda block_number: neurons, raising=False)
         monkeypatch.setattr(_st, "get_shielded_neurons", lambda: neurons, raising=False)
         monkeypatch.setattr(

@@ -653,7 +653,7 @@ LOGGING = {
     },
     "root": {
         "handlers": ["console"],
-        "level": "DEBUG",
+        "level": env.str("ROOT_LOGGER_LEVEL", "DEBUG"),
     },
     "loggers": {
         "django": {

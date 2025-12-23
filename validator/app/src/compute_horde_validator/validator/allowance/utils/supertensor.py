@@ -8,7 +8,6 @@ import functools
 import logging
 import threading
 import time
-from collections import deque
 from collections.abc import Awaitable, Callable
 from queue import Queue
 from typing import Any, TypeVar, assert_never
@@ -21,9 +20,11 @@ from bt_ddos_shield.shield_metagraph import ShieldMetagraphOptions
 from bt_ddos_shield.turbobt import ShieldedBittensor
 from compute_horde.blockchain.block_cache import get_current_block
 from compute_horde.utils import MIN_VALIDATOR_STAKE, VALIDATORS_LIMIT
+from pylon.v1 import GetNeuronsResponse, Neuron
 from turbobt.subtensor.runtime.subnet_info import SubnetHyperparams
 
 from compute_horde_validator.validator.allowance.types import MetagraphData, ValidatorModel
+from compute_horde_validator.validator.pylon import pylon_client
 
 DEFAULT_TIMEOUT = 30.0
 
@@ -140,10 +141,10 @@ def archive_fallback(func: F) -> F:
 
 class BaseSuperTensor(abc.ABC):
     @abc.abstractmethod
-    def list_neurons(self, block_number: int) -> list[turbobt.Neuron]: ...
+    def list_neurons(self, block_number: int) -> list[Neuron]: ...
 
     @abc.abstractmethod
-    def list_validators(self, block_number: int) -> list[turbobt.Neuron]: ...
+    def list_validators(self, block_number: int) -> list[ValidatorModel]: ...
 
     @abc.abstractmethod
     def get_metagraph(self, block_number: int | None = None) -> MetagraphData: ...
@@ -225,8 +226,6 @@ class SuperTensor(BaseSuperTensor):
             self.archive_bittensor = None
             self.archive_subnet = None
 
-        self._neuron_list_cache: deque[tuple[int, list[turbobt.Neuron]]] = deque(maxlen=15)
-
         self._closed = False
         self.loop: asyncio.AbstractEventLoop | None = None
         self._background_thread: threading.Thread | None = None
@@ -260,40 +259,23 @@ class SuperTensor(BaseSuperTensor):
             return float("-inf")
         return self.get_current_block() - LITE_BLOCK_LOOKBACK
 
-    def _list_neurons(self, block_number: int) -> list[turbobt.Neuron]:
-        cache = dict(self._neuron_list_cache)
-        if hit := cache.get(block_number):
-            return hit
-        result: list[turbobt.Neuron] = self._real_list_neurons(block_number)
-        self._neuron_list_cache.append((block_number, result))
-        return result
+    def get_neurons(self, block_number: int) -> GetNeuronsResponse:
+        with pylon_client() as client:
+            return client.identity.get_neurons(block_number)
 
-    @RETRY_ON_TIMEOUT
-    def list_neurons(self, block_number: int) -> list[turbobt.Neuron]:
-        return self._list_neurons(block_number)
-
-    @archive_fallback
-    @make_sync
-    async def _real_list_neurons(self, block_number: int) -> list[turbobt.Neuron]:
-        bittensor = bittensor_context.get()
-        subnet = subnet_context.get()
-        async with bittensor.block(block_number):
-            result: list[turbobt.Neuron] = await subnet.list_neurons()
-            return result
+    def list_neurons(self, block_number: int) -> list[Neuron]:
+        return list(self.get_neurons(block_number).neurons.values())
 
     def list_validators(self, block_number: int) -> list[ValidatorModel]:
-        # Pull relevant neuron data from subnet state
-        # We have to use subnet state because it has the correct total stake that includes up-to-date root stake etc.
-        state = self.get_subnet_state(block_number)
-        uids = range(len(state.get("hotkeys", [])))
-        hotkeys = state.get("hotkeys", [])
-        stakes = [s / 1_000_000_000 for s in state.get("total_stake", [])]
+        neurons = self.list_neurons(block_number)
 
         # Filter out neurons with a stake lower than MIN_VALIDATOR_STAKE
         maybe_validators = [
-            ValidatorModel(uid=uid, hotkey=hotkey, effective_stake=stake)
-            for uid, hotkey, stake in zip(uids, hotkeys, stakes)
-            if stake >= MIN_VALIDATOR_STAKE
+            ValidatorModel(
+                uid=neuron.uid, hotkey=neuron.hotkey, effective_stake=neuron.stakes.total
+            )
+            for neuron in neurons
+            if neuron.stakes.total >= MIN_VALIDATOR_STAKE
         ]
 
         # We accept up to VALIDATORS_LIMIT validators, preferring the ones with the highest stake
@@ -302,33 +284,28 @@ class SuperTensor(BaseSuperTensor):
 
         return validators
 
-    def _build_metagraph_data(self, block_number: int) -> MetagraphData:
-        block_hash = self.get_block_hash(block_number)
-        turbobt_neurons = self.list_neurons(block_number)
-        subnet_state = self.get_subnet_state(block_number)
-        total_stake = [s / 1_000_000_000 for s in subnet_state.get("total_stake", [])]
-        uids = [neuron.uid for neuron in turbobt_neurons]
-        hotkeys = [neuron.hotkey for neuron in turbobt_neurons]
+    def get_metagraph(self, block_number: int | None = None) -> MetagraphData:
+        if block_number is None:
+            block_number = self.get_current_block()
+        neurons_data = self.get_neurons(block_number)
+        neurons_sorted = sorted(neurons_data.neurons.values(), key=lambda n: n.uid)
+        total_stake = [neuron.stakes.total for neuron in neurons_sorted]
+        uids = [neuron.uid for neuron in neurons_sorted]
+        hotkeys = [neuron.hotkey for neuron in neurons_sorted]
         serving_hotkeys = [
             neuron.hotkey
-            for neuron in turbobt_neurons
+            for neuron in neurons_sorted
             if neuron.axon_info and str(neuron.axon_info.ip) != "0.0.0.0"
         ]
 
         return MetagraphData.model_construct(
-            block=block_number,
-            block_hash=block_hash,
+            block=neurons_data.block.number,
+            block_hash=neurons_data.block.hash,
             total_stake=total_stake,
             uids=uids,
             hotkeys=hotkeys,
             serving_hotkeys=serving_hotkeys,
         )
-
-    @RETRY_ON_TIMEOUT
-    def get_metagraph(self, block_number: int | None = None) -> MetagraphData:
-        if block_number is None:
-            block_number = self.get_current_block()
-        return self._build_metagraph_data(block_number)
 
     @archive_fallback
     @make_sync
@@ -355,19 +332,13 @@ class SuperTensor(BaseSuperTensor):
     def get_subnet_state(self, block_number: int) -> turbobt.subnet.SubnetState:
         return self._get_subnet_state(block_number)
 
-    @archive_fallback
-    @make_sync
-    async def _get_commitments(self, block_number: int) -> dict[str, bytes]:
-        bittensor = bittensor_context.get()
-        subnet = subnet_context.get()
-        async with bittensor.block(block_number):
-            result: dict[str, bytes] = await subnet.commitments.fetch()
-            logger.debug(f"Commitments for block {block_number}: {result}")
-            return result
-
-    @RETRY_ON_TIMEOUT
     def get_commitments(self, block_number: int) -> dict[str, bytes]:
-        return self._get_commitments(block_number)
+        with pylon_client() as client:
+            response = client.identity.get_commitments()
+            return {
+                hotkey: bytes.fromhex(commitment.removeprefix("0x"))
+                for hotkey, commitment in response.commitments.items()
+            }
 
     @archive_fallback
     @make_sync
@@ -464,7 +435,7 @@ class TaskType(enum.Enum):
 
 class BaseCache(abc.ABC):
     @abc.abstractmethod
-    def put_neurons(self, block_number: int, neurons: list[turbobt.Neuron]): ...
+    def put_neurons(self, block_number: int, neurons: list[Neuron]): ...
 
     @abc.abstractmethod
     def put_block_timestamp(self, block_number: int, timestamp: datetime.datetime): ...
@@ -473,7 +444,7 @@ class BaseCache(abc.ABC):
     def put_block_hash(self, block_number: int, block_hash: str): ...
 
     @abc.abstractmethod
-    def get_neurons(self, block_number: int) -> list[turbobt.Neuron] | None: ...
+    def get_neurons(self, block_number: int) -> list[Neuron] | None: ...
 
     @abc.abstractmethod
     def get_block_timestamp(self, block_number: int) -> datetime.datetime | None: ...
@@ -502,14 +473,14 @@ class BaseCache(abc.ABC):
 
 class InMemoryCache(BaseCache):
     def __init__(self):
-        self._neuron_cache: dict[int, list[turbobt.Neuron]] = {}
+        self._neuron_cache: dict[int, list[Neuron]] = {}
         self._block_timestamp_cache: dict[int, datetime.datetime] = {}
         self._block_hash_cache: dict[int, str] = {}
         self._subnet_state_cache: dict[int, turbobt.subnet.SubnetState] = {}
         self._validators_cache: dict[int, list[ValidatorModel]] = {}
         self._commitments_cache: dict[int, dict[str, bytes]] = {}
 
-    def put_neurons(self, block_number: int, neurons: list[turbobt.Neuron]):
+    def put_neurons(self, block_number: int, neurons: list[Neuron]):
         self._neuron_cache[block_number] = neurons
 
     def put_block_timestamp(self, block_number: int, timestamp: datetime.datetime):
@@ -518,7 +489,7 @@ class InMemoryCache(BaseCache):
     def put_block_hash(self, block_number: int, block_hash: str):
         self._block_hash_cache[block_number] = block_hash
 
-    def get_neurons(self, block_number: int) -> list[turbobt.Neuron] | None:
+    def get_neurons(self, block_number: int) -> list[Neuron] | None:
         return self._neuron_cache.get(block_number)
 
     def get_block_timestamp(self, block_number: int) -> datetime.datetime | None:
@@ -708,7 +679,7 @@ class PrecachingSuperTensor(SuperTensor):
         if self.highest_block_submitted is None:
             self.highest_block_submitted = block_number - 1
 
-    def _list_neurons(self, block_number: int) -> list[turbobt.Neuron]:
+    def list_neurons(self, block_number: int) -> list[Neuron]:
         self.set_starting_block(block_number)
         neurons = self.cache.get_neurons(block_number)
         if neurons is not None:
@@ -717,7 +688,7 @@ class PrecachingSuperTensor(SuperTensor):
             raise PrecachingSuperTensorCacheMiss(f"Cache miss for block {block_number}")
         else:
             logger.debug(f"Cache miss for block {block_number}")
-            neurons = super()._list_neurons(block_number)
+            neurons = super().list_neurons(block_number)
             self.cache.put_neurons(block_number, neurons)
             return neurons
 
