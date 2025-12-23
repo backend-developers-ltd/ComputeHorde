@@ -7,7 +7,4 @@ from compute_horde_validator.validator.allowance.tasks import (
 
 class Command(BaseCommand):
     def handle(self, *args, **options):
-        scan_blocks_and_calculate_allowance(
-            backfilling_supertensor=None,
-            keep_running=False,
-        )
+        scan_blocks_and_calculate_allowance(keep_running=False)
