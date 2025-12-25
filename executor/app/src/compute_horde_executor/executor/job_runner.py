@@ -132,6 +132,12 @@ def network_name(docker_objects_infix: str) -> str:
     return f"ch-{docker_objects_infix}"
 
 
+def fix_docker_tag(image: str) -> str:
+    if ":" not in image:
+        return f"{image}:latest"
+    return image
+
+
 class BaseJobRunner(ABC):
     def __init__(self):
         self.initial_job_request: V0InitialJobRequest | None = None
@@ -213,9 +219,8 @@ class BaseJobRunner(ABC):
                 stdout = ""
                 stderr = ""
                 try:
-                    async for _line in client.images.pull(
-                        self.initial_job_request.docker_image, stream=True
-                    ):
+                    docker_image = fix_docker_tag(self.initial_job_request.docker_image)
+                    async for _line in client.images.pull(docker_image, stream=True):
                         line_str = json.dumps(_line)
                         if "error" in _line:
                             stderr += line_str + "\n"
@@ -456,11 +461,7 @@ class DefaultJobRunner(BaseJobRunner):
         assert self.initial_job_request is not None, (
             "Initial job request must be set. Call prepare_initial() first."
         )
-        image = self.full_job_request.docker_image
-        # aiodocker pulls all tags by default, so we need to specify the tag explicitly
-        if ":" not in image:
-            image += ":latest"
-        return image
+        return fix_docker_tag(self.full_job_request.docker_image)
 
     async def get_docker_run_args(self) -> dict[str, Any]:
         assert self.full_job_request is not None, (
