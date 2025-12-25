@@ -5,10 +5,12 @@ services:
     image: backenddevelopersltd/compute-horde-health-probe:v0-latest
     environment:
       - ENV=${ENV}
+      - JOB_SPEC_NAME=${JOB_SPEC_NAME}
       - BITTENSOR_WALLET_NAME=${BITTENSOR_WALLET_NAME}
       - BITTENSOR_WALLET_HOTKEY_NAME=${BITTENSOR_WALLET_HOTKEY_NAME}
       - BITTENSOR_WALLET_PATH=${BITTENSOR_WALLET_PATH}
       - FACILITATOR_URL=${FACILITATOR_URL}
+      - VALIDATOR_HOTKEY=${VALIDATOR_HOTKEY}
       - METRICS_SERVER_PORT=${METRICS_SERVER_PORT}
     volumes:
       - ${PWD}/wallets:/root/src/wallets
