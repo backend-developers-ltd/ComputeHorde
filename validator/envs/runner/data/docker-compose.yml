@@ -196,7 +196,7 @@ services:
       scrape_configs:
         - job_name: 'validator'
           static_configs:
-            - targets: ['cadvisor:8080', 'host.docker.internal:9100', 'app:8000', 'celery-flower:5555']
+            - targets: ['cadvisor:8080', 'host.docker.internal:9100', 'app:8000', 'celery-flower:5555', 'prometheus-proxy:8000']
               labels:
                 hotkey: '{hotkey}'
                 bittensor_network: $${BITTENSOR_NETWORK:-finney}
@@ -230,7 +230,7 @@ services:
       - PROMETHEUS_MULTIPROC_DIR=/prometheus-multiproc-dir/prometheus-proxy
     volumes:
       - ${HOST_WALLET_DIR}:/root/.bittensor/wallets
-      - ./prometheus-metrics:/prometheus-multiproc-dir
+      - ./prometheus-proxy-metrics:/prometheus-multiproc-dir
 
   celery-flower:
     image: backenddevelopersltd/${VALIDATOR_IMAGE_REPO}:v0-latest
