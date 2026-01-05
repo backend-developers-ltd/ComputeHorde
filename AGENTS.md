@@ -34,4 +34,4 @@ This project uses Astral uv. Use `uv run` to run Python code or Python tools. Do
 
 to run type checking in validator: `cd validator; uv run nox -s type_check`
 
-to run tests in validator: `cd validator/app/src; uv run pytest`
+to run tests in validator: `cd validator/; uv run nox -s test`; Similarly for other apps.

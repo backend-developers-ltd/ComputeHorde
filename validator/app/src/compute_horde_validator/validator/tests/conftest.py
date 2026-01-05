@@ -7,7 +7,7 @@ import bittensor_wallet
 import pytest
 from compute_horde.executor_class import EXECUTOR_CLASS
 from compute_horde_core.executor_class import ExecutorClass
-from pylon._internal.client.sync.client import PylonClient
+from pylon_client.v1 import PylonClient
 
 from ..organic_jobs.miner_driver import execute_organic_job_request
 from .helpers import MockNeuron

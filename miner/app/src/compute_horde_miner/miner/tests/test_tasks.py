@@ -1,5 +1,5 @@
 from collections.abc import Iterable
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, Mock
 
 import pytest
 from faker import Faker
@@ -11,8 +11,9 @@ pytestmark = [pytest.mark.django_db]
 
 
 @pytest.fixture(autouse=True)
-def mock_get_validators(mocker):
-    return mocker.patch("compute_horde_miner.miner.tasks.get_validators")
+def mock_pylon(mocker, mock_pylon_client):
+    mocker.patch("compute_horde_miner.miner.tasks.pylon_client", return_value=mock_pylon_client)
+    return mock_pylon_client
 
 
 @pytest.fixture
@@ -43,11 +44,15 @@ def _generate_validator_mocks(hotkeys: Iterable[str]):
     return [MagicMock(hotkey=key) for key in hotkeys]
 
 
-def test_fetch_validators_creates_new_active_validators(
-    faker: Faker, mock_get_validators: MagicMock
-):
+def _set_mock_validators(mock_pylon, hotkeys: Iterable[str]):
+    mock_pylon.identity.get_latest_validators.return_value = Mock(
+        validators=_generate_validator_mocks(hotkeys)
+    )
+
+
+def test_fetch_validators_creates_new_active_validators(faker: Faker, mock_pylon):
     new_keys = [faker.pystr() for _ in range(3)]
-    mock_get_validators.return_value = _generate_validator_mocks(new_keys)
+    _set_mock_validators(mock_pylon, new_keys)
 
     fetch_validators()
 
@@ -59,9 +64,9 @@ def test_fetch_validators_updates_existing_validators(
     inactive_validators_keys: list[str],
     active_validators: list[Validator],
     inactive_validators: list[Validator],
-    mock_get_validators: MagicMock,
+    mock_pylon,
 ):
-    mock_get_validators.return_value = _generate_validator_mocks(inactive_validators_keys)
+    _set_mock_validators(mock_pylon, inactive_validators_keys)
 
     fetch_validators()
 
@@ -77,10 +82,10 @@ def test_fetch_validators_debug(
     active_validators: list[Validator],
     active_validators_keys: list[str],
     inactive_validators: list[Validator],
-    mock_get_validators: MagicMock,
+    mock_pylon,
     faker: Faker,
 ):
-    mock_get_validators.return_value = _generate_validator_mocks(active_validators_keys)
+    _set_mock_validators(mock_pylon, active_validators_keys)
 
     debug_validator_key = faker.pystr()
     Validator.objects.create(public_key=debug_validator_key, active=True, debug=True)
@@ -95,10 +100,10 @@ def test_fetch_validators_debug(
 
 def test_fetch_validators_debug_inactive(
     active_validators_keys: list[str],
-    mock_get_validators: MagicMock,
+    mock_pylon,
     faker: Faker,
 ):
-    mock_get_validators.return_value = _generate_validator_mocks(active_validators_keys)
+    _set_mock_validators(mock_pylon, active_validators_keys)
 
     debug_validator_key = faker.pystr()
     debug_validator = Validator.objects.create(

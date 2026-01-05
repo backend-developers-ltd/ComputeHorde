@@ -6,7 +6,7 @@ from celery.utils.log import get_task_logger
 from compute_horde_core.executor_class import ExecutorClass
 from django.db import IntegrityError, transaction
 from django.db.models import Case, Exists, Max, Min, OuterRef, Q, Sum, When
-from pylon.v1 import Neuron
+from pylon_client.v1 import Neuron
 
 from compute_horde_validator.validator.dynamic_config import get_config
 from compute_horde_validator.validator.locks import Lock, LockType

@@ -16,8 +16,7 @@ import websockets
 from bt_ddos_shield.shield_metagraph import ShieldMetagraphOptions
 from bt_ddos_shield.turbobt import ShieldedBittensor
 from compute_horde.blockchain.block_cache import get_current_block
-from compute_horde.utils import MIN_VALIDATOR_STAKE, VALIDATORS_LIMIT
-from pylon.v1 import GetNeuronsResponse, Neuron
+from pylon_client.v1 import GetNeuronsResponse, Neuron
 from turbobt.subtensor.runtime.subnet_info import SubnetHyperparams
 
 from compute_horde_validator.validator.allowance.types import MetagraphData, ValidatorModel
@@ -264,22 +263,14 @@ class SuperTensor(BaseSuperTensor):
         return list(self.get_neurons(block_number).neurons.values())
 
     def list_validators(self, block_number: int) -> list[ValidatorModel]:
-        neurons = self.list_neurons(block_number)
-
-        # Filter out neurons with a stake lower than MIN_VALIDATOR_STAKE
-        maybe_validators = [
+        with pylon_client() as client:
+            response = client.identity.get_validators(block_number)
+        return [
             ValidatorModel(
                 uid=neuron.uid, hotkey=neuron.hotkey, effective_stake=neuron.stakes.total
             )
-            for neuron in neurons
-            if neuron.stakes.total >= MIN_VALIDATOR_STAKE
+            for neuron in response.validators
         ]
-
-        # We accept up to VALIDATORS_LIMIT validators, preferring the ones with the highest stake
-        maybe_validators.sort(key=lambda v: v.effective_stake, reverse=True)
-        validators = maybe_validators[:VALIDATORS_LIMIT]
-
-        return validators
 
     def get_metagraph(self, block_number: int | None = None) -> MetagraphData:
         if block_number is None:

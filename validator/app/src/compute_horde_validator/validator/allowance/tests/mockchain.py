@@ -10,7 +10,7 @@ from compute_horde.protocol_messages import V0ExecutorManifestRequest
 from compute_horde.test_wallet import get_test_validator_wallet
 from compute_horde_core.executor_class import ExecutorClass
 from pydantic import BaseModel
-from pylon.v1 import AxonInfo, AxonProtocol, Neuron, Stakes
+from pylon_client.v1 import AxonInfo, AxonProtocol, Neuron, Stakes
 from turbobt.subtensor.runtime.subnet_info import SubnetHyperparams
 
 from compute_horde_validator.validator.allowance.types import MetagraphData, ValidatorModel
