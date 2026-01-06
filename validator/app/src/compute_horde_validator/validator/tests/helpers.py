@@ -86,18 +86,39 @@ class MockAxonInfo:
 
 
 class MockMinerClient(MinerClient):
+    """Synchronous miner client stub.
+
+    This project used to run organic jobs with an async miner client. After refactoring organic
+    execution to be fully synchronous, tests that patch `MinerClient` need a sync-compatible
+    stub that can satisfy `execute_organic_job_on_miner_sync()`.
+    """
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._sent_models = []
+        self._sent_models: list[Any] = []
+        self._recv_queue: list[Any] = []
 
     def miner_url(self) -> str:
         return "ws://miner"
 
-    async def connect(self):
+    # Disable real networking
+    def connect(self) -> None:
         return
 
-    async def send_model(self, model, error_event_callback=None):
+    def close(self) -> None:
+        return
+
+    # Avoid touching the base class websocket machinery
+    def send(self, data: str | bytes) -> None:
+        return
+
+    def send_model(self, model, error_event_callback=None):
         self._sent_models.append(model)
+
+    def receive_model(self, timeout_seconds: float | None):
+        if not self._recv_queue:
+            raise TimeoutError("No more mock messages")
+        return self._recv_queue.pop(0)
 
     def _query_sent_models(self, condition=None, model_class=None):
         result = []
@@ -113,33 +134,33 @@ class MockMinerClient(MinerClient):
 class MockSuccessfulMinerClient(MockMinerClient):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.job_accepted_future.set_result(V0AcceptJobRequest(job_uuid=self.job_uuid))
-        self.executor_ready_future.set_result(V0ExecutorReadyRequest(job_uuid=self.job_uuid))
-        self.volumes_ready_future.set_result(V0VolumesReadyRequest(job_uuid=self.job_uuid))
-        self.execution_done_future.set_result(V0ExecutionDoneRequest(job_uuid=self.job_uuid))
-        self.job_finished_future.set_result(
+        self._recv_queue = [
+            V0AcceptJobRequest(job_uuid=self.job_uuid),
+            V0ExecutorReadyRequest(job_uuid=self.job_uuid),
+            V0VolumesReadyRequest(job_uuid=self.job_uuid),
+            V0ExecutionDoneRequest(job_uuid=self.job_uuid),
             V0JobFinishedRequest(
                 job_uuid=self.job_uuid,
                 docker_process_stdout="",
                 docker_process_stderr="",
                 artifacts={},
             )
-        )
+        ]
 
 
 class MockFaillingMinerClient(MockMinerClient):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.job_accepted_future.set_result(V0AcceptJobRequest(job_uuid=self.job_uuid))
-        self.executor_ready_future.set_result(V0ExecutorReadyRequest(job_uuid=self.job_uuid))
-        self.job_finished_future.set_result(
+        self._recv_queue = [
+            V0AcceptJobRequest(job_uuid=self.job_uuid),
+            V0ExecutorReadyRequest(job_uuid=self.job_uuid),
             V0JobFailedRequest(
                 job_uuid=self.job_uuid,
                 docker_process_stdout="",
                 docker_process_stderr="",
                 docker_process_exit_status=1,
             )
-        )
+        ]
 
 
 def get_dummy_signature() -> Signature:

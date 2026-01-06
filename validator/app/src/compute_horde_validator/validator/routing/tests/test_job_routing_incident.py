@@ -35,7 +35,7 @@ from compute_horde_validator.validator.models.allowance.internal import (
 from compute_horde_validator.validator.organic_jobs.facilitator_client import FacilitatorClient
 from compute_horde_validator.validator.organic_jobs.miner_driver import drive_organic_job
 from compute_horde_validator.validator.routing.default import routing
-from compute_horde_validator.validator.routing.types import JobRoute
+from compute_horde_validator.validator.routing.types import JobRoute, MinerIncidentType
 from compute_horde_validator.validator.tests.transport import SimulationTransport
 
 
@@ -96,70 +96,29 @@ def reliability_env(
     # routing builds miners from manifests/supertensor neuron list, where we set port=8000+idx
     port_by_hotkey = {m.hotkey: 8000 + idx for idx, m in enumerate(miners, start=1)}
 
-    async def _report_incidents(miner_hotkey: str, incidents: int, executor_class):
-        """Simulate miner incidents by running organic job flows that are declined.
+    def _report_incidents(miner_hotkey: str, incidents: int, executor_class):
+        """Simulate miner incidents.
 
-        Uses SimulationTransport to feed a V0DeclineJobRequest during the reservation stage
-        which triggers the incident reporting path in miner_driver (MinerRejectedJob).
+        The production incident path is triggered from the organic job driver.
+        After refactoring organic execution to be synchronous, calling the driver from
+        async tests raises `SynchronousOnlyOperation`. For routing reliability tests, it
+        is sufficient to record the corresponding `MinerIncident` rows.
         """
-        # Ensure Miner model exists (minimal fields for OrganicJob FK)
         expected_port = port_by_hotkey[miner_hotkey]
-        miner_model, created = await Miner.objects.aget_or_create(
+        miner_model, created = Miner.objects.get_or_create(
             hotkey=miner_hotkey,
             defaults={"address": "127.0.0.1", "port": expected_port, "ip_version": 4},
         )
-        # If it already existed (shouldn't normally) but with a mismatching port, align it
         if not created and miner_model.port != expected_port:
             miner_model.port = expected_port
-            await miner_model.asave(update_fields=["port"])
-        for i in range(incidents):
-            job_uuid = str(uuid.uuid4())
-            job = await OrganicJob.objects.acreate(
-                job_uuid=job_uuid,
-                miner=miner_model,
-                miner_address=miner_model.address or "127.0.0.1",
-                miner_address_ip_version=miner_model.ip_version or 4,
-                miner_port=miner_model.port or 9000,
-                executor_class=executor_class.value,
-                job_description="decline simulation",
-                block=base_block,
-            )
+            miner_model.save(update_fields=["port"])
 
-            transport = SimulationTransport(f"decline_sim_{miner_hotkey}_{i}")
-            # Miner will decline right after the initial job request is sent by the validator
-            await transport.add_message(
-                V0DeclineJobRequest(job_uuid=job_uuid),
-                send_before=1,
-            )
-
-            # Build a V2JobRequest mirroring JOB_REQUEST but with unique uuid
-            simulated_request = V2JobRequest(
-                uuid=job_uuid,
-                executor_class=JOB_REQUEST.executor_class,
-                docker_image=JOB_REQUEST.docker_image,
-                args=list(JOB_REQUEST.args),
-                env=dict(JOB_REQUEST.env),
-                download_time_limit=JOB_REQUEST.download_time_limit,
-                execution_time_limit=JOB_REQUEST.execution_time_limit,
-                streaming_start_time_limit=JOB_REQUEST.streaming_start_time_limit,
-                upload_time_limit=JOB_REQUEST.upload_time_limit,
-            )
-
-            miner_client = OrganicMinerClient(
-                miner_hotkey=miner_hotkey,
-                miner_address=miner_model.address or "127.0.0.1",
-                miner_port=miner_model.port or 9000,
-                job_uuid=job_uuid,
-                my_keypair=settings.BITTENSOR_WALLET().hotkey,
-                transport=transport,
-            )
-
-            # Run the job driver; this will catch MinerRejectedJob and record an incident
-            # Use default internal async dummy notify callback (omit custom one)
-            await drive_organic_job(
-                miner_client=miner_client,
-                job=job,
-                job_request=simulated_request,
+        for _ in range(incidents):
+            routing().report_miner_incident(
+                MinerIncidentType.MINER_JOB_REJECTED,
+                hotkey_ss58address=miner_hotkey,
+                job_uuid=str(uuid.uuid4()),
+                executor_class=executor_class,
             )
 
     target_executor_class = CoreExecutorClass(JOB_REQUEST.executor_class)
@@ -234,7 +193,7 @@ def reliability_env(
 
     for m in miners:
         if m.incidents:
-            async_to_sync(_report_incidents)(m.hotkey, m.incidents, target_executor_class)
+            _report_incidents(m.hotkey, m.incidents, target_executor_class)
 
     def _dbg_read():
         return list(
