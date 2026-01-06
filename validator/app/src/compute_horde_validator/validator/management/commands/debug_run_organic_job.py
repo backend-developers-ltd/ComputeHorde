@@ -2,7 +2,6 @@ import shlex
 import sys
 import uuid
 
-from asgiref.sync import async_to_sync
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.fv_protocol.facilitator_requests import V2JobRequest
 from compute_horde.fv_protocol.validator_requests import JobStatusUpdate
@@ -26,7 +25,7 @@ def get_keypair():
     return settings.BITTENSOR_WALLET().get_hotkey()
 
 
-async def notify_job_status_update(msg: JobStatusUpdate):
+def notify_job_status_update(msg: JobStatusUpdate) -> None:
     print(f"\njob status: {msg.status}")
     if msg.metadata:
         if details := (
@@ -137,7 +136,7 @@ class Command(BaseCommand):
             block=allowance().get_current_block(),
         )
 
-        async def _run_job():
+        try:
             keypair = get_keypair()
             miner_client = MinerClient(
                 miner_hotkey=miner.hotkey,
@@ -146,15 +145,12 @@ class Command(BaseCommand):
                 job_uuid=str(job.job_uuid),
                 my_keypair=keypair,
             )
-            await drive_organic_job(
+            drive_organic_job(
                 miner_client,
                 job,
                 job_request,
                 notify_callback=notify_job_status_update,
             )
-
-        try:
-            async_to_sync(_run_job)()
         except Exception as e:
             print(f"Failed to run job {job.job_uuid}: {e}")
             sys.exit(1)

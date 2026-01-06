@@ -314,10 +314,10 @@ def test_excused_job_no_incident(monkeypatch):
     job_uuid = str(uuid.uuid4())
 
     # Monkeypatch excuse helpers to simulate a valid excuse: 1 expected executor, 1 valid receipt
-    async def fake_filter_valid_excuse_receipts(**_kwargs):
+    def fake_filter_valid_excuse_receipts(**_kwargs):
         return [object()]
 
-    async def fake_get_expected_miner_executor_count(**_kwargs):
+    def fake_get_expected_miner_executor_count(**_kwargs):
         return 1
 
     monkeypatch.setattr(

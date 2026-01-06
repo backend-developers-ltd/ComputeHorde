@@ -1,10 +1,10 @@
 import logging
 import time
-from collections.abc import Awaitable, Callable
+from collections.abc import Callable
 from functools import partial
 
 import sentry_sdk
-from asgiref.sync import sync_to_async
+from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 from compute_horde.executor_class import EXECUTOR_CLASS
 from compute_horde.fv_protocol.facilitator_requests import OrganicJobRequest
@@ -18,14 +18,14 @@ from compute_horde.fv_protocol.validator_requests import (
     StreamingServerDetails,
 )
 from compute_horde.job_errors import HordeError
-from compute_horde.miner_client.organic import (
+from compute_horde.miner_client.organic import OrganicJobDetails
+from compute_horde.miner_client.organic_sync import (
     MinerConnectionFailed,
     MinerRejectedJob,
     MinerReportedHordeFailed,
     MinerReportedJobFailed,
     MinerTimedOut,
-    OrganicJobDetails,
-    execute_organic_job_on_miner,
+    execute_organic_job_on_miner_sync,
 )
 from compute_horde.protocol_consts import (
     HordeFailureReason,
@@ -47,7 +47,7 @@ from compute_horde_validator.validator import job_excuses
 from compute_horde_validator.validator.allowance.default import allowance
 from compute_horde_validator.validator.allowance.types import ValidatorModel
 from compute_horde_validator.validator.allowance.utils.supertensor import supertensor
-from compute_horde_validator.validator.dynamic_config import aget_config
+from compute_horde_validator.validator.dynamic_config import get_config
 from compute_horde_validator.validator.models import (
     Miner,
     OrganicJob,
@@ -65,7 +65,6 @@ def _get_current_block() -> int:
     return allowance().get_current_block()
 
 
-@sync_to_async
 def _get_active_validators(block: int | None) -> list[ValidatorModel]:
     if block is None:
         block = supertensor().get_current_block()
@@ -162,10 +161,10 @@ def status_update_from_horde_error(job: OrganicJob, error: HordeError) -> JobSta
     )
 
 
-async def save_job_execution_event(
+def save_job_execution_event(
     subtype: str, long_description: str, data: JsonValue = None, success: bool = False
 ) -> None:
-    await SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).acreate(
+    SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).create(
         type=SystemEvent.EventType.MINER_ORGANIC_JOB_SUCCESS
         if success
         else SystemEvent.EventType.MINER_ORGANIC_JOB_FAILURE,
@@ -175,11 +174,11 @@ async def save_job_execution_event(
     )
 
 
-async def _dummy_notify_callback(_: JobStatusUpdate) -> None:
-    pass
+def _dummy_notify_callback(_: JobStatusUpdate) -> None:
+    return
 
 
-async def execute_organic_job_request(
+def execute_organic_job_request(
     job_request: OrganicJobRequest, job_route: JobRoute
 ) -> OrganicJob:
     if (
@@ -205,10 +204,10 @@ async def execute_organic_job_request(
     if settings.DEBUG_USE_MOCK_BLOCK_NUMBER:
         block = 5136476 + int((time.time() - 1742076533) / 12)
     else:
-        block = await sync_to_async(_get_current_block, thread_sensitive=False)()
+        block = _get_current_block()
 
-    miner = await Miner.objects.aget(hotkey=job_route.miner.hotkey_ss58)
-    job = await OrganicJob.objects.acreate(
+    miner = Miner.objects.get(hotkey=job_route.miner.hotkey_ss58)
+    job = OrganicJob.objects.create(
         job_uuid=str(job_request.uuid),
         miner=miner,
         miner_address=miner_ip,
@@ -235,13 +234,13 @@ async def execute_organic_job_request(
         my_keypair=settings.BITTENSOR_WALLET().hotkey,
     )
 
-    async def job_status_callback(status_update: JobStatusUpdate):
-        await get_channel_layer().send(
+    def job_status_callback(status_update: JobStatusUpdate) -> None:
+        async_to_sync(get_channel_layer().send)(
             f"job_status_updates__{status_update.uuid}",
             {"type": "job_status_update", "payload": status_update.model_dump(mode="json")},
         )
 
-    await drive_organic_job(
+    drive_organic_job(
         miner_client,
         job,
         job_request,
@@ -251,11 +250,11 @@ async def execute_organic_job_request(
     return job
 
 
-async def drive_organic_job(
+def drive_organic_job(
     miner_client: MinerClient,
     job: OrganicJob,
     job_request: OrganicJobRequest,
-    notify_callback: Callable[[JobStatusUpdate], Awaitable[None]] | None = None,
+    notify_callback: Callable[[JobStatusUpdate], None] | None = None,
 ) -> bool:
     """
     Execute an organic job on a miner client.
@@ -264,22 +263,22 @@ async def drive_organic_job(
     if notify_callback is None:
         notify_callback = _dummy_notify_callback
 
-    if job.on_trusted_miner and await aget_config("DYNAMIC_DISABLE_TRUSTED_ORGANIC_JOB_EVENTS"):
+    if job.on_trusted_miner and get_config("DYNAMIC_DISABLE_TRUSTED_ORGANIC_JOB_EVENTS"):
         # ignore trusted system events
-        async def save_event(*args, **kwargs):
-            pass
+        def save_event(*args, **kwargs):
+            return
     else:
         data: JsonValue = {"job_uuid": str(job.job_uuid), "miner_hotkey": miner_client.my_hotkey}
         save_event = partial(save_job_execution_event, data=data)
 
     def status_callback(status: JobStatus):
-        async def relay(msg: MinerToValidatorMessage) -> None:
-            await notify_callback(JobStatusUpdate(uuid=str(job.job_uuid), status=status))
+        def relay(_msg: MinerToValidatorMessage) -> None:
+            notify_callback(JobStatusUpdate(uuid=str(job.job_uuid), status=status))
 
         return relay
 
-    async def streaming_ready_callback(msg: V0StreamingJobReadyRequest) -> None:
-        await notify_callback(
+    def streaming_ready_callback(msg: V0StreamingJobReadyRequest) -> None:
+        notify_callback(
             JobStatusUpdate(
                 uuid=str(job.job_uuid),
                 status=JobStatus.STREAMING_READY,
@@ -293,11 +292,11 @@ async def drive_organic_job(
             )
         )
 
-    miner_client.notify_job_accepted = status_callback(JobStatus.ACCEPTED)  # type: ignore[method-assign]
-    miner_client.notify_executor_ready = status_callback(JobStatus.EXECUTOR_READY)  # type: ignore[method-assign]
-    miner_client.notify_volumes_ready = status_callback(JobStatus.VOLUMES_READY)  # type: ignore[method-assign]
-    miner_client.notify_execution_done = status_callback(JobStatus.EXECUTION_DONE)  # type: ignore[method-assign]
-    miner_client.notify_streaming_readiness = streaming_ready_callback  # type: ignore[method-assign]
+    miner_client.notify_job_accepted = status_callback(JobStatus.ACCEPTED)
+    miner_client.notify_executor_ready = status_callback(JobStatus.EXECUTOR_READY)
+    miner_client.notify_volumes_ready = status_callback(JobStatus.VOLUMES_READY)
+    miner_client.notify_execution_done = status_callback(JobStatus.EXECUTION_DONE)
+    miner_client.notify_streaming_readiness = streaming_ready_callback
     # TODO: remove method assignment above and properly handle notify_* cases
 
     executor_class = ExecutorClass(job_request.executor_class)
@@ -315,7 +314,7 @@ async def drive_organic_job(
         output=job_request.output_upload,
         artifacts_dir=job_request.artifacts_dir,
         job_timing=OrganicJobDetails.TimingDetails(
-            allowed_leeway=await aget_config("DYNAMIC_ORGANIC_JOB_ALLOWED_LEEWAY_TIME"),
+            allowed_leeway=get_config("DYNAMIC_ORGANIC_JOB_ALLOWED_LEEWAY_TIME"),
             download_time_limit=job_request.download_time_limit,
             execution_time_limit=job_request.execution_time_limit,
             upload_time_limit=job_request.upload_time_limit,
@@ -327,16 +326,16 @@ async def drive_organic_job(
     )
 
     try:
-        stdout, stderr, artifacts, upload_results = await execute_organic_job_on_miner(
+        stdout, stderr, artifacts, upload_results = execute_organic_job_on_miner_sync(
             miner_client,
             job_details,
-            reservation_time_limit=await aget_config("DYNAMIC_EXECUTOR_RESERVATION_TIME_LIMIT"),
-            executor_startup_time_limit=await aget_config("DYNAMIC_EXECUTOR_STARTUP_TIME_LIMIT"),
+            reservation_time_limit=get_config("DYNAMIC_EXECUTOR_RESERVATION_TIME_LIMIT"),
+            executor_startup_time_limit=get_config("DYNAMIC_EXECUTOR_STARTUP_TIME_LIMIT"),
         )
 
         if job.allowance_reservation_id is not None:
             try:
-                await sync_to_async(allowance().spend_allowance)(job.allowance_reservation_id)
+                allowance().spend_allowance(job.allowance_reservation_id)
                 logger.info(
                     "Successfully spent allowance for reservation %s for job %s",
                     job.allowance_reservation_id,
@@ -358,12 +357,10 @@ async def drive_organic_job(
         job.upload_results = upload_results
         job.status = OrganicJob.Status.COMPLETED
         job.comment = comment
-        await job.asave()
+        job.save()
         logger.info(comment)
-        await save_event(
-            subtype=SystemEvent.EventSubType.SUCCESS, long_description=comment, success=True
-        )
-        await notify_callback(status_update_from_success(job))
+        save_event(subtype=SystemEvent.EventSubType.SUCCESS, long_description=comment, success=True)
+        notify_callback(status_update_from_success(job))
         return True
 
     except MinerRejectedJob as rejection:
@@ -375,22 +372,22 @@ async def drive_organic_job(
             )  # As far as the validator is concerned, the job is as good as failed
             system_event_subtype = SystemEvent.EventSubType.JOB_REJECTED
         else:  # rejection.msg.reason == JobRejectionReason.BUSY
-            job_started_receipt = await JobStartedReceipt.objects.aget(job_uuid=str(job.job_uuid))
+            job_started_receipt = JobStartedReceipt.objects.get(job_uuid=str(job.job_uuid))
             job_request_time = job_started_receipt.timestamp
-            active_validators = await _get_active_validators(job.block)
+            active_validators = _get_active_validators(job.block)
             valid_excuses = job_excuses.filter_valid_excuse_receipts(
                 receipts_to_check=rejection.msg.receipts or [],
                 check_time=job_request_time,
                 declined_job_uuid=str(job.job_uuid),
                 declined_job_executor_class=ExecutorClass(job.executor_class),
                 declined_job_is_synthetic=False,
-                minimum_validator_stake_for_excuse=await aget_config(
+                minimum_validator_stake_for_excuse=get_config(
                     "DYNAMIC_MINIMUM_VALIDATOR_STAKE_FOR_EXCUSE"
                 ),
                 miner_hotkey=job.miner.hotkey,
                 active_validators=active_validators,
             )
-            expected_executor_count = await job_excuses.get_expected_miner_executor_count(
+            expected_executor_count = job_excuses.get_expected_miner_executor_count(
                 check_time=job_request_time,
                 miner_hotkey=job.miner.hotkey,
                 executor_class=ExecutorClass(job.executor_class),
@@ -407,68 +404,68 @@ async def drive_organic_job(
         logger.info(comment)
         job.comment = comment
         job.status = status
-        await job.asave()
+        job.save()
         if status != OrganicJob.Status.EXCUSED:
-            await sync_to_async(routing().report_miner_incident)(
+            routing().report_miner_incident(
                 MinerIncidentType.MINER_JOB_REJECTED,
                 hotkey_ss58address=job.miner.hotkey,
                 job_uuid=str(job.job_uuid),
                 executor_class=ExecutorClass(job.executor_class),
             )
-        await save_event(subtype=system_event_subtype, long_description=comment)
+        save_event(subtype=system_event_subtype, long_description=comment)
         status_update = status_update_from_miner_rejection(job, rejection, comment)
-        await notify_callback(status_update)
+        notify_callback(status_update)
 
     except MinerReportedJobFailed as failure:
         job.status = OrganicJob.Status.FAILED
         job.comment = failure.msg.message
-        await job.asave()
-        await sync_to_async(routing().report_miner_incident)(
+        job.save()
+        routing().report_miner_incident(
             MinerIncidentType.MINER_JOB_FAILED,
             hotkey_ss58address=job.miner.hotkey,
             job_uuid=str(job.job_uuid),
             executor_class=ExecutorClass(job.executor_class),
         )
-        await save_event(
+        save_event(
             subtype=_job_event_subtype_map.get(
                 failure.msg.reason, SystemEvent.EventSubType.GENERIC_JOB_FAILURE
             ),
             long_description=failure.msg.message,
         )
         status_update = status_update_from_miner_job_failure(job, failure)
-        await notify_callback(status_update)
+        notify_callback(status_update)
 
     except MinerReportedHordeFailed as failure:
         job.status = OrganicJob.Status.FAILED
         job.comment = failure.msg.message
-        await job.asave()
-        await sync_to_async(routing().report_miner_incident)(
+        job.save()
+        routing().report_miner_incident(
             MinerIncidentType.MINER_HORDE_FAILED,
             hotkey_ss58address=job.miner.hotkey,
             job_uuid=str(job.job_uuid),
             executor_class=ExecutorClass(job.executor_class),
         )
-        await save_event(
+        save_event(
             subtype=_horde_event_subtype_map.get(
                 failure.msg.reason, SystemEvent.EventSubType.GENERIC_ERROR
             ),
             long_description=failure.msg.message,
         )
         status_update = status_update_from_miner_horde_failure(job, failure)
-        await notify_callback(status_update)
+        notify_callback(status_update)
 
     except (MinerConnectionFailed, MinerTimedOut) as e:
         comment = str(e)
         logger.warning(comment)
         job.status = OrganicJob.Status.FAILED
         job.comment = comment
-        await job.asave()
+        job.save()
         event_subtype = _horde_event_subtype_map.get(
             e.reason, SystemEvent.EventSubType.GENERIC_ERROR
         )
-        await save_event(subtype=event_subtype, long_description=comment)
+        save_event(subtype=event_subtype, long_description=comment)
         status_update = status_update_from_horde_error(job, e)
-        await notify_callback(status_update)
+        notify_callback(status_update)
 
     except Exception as e:
         sentry_sdk.capture_exception(e)
@@ -477,22 +474,20 @@ async def drive_organic_job(
         logger.warning(comment)
         job.status = OrganicJob.Status.FAILED
         job.comment = comment
-        await job.asave()
+        job.save()
 
         event_subtype = _horde_event_subtype_map.get(
             e.reason, SystemEvent.EventSubType.GENERIC_ERROR
         )
-        await save_event(subtype=event_subtype, long_description=comment)
+        save_event(subtype=event_subtype, long_description=comment)
 
         status_update = status_update_from_horde_error(job, e)
-        await notify_callback(status_update)
+        notify_callback(status_update)
 
     # Undo allowance reservation for any job failure
     if job.allowance_reservation_id is not None:
         try:
-            await sync_to_async(allowance().undo_allowance_reservation)(
-                job.allowance_reservation_id
-            )
+            allowance().undo_allowance_reservation(job.allowance_reservation_id)
             logger.info(
                 "Successfully undid allowance reservation %s for failed job %s",
                 job.allowance_reservation_id,

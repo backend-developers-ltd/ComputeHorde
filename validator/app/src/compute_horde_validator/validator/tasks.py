@@ -262,6 +262,17 @@ async def execute_organic_job_request_on_worker(
         ```
     """
     timeout = await aget_config("ORGANIC_JOB_CELERY_WAIT_TIMEOUT")
+
+    # In tests/dev we often run Celery in eager mode. When this coroutine is called from an
+    # async context, running the (sync) celery task inline will execute sync Django ORM calls
+    # inside the event loop, which raises `SynchronousOnlyOperation`.
+    if bool(getattr(app.conf, "task_always_eager", False)):
+        await sync_to_async(_execute_organic_job_on_worker, thread_sensitive=True)(
+            job_request.model_dump(),
+            job_route.model_dump(),
+        )
+        return await OrganicJob.objects.aget(job_uuid=job_request.uuid)
+
     future_result: AsyncResult[None] = _execute_organic_job_on_worker.apply_async(
         args=(job_request.model_dump(), job_route.model_dump()),
         expires=timeout,
@@ -276,7 +287,7 @@ async def execute_organic_job_request_on_worker(
 def _execute_organic_job_on_worker(job_request: JsonValue, job_route: JsonValue) -> None:
     request: OrganicJobRequest = TypeAdapter(OrganicJobRequest).validate_python(job_request)
     route: JobRoute = TypeAdapter(JobRoute).validate_python(job_route)
-    async_to_sync(execute_organic_job_request)(request, route)
+    execute_organic_job_request(request, route)
 
 
 @app.task(bind=True, max_retries=SLASH_COLLATERAL_TASK_MAX_RETRIES)

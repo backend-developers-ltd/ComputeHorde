@@ -10,16 +10,15 @@ from compute_horde_validator.validator.routing.types import JobRoute
 from compute_horde_validator.validator.tests.helpers import get_dummy_job_request_v2
 
 
-@pytest.mark.asyncio
 @pytest.mark.django_db
 @pytest.mark.parametrize(
     "job_namespace,namespace_value", [("SN123.1.0", "SN123.1.0"), ("", "docker_image")]
 )
-async def test_organic_job_namespace_priority(job_namespace, namespace_value):
+def test_organic_job_namespace_priority(job_namespace, namespace_value):
     """
     Test OrganicJob uses namespace with fallback to docker_image.
     """
-    miner_model = await Miner.objects.acreate(
+    miner_model = Miner.objects.create(
         hotkey=f"test-miner-{str(uuid.uuid4())[:8]}",
         address="127.0.0.1",
         port=8000,
@@ -51,5 +50,5 @@ async def test_organic_job_namespace_priority(job_namespace, namespace_value):
         ) as mock_drive:
             mock_drive.return_value = True
 
-            job = await execute_organic_job_request(job_request, job_route)
+            job = execute_organic_job_request(job_request, job_route)
             assert job.namespace == namespace_value

@@ -89,20 +89,20 @@ def filter_valid_excuse_receipts(
     return valid_receipts
 
 
-async def get_expected_miner_executor_count(
+def get_expected_miner_executor_count(
     check_time: datetime,
     miner_hotkey: str,
     executor_class: ExecutorClass,
 ) -> int:
     latest_manifest = (
-        await MinerManifest.objects.filter(
+        MinerManifest.objects.filter(
             miner__hotkey=miner_hotkey,
             executor_class=executor_class,
             created_at__lte=check_time,
         )
         .order_by("created_at")
         .only("online_executor_count")
-        .afirst()
+        .first()
     )
 
     if latest_manifest is None:
