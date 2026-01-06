@@ -1,10 +1,12 @@
 import json
 from collections.abc import Callable
+from datetime import timedelta
 from enum import Enum
 from functools import cached_property, wraps
 from typing import Annotated, ClassVar, Union
 
 import structlog
+from bittensor_wallet import Keypair
 from channels.generic.websocket import AsyncWebsocketConsumer
 from compute_horde import protocol_consts
 from compute_horde.fv_protocol.facilitator_requests import Error, Response
@@ -57,8 +59,35 @@ class ValidatorConsumer(AsyncWebsocketConsumer):
     """A WS endpoint for validators to connect to"""
 
     async def connect(self) -> None:
-        await super().connect()
-        log.info("connected", scope=self.scope)
+        timestamp_str = self.headers.get("x-timestamp", "0")
+        timestamp = int(timestamp_str)
+        public_key = self.headers.get("x-public-key")
+        signature = self.headers.get("x-signature")
+
+        if public_key is None or signature is None:
+            await self.close(code=CloseCode.INVALID_SIGNATURE.value, reason="Missing public key or signature")
+            log.info("missing public key or signature", public_key=public_key, signature=signature)
+            return
+
+        if timestamp > now().timestamp() + timedelta(seconds=5).total_seconds():  # 5-second leeway for clock skew
+            await self.close(code=CloseCode.INVALID_SIGNATURE.value, reason="Timestamp is in the future")
+            log.info("timestamp in the future", timestamp=timestamp)
+            return
+        if timestamp < now().timestamp() - timedelta(seconds=60).total_seconds():
+            await self.close(code=CloseCode.INVALID_SIGNATURE.value, reason="Timestamp is too old")
+            log.info("timestamp too old", timestamp=timestamp)
+            return
+
+        keypair = Keypair(public_key=public_key, ss58_format=42)
+        valid: bool = keypair.verify(timestamp_str, signature)
+
+        if valid:
+            await self.accept()
+            log.info("connected", scope=self.scope)
+            # TODO: check `async def authenticate` for the rest of things to do
+        else:
+            await self.close(code=CloseCode.INVALID_SIGNATURE.value, reason="Invalid signature")
+            log.info("invalid signature", public_key=public_key, signature=signature)
 
     async def disconnect(self, code: int | str) -> None:
         if self.scope.get("ss58_address"):
@@ -69,7 +98,7 @@ class ValidatorConsumer(AsyncWebsocketConsumer):
         log.info("disconnected", scope=self.scope, code=code)
 
     @cached_property
-    def headers(self):
+    def headers(self) -> dict[str, str]:
         headers = self.scope.get("headers", [])
 
         return {key.decode().lower(): value.decode() for key, value in headers}

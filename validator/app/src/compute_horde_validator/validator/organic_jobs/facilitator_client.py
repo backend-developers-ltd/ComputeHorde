@@ -132,7 +132,16 @@ class FacilitatorClient:
 
     def connect(self) -> websockets.connect:
         """Create an awaitable/async-iterable websockets.connect() object"""
+        timestamp_str = str(int(time.time()))
+        public_key_bytes = self.keypair.public_key
+        if public_key_bytes is None:
+            raise ValueError("keypair.public_key is None")
+        public_key = public_key_bytes.hex()
+        signature = "0x" + self.keypair.sign(timestamp_str).hex()
         additional_headers = {
+            "X-Timestamp": timestamp_str,
+            "X-Public-Key": public_key,
+            "X-Signature": signature,
             "X-Validator-Runner-Version": os.environ.get("VALIDATOR_RUNNER_VERSION", "unknown"),
             "X-Validator-Version": os.environ.get("VALIDATOR_VERSION", "unknown"),
         }
