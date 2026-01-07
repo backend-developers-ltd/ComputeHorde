@@ -20,6 +20,8 @@ from django.contrib.auth.models import User
 from ...asgi import application
 from ..models import Channel, Job, Validator
 
+pytest_plugins = ["compute_horde.test_base.pylon"]
+
 
 @pytest_asyncio.fixture
 async def communicator():

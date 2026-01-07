@@ -12,6 +12,16 @@ services:
       options:
         tag: '{{.Name}}'
 
+  pylon:
+    image: docker.io/backenddevelopersltd/bittensor-pylon:0.3.0
+    init: true
+    restart: unless-stopped
+    env_file: ./.env
+    environment:
+      - PYLON_OPEN_ACCESS_TOKEN=${PYLON_OPEN_ACCESS_TOKEN:-facilitator_token}
+    logging:
+      <<: *logging
+
   db:
     image: postgres:14.0-alpine
     healthcheck:
@@ -51,6 +61,7 @@ services:
     depends_on:
       - redis
       - db
+      - pylon
     logging:
       <<: *logging
 
@@ -70,6 +81,7 @@ services:
     tmpfs: /run
     depends_on:
       - redis
+      - pylon
     logging:
       <<: *logging
 
