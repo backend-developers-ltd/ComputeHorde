@@ -26,12 +26,17 @@ services:
       <<: *logging
 
   pylon:
-    image: docker.io/backenddevelopersltd/bittensor-pylon:0.1.0
+    image: docker.io/backenddevelopersltd/bittensor-pylon:0.3.0
     init: true
     restart: unless-stopped
     env_file: ./.env
     environment:
       - BITTENSOR_WALLET_PATH=/root/.bittensor/wallets
+      - PYLON_IDENTITIES=["validator"]
+      - PYLON_ID_VALIDATOR_WALLET_NAME=${BITTENSOR_WALLET_NAME}
+      - PYLON_ID_VALIDATOR_HOTKEY_NAME=${BITTENSOR_WALLET_HOTKEY_NAME}
+      - PYLON_ID_VALIDATOR_NETUID=${BITTENSOR_NETUID:-12}
+      - PYLON_ID_VALIDATOR_TOKEN=${PYLON_IDENTITY_TOKEN:-validator_token}
     volumes:
       - ${HOST_WALLET_DIR}:/root/.bittensor/wallets
     logging:

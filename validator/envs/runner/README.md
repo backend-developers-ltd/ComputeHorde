@@ -58,6 +58,8 @@ BITTENSOR_WALLET_NAME=validator
 BITTENSOR_WALLET_HOTKEY_NAME=default
 HOST_WALLET_DIR=/home/josephus/.bittensor/wallets
 FACILITATOR_URI=wss://facilitator.computehorde.io/ws/v0/
+# optional: authentication token for the Pylon service (defaults to "validator_token")
+PYLON_IDENTITY_TOKEN=validator_token
 ```
 
 Validator support admin panel that binds to 127.0.0.1:80. If you want to change default port add set it in `.env`, e.g.
@@ -95,6 +97,7 @@ A `watchtower` container that will automatically apply updates for containers.
 backenddevelopersltd/compute-horde-validator-runner
 |__postgres
 |__redis
+|__pylon
 |__worker
 |__...
 |__watchtower
@@ -103,3 +106,6 @@ backenddevelopersltd/compute-horde-validator-runner
 The `watchtower` container may update:
 1) core services in `docker-compose.yml` (like `worker`), and
 2) `backenddevelopersltd/compute-horde-validator-runner` container itself, which will automatically update ALL the other containers.
+
+The `pylon` service handles wallet operations and blockchain interactions (e.g., committing manifests, fetching validators).
+See the [Pylon documentation](https://github.com/backend-developers-ltd/bittensor-pylon) for more details.

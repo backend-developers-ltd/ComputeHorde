@@ -68,6 +68,7 @@ A `watchtower` container will automatically apply updates for containers.
 backenddevelopersltd/compute-horde-miner-runner
 |__postgres
 |__redis
+|__pylon
 |__app
 |__worker
 |__nginx
@@ -77,3 +78,6 @@ backenddevelopersltd/compute-horde-miner-runner
 The `watchtower` container may update:
 1) core services in `docker-compose.yml` (like `app` or `worker`), and
 2) `backenddevelopersltd/compute-horde-miner-runner` container itself, which will automatically update ALL the other containers.
+
+The `pylon` service handles wallet operations and blockchain interactions (e.g., committing manifests, fetching validators).
+See the [Pylon documentation](https://github.com/backend-developers-ltd/bittensor-pylon) for more details.
