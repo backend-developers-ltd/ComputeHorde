@@ -144,7 +144,7 @@ class MockSuccessfulMinerClient(MockMinerClient):
                 docker_process_stdout="",
                 docker_process_stderr="",
                 artifacts={},
-            )
+            ),
         ]
 
 
@@ -159,7 +159,7 @@ class MockFaillingMinerClient(MockMinerClient):
                 docker_process_stdout="",
                 docker_process_stderr="",
                 docker_process_exit_status=1,
-            )
+            ),
         ]
 
 

@@ -10,8 +10,6 @@ import pytest
 from asgiref.sync import async_to_sync
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.fv_protocol.facilitator_requests import V2JobRequest
-from compute_horde.miner_client.organic import OrganicMinerClient
-from compute_horde.protocol_messages import V0DeclineJobRequest
 from compute_horde.transport import AbstractTransport
 from compute_horde_core.executor_class import ExecutorClass as CoreExecutorClass
 from django.conf import settings
@@ -33,7 +31,6 @@ from compute_horde_validator.validator.models.allowance.internal import (
     BlockAllowance as _DbgBlockAllowance,
 )
 from compute_horde_validator.validator.organic_jobs.facilitator_client import FacilitatorClient
-from compute_horde_validator.validator.organic_jobs.miner_driver import drive_organic_job
 from compute_horde_validator.validator.routing.default import routing
 from compute_horde_validator.validator.routing.types import JobRoute, MinerIncidentType
 from compute_horde_validator.validator.tests.transport import SimulationTransport

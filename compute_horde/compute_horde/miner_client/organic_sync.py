@@ -43,6 +43,10 @@ from compute_horde.receipts.schemas import (
 )
 from compute_horde.utils import MachineSpecs, Timer, sign_blob
 
+TYPE_CHECKING = False
+if TYPE_CHECKING:
+    from .organic import OrganicJobDetails
+
 logger = logging.getLogger(__name__)
 
 
@@ -126,7 +130,9 @@ class SyncOrganicMinerClient:
         return f"{self.miner_hotkey}@{self.miner_address}:{self.miner_port}"
 
     def miner_url(self) -> str:
-        return f"ws://{self.miner_address}:{self.miner_port}/ws/v0/validator"  # matches async client
+        return (
+            f"ws://{self.miner_address}:{self.miner_port}/ws/v0/validator"  # matches async client
+        )
 
     def notify_generic_error(self, _msg: GenericError) -> None:
         return
@@ -203,9 +209,7 @@ class SyncOrganicMinerClient:
             ).save()
             logger.debug("Sent job accepted receipt for %s", self.job_uuid)
         except Exception as e:
-            comment = (
-                f"Failed to send job accepted receipt to miner {self.miner_name} for job {self.job_uuid}: {e}"
-            )
+            comment = f"Failed to send job accepted receipt to miner {self.miner_name} for job {self.job_uuid}: {e}"
             logger.warning(comment)
             self.notify_receipt_failure(comment)
 
@@ -250,9 +254,7 @@ class SyncOrganicMinerClient:
             ).save()
             logger.debug("Sent job finished receipt for %s", self.job_uuid)
         except Exception as e:
-            comment = (
-                f"Failed to send job finished receipt to miner {self.miner_name} for job {self.job_uuid}: {e}"
-            )
+            comment = f"Failed to send job finished receipt to miner {self.miner_name} for job {self.job_uuid}: {e}"
             logger.warning(comment)
             self.notify_receipt_failure(comment)
 
@@ -332,7 +334,9 @@ class SyncOrganicMinerClient:
                 volume=job_details.volume,
                 job_started_receipt_payload=receipt_payload,
                 job_started_receipt_signature=receipt_signature,
-                executor_timing=V0InitialJobRequest.ExecutorTimingDetails(**asdict(job_details.job_timing))
+                executor_timing=V0InitialJobRequest.ExecutorTimingDetails(
+                    **asdict(job_details.job_timing)
+                )
                 if job_details.job_timing is not None
                 else None,
                 streaming_details=job_details.streaming_details,
@@ -355,7 +359,9 @@ def _recv_until(
     return client.receive_model(timeout_seconds)
 
 
-def _handle_incoming(client: SyncOrganicMinerClient, msg: MinerToValidatorMessage) -> MinerToValidatorMessage:
+def _handle_incoming(
+    client: SyncOrganicMinerClient, msg: MinerToValidatorMessage
+) -> MinerToValidatorMessage:
     if isinstance(msg, GenericError):
         logger.warning("Received error message from miner %s: %s", client.miner_name, msg)
         client.notify_generic_error(msg)
@@ -479,13 +485,17 @@ def execute_organic_job_on_miner_sync(
                 while True:
                     remaining = readiness_time_limit - (time.monotonic() - start)
                     if remaining <= 0:
-                        raise MinerTimedOut(HordeFailureReason.EXECUTOR_READINESS_RESPONSE_TIMED_OUT)
+                        raise MinerTimedOut(
+                            HordeFailureReason.EXECUTOR_READINESS_RESPONSE_TIMED_OUT
+                        )
                     m = _handle_incoming(client, client.receive_model(remaining))
                     if isinstance(m, V0ExecutorReadyRequest):
                         executor_ready_response = m
                         break
             except TimeoutError as exc:
-                raise MinerTimedOut(HordeFailureReason.EXECUTOR_READINESS_RESPONSE_TIMED_OUT) from exc
+                raise MinerTimedOut(
+                    HordeFailureReason.EXECUTOR_READINESS_RESPONSE_TIMED_OUT
+                ) from exc
 
             client.notify_executor_ready(executor_ready_response)
 
@@ -512,7 +522,9 @@ def execute_organic_job_on_miner_sync(
                 if executor_timing:
                     deadline.extend_timeout(executor_timing.download_time_limit)
                 while True:
-                    m = _handle_incoming(client, client.receive_model(_deadline_time_left(deadline)))
+                    m = _handle_incoming(
+                        client, client.receive_model(_deadline_time_left(deadline))
+                    )
                     if isinstance(m, V0VolumesReadyRequest):
                         volumes_ready_response = m
                         break
@@ -541,7 +553,9 @@ def execute_organic_job_on_miner_sync(
                 if executor_timing:
                     deadline.extend_timeout(executor_timing.execution_time_limit)
                 while True:
-                    m = _handle_incoming(client, client.receive_model(_deadline_time_left(deadline)))
+                    m = _handle_incoming(
+                        client, client.receive_model(_deadline_time_left(deadline))
+                    )
                     if isinstance(m, V0ExecutionDoneRequest):
                         execution_done_response = m
                         break
@@ -554,7 +568,9 @@ def execute_organic_job_on_miner_sync(
                 if executor_timing:
                     deadline.extend_timeout(executor_timing.upload_time_limit)
                 while True:
-                    m = _handle_incoming(client, client.receive_model(_deadline_time_left(deadline)))
+                    m = _handle_incoming(
+                        client, client.receive_model(_deadline_time_left(deadline))
+                    )
                     if isinstance(m, V0JobFinishedRequest):
                         final_response = m
                         break

@@ -178,9 +178,7 @@ def _dummy_notify_callback(_: JobStatusUpdate) -> None:
     return
 
 
-def execute_organic_job_request(
-    job_request: OrganicJobRequest, job_route: JobRoute
-) -> OrganicJob:
+def execute_organic_job_request(job_request: OrganicJobRequest, job_route: JobRoute) -> OrganicJob:
     if (
         job_route.miner.hotkey_ss58 == settings.DEBUG_MINER_KEY
         and settings.DEBUG_MINER_ADDRESS
