@@ -15,8 +15,8 @@ from django.conf import settings
 from django.db import transaction
 from numpy._typing import NDArray
 from pydantic import JsonValue
-from pylon.v1 import DEFAULT_RETRIES, BasePylonException, Hotkey, Weight
-from pylon.v1 import Neuron as Neuron
+from pylon_client.v1 import DEFAULT_RETRIES, BasePylonException, Hotkey, Weight
+from pylon_client.v1 import Neuron as Neuron
 from tenacity import stop_after_attempt, wait_fixed
 
 from compute_horde_validator.celery import app

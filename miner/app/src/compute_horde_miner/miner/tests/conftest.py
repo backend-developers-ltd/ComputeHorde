@@ -3,6 +3,8 @@ from collections.abc import Generator
 
 import pytest
 
+pytest_plugins = ["compute_horde.test_base.pylon"]
+
 logger = logging.getLogger(__name__)
 
 

@@ -699,8 +699,8 @@ LOGGING = {
 BITTENSOR_NETUID = env.int("BITTENSOR_NETUID")
 BITTENSOR_NETWORK = env.str("BITTENSOR_NETWORK")
 PYLON_ADDRESS = env.str("PYLON_ADDRESS", "http://pylon:8000")
-PYLON_IDENTITY_NAME = env.str("PYLON_IDENTITY_NAME")
-PYLON_IDENTITY_TOKEN = env.str("PYLON_IDENTITY_TOKEN")
+PYLON_IDENTITY_NAME = "validator"
+PYLON_IDENTITY_TOKEN = env.str("PYLON_IDENTITY_TOKEN", "validator_token")
 # This can be explicitly set to None, which will cause some backfilling operations to never succeed. Useful when running
 # on a private staging net etc.
 BITTENSOR_ARCHIVE_NETWORK = env.str("BITTENSOR_ARCHIVE_NETWORK", "archive")

@@ -6,7 +6,7 @@ import pytest
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from constance.test.pytest import override_config
 from django.test import override_settings
-from pylon.v1 import PylonRequestException
+from pylon_client.v1 import PylonRequestException
 
 from compute_horde_validator.validator.allowance.tests.mockchain import set_block_number
 from compute_horde_validator.validator.models import (

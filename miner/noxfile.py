@@ -157,12 +157,14 @@ def test(session):
     with session.chdir(str(APP_ROOT)):
         session.run(
             "pytest",
+            "-c",
+            "compute_horde_miner/miner/tests/pytest.ini",
             "-s",
             "-vv",
             "-n",
             "auto",
             "--junitxml",
             "test-report.xml",
-            "compute_horde_miner",
+            "compute_horde_miner/miner/tests",
             *session.posargs,
         )

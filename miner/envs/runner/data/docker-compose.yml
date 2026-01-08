@@ -25,6 +25,23 @@ services:
     logging:
       <<: *logging
 
+  pylon:
+    image: docker.io/backenddevelopersltd/bittensor-pylon:0.3.0
+    init: true
+    restart: unless-stopped
+    env_file: ./.env
+    environment:
+      - BITTENSOR_WALLET_PATH=/root/.bittensor/wallets
+      - PYLON_IDENTITIES=["miner"]
+      - PYLON_ID_MINER_WALLET_NAME=${BITTENSOR_WALLET_NAME}
+      - PYLON_ID_MINER_HOTKEY_NAME=${BITTENSOR_WALLET_HOTKEY_NAME}
+      - PYLON_ID_MINER_NETUID=${BITTENSOR_NETUID:-12}
+      - PYLON_ID_MINER_TOKEN=${PYLON_IDENTITY_TOKEN:-miner_token}
+    volumes:
+      - ${HOST_WALLET_DIR}:/root/.bittensor/wallets
+    logging:
+      <<: *logging
+
   app:
     image: backenddevelopersltd/${MINER_IMAGE_REPO}:${MINER_IMAGE_TAG:-v0-latest}
     pull_policy: always

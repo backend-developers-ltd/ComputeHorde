@@ -540,3 +540,7 @@ if SENTRY_DSN := env("SENTRY_DSN", default=""):
 
 CLUSTER_SECRET = env.str("CLUSTER_SECRET", default="")
 CLUSTER_HOTKEYS = env.list("CLUSTER_HOTKEYS", default=[])
+
+PYLON_ADDRESS = env.str("PYLON_ADDRESS", "http://pylon:8000")
+PYLON_IDENTITY_NAME = "miner"
+PYLON_IDENTITY_TOKEN = env.str("PYLON_IDENTITY_TOKEN", "miner_token")
