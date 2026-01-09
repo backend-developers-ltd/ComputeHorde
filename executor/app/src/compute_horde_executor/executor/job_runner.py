@@ -538,16 +538,21 @@ class DefaultJobRunner(BaseJobRunner):
                 job_network=self.job_network_name,
                 container_name=self.nginx_container_name,
                 timeout=WAIT_FOR_NGINX_TIMEOUT,
+                on_host=settings.EXECUTOR_ON_HOST,
             )
         except Exception as e:
             raise HordeError(f"Failed to start Nginx: {truncate(str(e))}") from e
 
         assert self.executor_certificate is not None
         # check that the job is ready to serve requests
-        ip = await get_docker_container_ip(self.nginx_container_name, bridge_network=True)
-        logger.debug(f"Checking if streaming job is ready at http://{ip}/health")
+        if settings.EXECUTOR_ON_HOST:
+            health_url = f"http://localhost:{settings.NGINX_PORT + 1}/health"
+        else:
+            ip = await get_docker_container_ip(self.nginx_container_name, bridge_network=True)
+            health_url = f"http://{ip}/health"
+        logger.debug(f"Checking if streaming job is ready at {health_url}")
         job_ready = await check_endpoint(
-            f"http://{ip}/health",
+            health_url,
             WAIT_FOR_STREAMING_JOB_TIMEOUT,  # TODO: TIMEOUTS - Remove timeout?
         )
         if not job_ready:

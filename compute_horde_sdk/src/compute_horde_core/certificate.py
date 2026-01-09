@@ -72,6 +72,7 @@ async def start_nginx(
     job_network: str,
     container_name: str = "job-nginx",
     timeout: int = 10,
+    on_host: bool = False,
 ) -> None:
     nginx_conf_file = dir_path / "nginx.conf"
     nginx_conf_file.write_text(nginx_conf)
@@ -86,11 +87,17 @@ async def start_nginx(
         "--network",
         "bridge",  # primary external network
         "-p",
-        f"{port}:443",  # expose nginx port
-        "-v",
-        f"{dir_path}:/etc/nginx/",
-        NGINX_IMAGE,
+        f"{port}:443",  # expose nginx port (HTTPS)
     ]
+    if on_host:
+        cmd.extend(["-p", f"{port + 1}:80"])  # expose health check port when running on host
+    cmd.extend(
+        [
+            "-v",
+            f"{dir_path}:/etc/nginx/",
+            NGINX_IMAGE,
+        ]
+    )
     process = await asyncio.create_subprocess_exec(*cmd)
     _stdout, _stderr = await process.communicate()
     await process.wait()
@@ -103,7 +110,10 @@ async def start_nginx(
     await process.wait()
 
     # wait for nginx to start
-    url = f"http://{ip}/ok"
+    if on_host:
+        url = f"http://localhost:{port + 1}/ok"
+    else:
+        url = f"http://{ip}/ok"
     nginx_started = await check_endpoint(url, timeout)
     if not nginx_started:
         stdout = _stdout.decode() if _stdout else ""
