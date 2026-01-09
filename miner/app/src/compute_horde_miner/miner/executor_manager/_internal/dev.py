@@ -24,6 +24,19 @@ class DevExecutorManager(BaseExecutorManager):
         logger.debug(f"Starting new executor process: {token=}")
         nginx_port = executor_port_dispenser.get_port()
 
+        env = {
+            "MINER_ADDRESS": f"ws://{settings.ADDRESS_FOR_EXECUTORS}:{settings.PORT_FOR_EXECUTORS}",
+            "EXECUTOR_TOKEN": token,
+            "PATH": os.environ["PATH"],
+            "NGINX_PORT": str(nginx_port),
+            "EXECUTOR_ON_HOST": "1",
+            # Enable hf_transfer download acceleration package
+            # https://huggingface.co/docs/huggingface_hub/package_reference/environment_variables#hfhubenablehftransfer
+            "HF_HUB_ENABLE_HF_TRANSFER": "1",
+        }
+        if docker_host := os.environ.get("DOCKER_HOST"):
+            env["DOCKER_HOST"] = docker_host
+
         return subprocess.Popen(
             [
                 "uv",
@@ -33,15 +46,7 @@ class DevExecutorManager(BaseExecutorManager):
                 "run_executor",
                 *(await self.get_executor_cmdline_args()),
             ],
-            env={
-                "MINER_ADDRESS": f"ws://{settings.ADDRESS_FOR_EXECUTORS}:{settings.PORT_FOR_EXECUTORS}",
-                "EXECUTOR_TOKEN": token,
-                "PATH": os.environ["PATH"],
-                "NGINX_PORT": str(nginx_port),
-                # Enable hf_transfer download acceleration package
-                # https://huggingface.co/docs/huggingface_hub/package_reference/environment_variables#hfhubenablehftransfer
-                "HF_HUB_ENABLE_HF_TRANSFER": "1",
-            },
+            env=env,
             cwd=executor_dir,
         )
 
