@@ -1,16 +1,17 @@
 from collections import defaultdict
 from datetime import timedelta
+from ipaddress import IPv4Address
 
 import requests
 import structlog
 from asgiref.sync import async_to_sync
 from celery.utils.log import get_task_logger
 from channels.layers import get_channel_layer
-from compute_horde.utils import get_validators
 from django.conf import settings
 from django.db import connection
 from django.utils.timezone import now
 from pydantic import BaseModel, ValidationError, parse_obj_as
+from pylon_client.v1 import NetUid
 from requests import RequestException
 
 from project.celery import app
@@ -26,6 +27,7 @@ from .models import (
     Validator,
 )
 from .models import MinerVersion as MinerVersionDTO
+from .pylon import pylon_client
 from .schemas import ForceDisconnect, HardwareSpec
 from .specs import normalize_gpu_name
 from .utils import fetch_compute_subnet_hardware
@@ -38,14 +40,18 @@ RECEIPTS_CUTOFF_TOLERANCE = timedelta(minutes=30)
 @app.task
 def sync_metagraph() -> None:
     """Fetch current validators and miners from the network and store them in the database"""
-    import bittensor
+    netuid = NetUid(settings.BITTENSOR_NETUID)
+    with pylon_client() as client:
+        validators_response = client.open_access.get_latest_validators(netuid)
+        block_number = validators_response.block.number
+        neurons_response = client.open_access.get_neurons(netuid, block_number)
 
-    with bittensor.subtensor(network=settings.BITTENSOR_NETWORK) as subtensor:
-        metagraph = subtensor.metagraph(netuid=settings.BITTENSOR_NETUID)
-        validators = get_validators(metagraph=metagraph)
-
-    sync_validators.delay([v.hotkey for v in validators])
-    sync_miners.delay([neuron.hotkey for neuron in metagraph.neurons if neuron.axon_info.is_serving])
+    validator_hotkeys = [v.hotkey for v in validators_response.validators]
+    serving_miner_hotkeys = [
+        hotkey for hotkey, neuron in neurons_response.neurons.items() if neuron.axon_info.is_serving
+    ]
+    sync_validators.delay(validator_hotkeys)
+    sync_miners.delay(serving_miner_hotkeys)
 
 
 @app.task
@@ -191,14 +197,18 @@ def fetch_miner_version(hotkey: str, ip: str, port: int) -> None:
 def fetch_miner_versions() -> None:
     """
     Fetch miner & miner runner versions for every active miner.
-    The list of active miners is retrieved from the metagraph.
+    The list of active miners is retrieved from the metagraph via Pylon.
     """
-    import bittensor
+    netuid = NetUid(settings.BITTENSOR_NETUID)
+    with pylon_client() as client:
+        response = client.open_access.get_latest_neurons(netuid)
 
-    metagraph = bittensor.metagraph(netuid=settings.BITTENSOR_NETUID, network=settings.BITTENSOR_NETWORK)
-    miners = [neuron for neuron in metagraph.neurons if neuron.axon_info.is_serving]
-    for miner in miners:
-        fetch_miner_version.delay(miner.hotkey, miner.axon_info.ip, miner.axon_info.port)
+    for hotkey, neuron in response.neurons.items():
+        if neuron.axon_info.is_serving:
+            if not isinstance(neuron.axon_info.ip, IPv4Address):
+                log.warning("skipping non-IPv4 miner", miner_hotkey=hotkey, ip=neuron.axon_info.ip)
+                continue
+            fetch_miner_version.delay(hotkey, str(neuron.axon_info.ip), neuron.axon_info.port)
 
 
 @app.task

@@ -92,6 +92,8 @@ def test(session):
     with session.chdir(str(APP_ROOT)):
         session.run(
             "pytest",
+            "-c",
+            "project/core/tests/pytest.ini",
             "-W",
             "ignore::DeprecationWarning",
             "-s",
@@ -99,6 +101,6 @@ def test(session):
             "-vv",
             # "-n",
             # "auto",
-            "project",
+            "project/core/tests",
             *session.posargs,
         )
