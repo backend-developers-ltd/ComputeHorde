@@ -134,6 +134,7 @@ BITTENSOR_APPROXIMATE_BLOCK_DURATION = timedelta(seconds=12)
 CONSTANCE_BACKEND = "constance.backends.database.DatabaseBackend"
 CONSTANCE_DATABASE_CACHE_BACKEND = "default"
 CONSTANCE_CONFIG = {
+    "SYNC_ORGANIC_JOBS": (False, "SYNC_ORGANIC_JOBS", bool),
     "SERVING": (
         not env.bool("MIGRATING", default=False),
         "Whether this validator is serving jobs and setting weights",
@@ -255,6 +256,11 @@ CONSTANCE_CONFIG = {
     "DYNAMIC_SCORE_ORGANIC_JOBS_LIMIT": (
         -1,
         "Maximum number of organic jobs each miner can get scores for. Negative value means unlimited.",
+        int,
+    ),
+    "DYNAMIC_MAX_OVERALL_ORGANIC_JOB_TIME_LIMIT": (
+        300,
+        "Overall time to complete an organic job",
         int,
     ),
     "DYNAMIC_EXECUTOR_RESERVATION_TIME_LIMIT": (
