@@ -114,3 +114,30 @@ async def get_expected_miner_executor_count(
         return 0
 
     return latest_manifest.online_executor_count
+
+
+def get_expected_miner_executor_count_sync(
+    check_time: datetime,
+    miner_hotkey: str,
+    executor_class: ExecutorClass,
+) -> int:
+    latest_manifest = (
+        MinerManifest.objects.filter(
+            miner__hotkey=miner_hotkey,
+            executor_class=executor_class,
+            created_at__lte=check_time,
+        )
+        .order_by("created_at")
+        .only("online_executor_count")
+        .first()
+    )
+
+    if latest_manifest is None:
+        logger.warning(
+            f"Cannot check expected miner executor count: "
+            f"manifest not found "
+            f"({miner_hotkey} {executor_class} {check_time})"
+        )
+        return 0
+
+    return latest_manifest.online_executor_count

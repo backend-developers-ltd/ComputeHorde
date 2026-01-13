@@ -49,6 +49,7 @@ from .collateral.types import (
 )
 from .dynamic_config import aget_config
 from .models import MinerManifest
+from .organic_jobs.miner_driver_sync import execute_organic_job_request_sync
 from .scoring import tasks as scoring_tasks  # noqa
 
 if False:
@@ -276,7 +277,11 @@ async def execute_organic_job_request_on_worker(
 def _execute_organic_job_on_worker(job_request: JsonValue, job_route: JsonValue) -> None:
     request: OrganicJobRequest = TypeAdapter(OrganicJobRequest).validate_python(job_request)
     route: JobRoute = TypeAdapter(JobRoute).validate_python(job_route)
-    async_to_sync(execute_organic_job_request)(request, route)
+
+    if config.SYNC_ORGANIC_JOBS:
+        execute_organic_job_request_sync(request, route)
+    else:
+        async_to_sync(execute_organic_job_request)(request, route)
 
 
 @app.task(bind=True, max_retries=SLASH_COLLATERAL_TASK_MAX_RETRIES)
