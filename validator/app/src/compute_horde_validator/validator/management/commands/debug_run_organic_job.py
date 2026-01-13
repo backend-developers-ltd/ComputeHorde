@@ -1,5 +1,6 @@
 import shlex
 import sys
+import time
 import uuid
 
 from asgiref.sync import async_to_sync
@@ -125,6 +126,11 @@ class Command(BaseCommand):
             streaming_start_time_limit=options["streaming_start_time_limit"],
         )
 
+        if settings.DEBUG_USE_MOCK_BLOCK_NUMBER:
+            block = 5136476 + int((time.time() - 1742076533) / 12)
+        else:
+            block = allowance().get_current_block()
+
         job = OrganicJob.objects.create(
             job_uuid=str(job_request.uuid),
             miner=miner,
@@ -134,7 +140,7 @@ class Command(BaseCommand):
             namespace=job_request.job_namespace or job_request.docker_image or None,
             executor_class=job_request.executor_class,
             job_description="User job from facilitator",
-            block=allowance().get_current_block(),
+            block=block,
         )
 
         async def _run_job():
