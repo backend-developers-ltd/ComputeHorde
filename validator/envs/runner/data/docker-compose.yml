@@ -37,6 +37,7 @@ services:
       - PYLON_ID_VALIDATOR_HOTKEY_NAME=${BITTENSOR_WALLET_HOTKEY_NAME}
       - PYLON_ID_VALIDATOR_NETUID=${BITTENSOR_NETUID:-12}
       - PYLON_ID_VALIDATOR_TOKEN=${PYLON_IDENTITY_TOKEN:-validator_token}
+      - PYLON_METRICS_TOKEN=${PYLON_METRICS_TOKEN:-validator_metrics_token}
     volumes:
       - ${HOST_WALLET_DIR}:/root/.bittensor/wallets
     logging:
@@ -213,7 +214,7 @@ services:
                 bittensor_network: $${BITTENSOR_NETWORK:-finney}
           authorization:
             type: Bearer
-            credentials: $${PYLON_METRICS_TOKEN}
+            credentials: $${PYLON_METRICS_TOKEN:-validator_metrics_token}
       remote_write:
         - url: "http://prometheus-proxy:8000/prometheus_outbound_proxy/"
       EOF
