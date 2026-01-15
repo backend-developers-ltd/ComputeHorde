@@ -60,6 +60,8 @@ HOST_WALLET_DIR=/home/josephus/.bittensor/wallets
 FACILITATOR_URI=wss://facilitator.computehorde.io/ws/v0/
 # optional: authentication token for the Pylon service (defaults to "validator_token")
 PYLON_IDENTITY_TOKEN=validator_token
+# optional: token for Pylon metrics endpoint (defaults to "validator_metrics_token")
+PYLON_METRICS_TOKEN=validator_metrics_token
 ```
 
 Validator support admin panel that binds to 127.0.0.1:80. If you want to change default port add set it in `.env`, e.g.

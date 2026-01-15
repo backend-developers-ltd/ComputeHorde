@@ -6,7 +6,9 @@ PROJECTS = [
     'lib',
     'sdk',
     'validator',
+    'validator-runner',
     'miner',
+    'miner-runner',
     'executor',
     'facilitator',
 ]
