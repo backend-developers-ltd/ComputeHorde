@@ -32,6 +32,6 @@ This project has several subprojects:
 
 This project uses Astral uv. Use `uv run` to run Python code or Python tools. Do not try to create or activate a venv manually.
 
-to run type checking in validator: `cd validator; uv run nox -s type_check`
+to run type checking in validator: `cd validator; uv tool run nox -s type_check`
 
-to run tests in validator: `cd validator/; uv run nox -s test`; Similarly for other apps.
+to run tests in validator: `cd validator/; uv tool run nox -s test`; Similarly for other apps.

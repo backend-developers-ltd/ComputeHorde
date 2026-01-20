@@ -39,8 +39,8 @@ def install(session: nox.Session, *args):
 def _list_files() -> list[Path]:
     file_list = []
     for cmd in (
-        ["git", "ls-files"],
-        ["git", "ls-files", "--others", "--exclude-standard"],
+            ["git", "ls-files"],
+            ["git", "ls-files", "--others", "--exclude-standard"],
     ):
         cmd_result = subprocess.run(cmd, check=True, text=True, capture_output=True)
         file_list.extend(cmd_result.stdout.splitlines())
