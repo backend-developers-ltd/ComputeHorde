@@ -34,7 +34,6 @@ The way to use these convenience mocks in test cases is:
 >>>    ...   
 """
 
-#  This is a temporary solution until we have a proper test setup for PylonClient in pylon repo.
 
 @pytest.fixture
 def mock_pylon_client(mocker):
