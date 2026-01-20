@@ -3,14 +3,12 @@ from __future__ import annotations
 import logging
 from ipaddress import IPv6Address
 
+from compute_horde.pylon import pylon_client_with_identity
+from pylon_client.v1 import Hotkey
+
 from compute_horde_validator.celery import app
 from compute_horde_validator.validator.models import Miner as MinerModel
 from compute_horde_validator.validator.models import SystemEvent
-from compute_horde_validator.validator.models.allowance.internal import (
-    MinerAddress,
-)
-from compute_horde_validator.validator.pylon import pylon_client
-from pylon_client.v1 import Hotkey
 
 logger = logging.getLogger(__name__)
 
@@ -22,10 +20,12 @@ def sync_miners() -> None:
     TODO: remove this task and make all places in code that rely on it use something more modularized, maybe
     allowance.sthsth or another module. and not models directly.
     """
-    neurons_response = pylon_client().identity.get_recent_neurons()
+    neurons_response = pylon_client_with_identity().identity.get_recent_neurons()
     neurons = neurons_response.neurons
 
-    existing_miners = list(MinerModel.objects.filter(hotkey__in=[n.hotkey for n in neurons.values()]))
+    existing_miners = list(
+        MinerModel.objects.filter(hotkey__in=[n.hotkey for n in neurons.values()])
+    )
     existing_hotkeys = {Hotkey(m.hotkey) for m in existing_miners}
     new_hotkeys = set([n.hotkey for n in neurons.values()]) - existing_hotkeys
 
