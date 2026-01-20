@@ -16,11 +16,11 @@ import websockets
 from bt_ddos_shield.shield_metagraph import ShieldMetagraphOptions
 from bt_ddos_shield.turbobt import ShieldedBittensor
 from compute_horde.blockchain.block_cache import get_current_block
+from compute_horde.pylon import pylon_client_with_identity
 from pylon_client.v1 import GetNeuronsResponse, Neuron
 from turbobt.subtensor.runtime.subnet_info import SubnetHyperparams
 
 from compute_horde_validator.validator.allowance.types import MetagraphData, ValidatorModel
-from compute_horde_validator.validator.pylon import pylon_client
 
 DEFAULT_TIMEOUT = 30.0
 
@@ -256,14 +256,14 @@ class SuperTensor(BaseSuperTensor):
         return self.get_current_block() - LITE_BLOCK_LOOKBACK
 
     def get_neurons(self, block_number: int) -> GetNeuronsResponse:
-        with pylon_client() as client:
+        with pylon_client_with_identity() as client:
             return client.identity.get_neurons(block_number)
 
     def list_neurons(self, block_number: int) -> list[Neuron]:
         return list(self.get_neurons(block_number).neurons.values())
 
     def list_validators(self, block_number: int) -> list[ValidatorModel]:
-        with pylon_client() as client:
+        with pylon_client_with_identity() as client:
             response = client.identity.get_validators(block_number)
         return [
             ValidatorModel(
@@ -321,7 +321,7 @@ class SuperTensor(BaseSuperTensor):
         return self._get_subnet_state(block_number)
 
     def get_commitments(self, block_number: int) -> dict[str, bytes]:
-        with pylon_client() as client:
+        with pylon_client_with_identity() as client:
             response = client.identity.get_commitments()
             return {
                 hotkey: bytes.fromhex(commitment.removeprefix("0x"))

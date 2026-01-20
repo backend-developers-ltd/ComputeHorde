@@ -255,7 +255,7 @@ def test_set_scores__set_weight_success(
     burn_targets,
     hotkey_to_score,
     expected_weights_set,
-    pylon_client_mock,
+    mock_pylon_client,
 ):
     def _normalize_weights(weights: dict[int, int]) -> dict[int, float]:
         total = sum(weights.values())
@@ -273,7 +273,7 @@ def test_set_scores__set_weight_success(
             set_scores()
         assert SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 3
 
-        pylon_client_mock.identity.put_weights.assert_called_once_with(
+        mock_pylon_client.identity.put_weights.assert_called_once_with(
             {
                 f"stable_miner_{uid:03d}": weight
                 for uid, weight in _normalize_weights(expected_weights_set).items()
@@ -303,8 +303,8 @@ def test_set_scores__set_weight_success(
 @patch("compute_horde_validator.validator.scoring.tasks.WEIGHT_SETTING_FAILURE_BACKOFF", 0)
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 @patch_constance({"DYNAMIC_COMMIT_REVEAL_WEIGHTS_ENABLED": False})
-def test_set_scores__set_weight_failure(settings, pylon_client_mock):
-    pylon_client_mock.identity.put_weights.side_effect = PylonRequestException(
+def test_set_scores__set_weight_failure(settings, mock_pylon_client):
+    mock_pylon_client.identity.put_weights.side_effect = PylonRequestException(
         "Mock pylon exception"
     )
 
@@ -333,8 +333,8 @@ def test_set_scores__set_weight_failure(settings, pylon_client_mock):
 @patch("compute_horde_validator.validator.scoring.tasks.WEIGHT_SETTING_FAILURE_BACKOFF", 0)
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 @patch_constance({"DYNAMIC_COMMIT_REVEAL_WEIGHTS_ENABLED": False})
-def test_set_scores__set_weight__exception(settings, pylon_client_mock):
-    pylon_client_mock.identity.put_weights.side_effect = PylonRequestException(
+def test_set_scores__set_weight__exception(settings, mock_pylon_client):
+    mock_pylon_client.identity.put_weights.side_effect = PylonRequestException(
         "Mock pylon exception"
     )
 
@@ -384,7 +384,7 @@ def test_set_scores__set_weight__commit__too_early_or_too_late(current_block: in
 @patch("compute_horde_validator.validator.scoring.tasks.WEIGHT_SETTING_HARD_TTL", 1)
 @patch("compute_horde_validator.validator.scoring.tasks.WEIGHT_SETTING_TTL", 1)
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
-def test_set_scores__multiple_starts(settings, pylon_client_mock):
+def test_set_scores__multiple_starts(settings, mock_pylon_client):
     # to ensure the other tasks will be run at the same time
     settings.CELERY_TASK_ALWAYS_EAGER = False
     threads = 5
@@ -398,7 +398,7 @@ def test_set_scores__multiple_starts(settings, pylon_client_mock):
             pool.submit(set_scores)
         pool.shutdown()
 
-    pylon_client_mock.identity.put_weights.assert_called_once()
+    mock_pylon_client.identity.put_weights.assert_called_once()
     # end of retries system event
     check_system_events(
         SystemEvent.EventType.WEIGHT_SETTING_SUCCESS,

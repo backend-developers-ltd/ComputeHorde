@@ -3,6 +3,7 @@ import datetime
 from asgiref.sync import async_to_sync
 from celery.utils.log import get_task_logger
 from compute_horde.dynamic_config import fetch_dynamic_configs_from_contract, sync_dynamic_config
+from compute_horde.pylon import pylon_client_with_identity
 from compute_horde.receipts.store.local import LocalFilesystemPagedReceiptStore
 from compute_horde.smart_contracts.map_contract import get_dynamic_config_types_from_settings
 from constance import config
@@ -12,7 +13,6 @@ from compute_horde_miner.celery import app
 from compute_horde_miner.miner import eviction, quasi_axon
 from compute_horde_miner.miner.manifest_commitment import commit_manifest
 from compute_horde_miner.miner.models import Validator
-from compute_horde_miner.miner.pylon import pylon_client
 from compute_horde_miner.miner.receipts import current_store
 
 logger = get_task_logger(__name__)
@@ -35,7 +35,7 @@ def fetch_validators():
         Validator.objects.filter(debug=True, active=True).values_list("public_key", flat=True)
     )
 
-    with pylon_client() as client:
+    with pylon_client_with_identity() as client:
         response = client.identity.get_latest_validators()
     validator_keys = {v.hotkey for v in response.validators} | debug_validator_keys
 
@@ -108,7 +108,7 @@ def commit_manifest_to_chain():
 
         manifest = async_to_sync(current.executor_manager.get_manifest)()
 
-        with pylon_client() as client:
+        with pylon_client_with_identity() as client:
             success = commit_manifest(manifest, client)
         if success:
             logger.info("Successfully committed manifest to chain")

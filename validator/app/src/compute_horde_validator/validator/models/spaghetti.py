@@ -152,6 +152,8 @@ class MinerQueryset(models.QuerySet["Miner"]):
 # contains all neurons not only miners
 # TODO: rename to Neuron
 class Miner(models.Model):
+    # TODO: remove this task and make all places in code that rely on it use something more modularized, maybe
+    # allowance.sthsth or another module. and not models directly.
     objects = MinerQueryset.as_manager()
 
     hotkey = models.CharField(max_length=255, unique=True)

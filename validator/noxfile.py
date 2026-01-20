@@ -159,10 +159,16 @@ def test(session):
             "pytest",
             "-s",
             "-vv",
-            "-n",
-            "auto",
-            "--junitxml",
-            "test-report.xml",
+            *(
+                [
+                    "-n",
+                    "auto",
+                    "--junitxml",
+                    "test-report.xml",
+                ]
+                if CI
+                else []
+            ),
             "compute_horde_validator",
             *session.posargs,
         )

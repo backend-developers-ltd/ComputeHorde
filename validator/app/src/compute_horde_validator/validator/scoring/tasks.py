@@ -10,6 +10,7 @@ import numpy as np
 import turbobt.substrate
 from bittensor import u16_normalized_float
 from bittensor.utils.weight_utils import process_weights
+from compute_horde.pylon import pylon_client_with_identity
 from constance import config
 from django.conf import settings
 from django.db import transaction
@@ -27,7 +28,6 @@ from compute_horde_validator.validator.models import SystemEvent
 from compute_horde_validator.validator.models.scoring.internal import (
     WeightSettingFinishedEvent,
 )
-from compute_horde_validator.validator.pylon import pylon_client
 from compute_horde_validator.validator.scoring import create_scoring_engine
 
 if False:
@@ -145,7 +145,7 @@ def set_scores() -> None:
                     Hotkey(hk_by_uid[uid]): Weight(weight) for uid, weight in zip(uids, weights)
                 }
                 logger.debug(f"Setting weights:\nuids={uids}\nscores={weights}")
-                with pylon_client(
+                with pylon_client_with_identity(
                     retries=DEFAULT_RETRIES.copy(
                         stop=stop_after_attempt(WEIGHT_SETTING_ATTEMPTS),
                         wait=wait_fixed(WEIGHT_SETTING_FAILURE_BACKOFF),

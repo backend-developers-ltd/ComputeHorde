@@ -27,7 +27,7 @@ from .models import (
     Validator,
 )
 from .models import MinerVersion as MinerVersionDTO
-from .pylon import pylon_client
+from compute_horde.pylon import pylon_client_with_open_access
 from .schemas import ForceDisconnect, HardwareSpec
 from .specs import normalize_gpu_name
 from .utils import fetch_compute_subnet_hardware
@@ -41,7 +41,7 @@ RECEIPTS_CUTOFF_TOLERANCE = timedelta(minutes=30)
 def sync_metagraph() -> None:
     """Fetch current validators and miners from the network and store them in the database"""
     netuid = NetUid(settings.BITTENSOR_NETUID)
-    with pylon_client() as client:
+    with pylon_client_with_open_access() as client:
         validators_response = client.open_access.get_latest_validators(netuid)
         block_number = validators_response.block.number
         neurons_response = client.open_access.get_neurons(netuid, block_number)
@@ -200,7 +200,7 @@ def fetch_miner_versions() -> None:
     The list of active miners is retrieved from the metagraph via Pylon.
     """
     netuid = NetUid(settings.BITTENSOR_NETUID)
-    with pylon_client() as client:
+    with pylon_client_with_open_access() as client:
         response = client.open_access.get_latest_neurons(netuid)
 
     for hotkey, neuron in response.neurons.items():
