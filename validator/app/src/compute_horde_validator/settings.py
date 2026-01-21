@@ -523,9 +523,9 @@ CELERY_BEAT_SCHEDULE = {
     },
     "sync_collaterals": {
         "task": "compute_horde_validator.validator.collateral.tasks.sync_collaterals",
-        "schedule": timedelta(minutes=5),
+        "schedule": timedelta(minutes=10),
         "options": {
-            "expires": timedelta(minutes=5).total_seconds(),
+            "expires": timedelta(minutes=10).total_seconds(),
         },
     },
     "set_scores": {
