@@ -35,6 +35,7 @@ The way to use these convenience mocks in test cases is:
 >>>    ...   
 """
 
+from .factories import PylonFactory, reset_pylon_factory
 
 @pytest.fixture
 def mock_pylon_client(mocker):

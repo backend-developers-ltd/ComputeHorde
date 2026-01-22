@@ -1,12 +1,24 @@
 import pytest
+from compute_horde.test_base.factories import PylonFactory
 from compute_horde.test_base.pylon import mock_pylon_client_case_100
 
 from compute_horde_validator.validator.miner_sync import sync_miners
 from compute_horde_validator.validator.models import Miner, SystemEvent
 
 
+def test_dupa():
+    n1 = PylonFactory.neuron(total_stake=999999, hotkey="hotkey1")
+    n2 = PylonFactory.neuron(rank=1000000)
+
+    print(n1, n2)
+
 @pytest.mark.django_db(transaction=True)
 def test_sync_miners_fresh_db(mock_pylon_client):
+    n1 = PylonFactory.neuron()
+    n2 = PylonFactory.neuron(hotkey="hotkey2", coldkey="coldkey2", address="2.2.2.2", port=8001)
+
+    print(n1, n2)
+    return
     with mock_pylon_client_case_100(mock_pylon_client):
         sync_miners()
 

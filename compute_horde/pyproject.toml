@@ -63,6 +63,9 @@ test = [
     "faker>=33.1.0",
     "pytest-django>=4.9.0",
 ]
+dev = [
+    "polyfactory>=3.2.0",
+]
 
 [tool.ruff]
 line-length = 100
