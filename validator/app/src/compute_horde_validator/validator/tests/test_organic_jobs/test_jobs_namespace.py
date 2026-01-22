@@ -11,7 +11,7 @@ from compute_horde_validator.validator.tests.helpers import get_dummy_job_reques
 
 
 @pytest.mark.asyncio
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 @pytest.mark.parametrize(
     "job_namespace,namespace_value", [("SN123.1.0", "SN123.1.0"), ("", "docker_image")]
 )

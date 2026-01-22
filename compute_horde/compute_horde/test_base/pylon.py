@@ -13,6 +13,7 @@ from pylon_client.v1 import (
     PylonClient,
     Stakes,
     SubnetNeurons,
+    SubnetValidators,
 )
 
 """
@@ -53,17 +54,63 @@ def seed_neuron_list(pylon_client_instance_mock: Mock, neurons: SubnetNeurons):
     """
     Seed the neron list returned by PylonClient with the provided response object.
     """
-    with patch.object(
-        pylon_client_instance_mock.identity, "get_recent_neurons", new=lambda *a, **kw: neurons
-    ):
-        with patch.object(
+    validator_list = [n for n in neurons.neurons.values() if n.validator_permit]
+    validators = SubnetValidators(block=neurons.block, neurons=validator_list)
+    with (
+        patch.object(
+            pylon_client_instance_mock.identity, "get_recent_neurons", new=lambda *a, **kw: neurons
+        ),
+        patch.object(
             pylon_client_instance_mock.identity, "get_latest_neurons", new=lambda *a, **kw: neurons
-        ):
-            with patch.object(
-                pylon_client_instance_mock.identity, "get_neurons", new=lambda *a, **kw: neurons
-            ):
-                yield
+        ),
+        patch.object(
+            pylon_client_instance_mock.identity, "get_neurons", new=lambda *a, **kw: neurons
+        ),
+        patch.object(
+            pylon_client_instance_mock.open_access, "get_recent_neurons", new=lambda *a, **kw: neurons
+        ),
+        patch.object(
+            pylon_client_instance_mock.open_access, "get_latest_neurons", new=lambda *a, **kw: neurons
+        ),
+        patch.object(
+            pylon_client_instance_mock.open_access, "get_neurons", new=lambda *a, **kw: neurons
+        ),
 
+        patch.object(
+            pylon_client_instance_mock.identity, "get_latest_validators", new=lambda *a, **kw: validators
+        ),
+        patch.object(
+            pylon_client_instance_mock.identity, "get_validators", new=lambda *a, **kw: validators
+        ),
+        patch.object(
+            pylon_client_instance_mock.open_access, "get_latest_validators", new=lambda *a, **kw: validators
+        ),
+        patch.object(
+            pylon_client_instance_mock.open_access, "get_validators", new=lambda *a, **kw: validators
+        ),
+    ):
+        yield
+
+def make_neuron(
+    uid=1,
+    hotkey="hotkey1",
+    coldkey="coldkey1",
+    active=True,
+    axon_info=AxonInfo(ip=IPv4Address("1.1.1.1"), port=8000, protocol=AxonProtocol.TCP),
+    stake=0,
+    rank=0,
+    emission=0,
+    incentive=0,
+    consensus=0,
+    trust=0,
+    validator_trust=0,
+    dividends=0,
+    last_update=0,
+    validator_permit=False,
+    pruning_score=0,
+    stakes=Stakes(alpha=0, tao=0, total=0),
+):
+    pass
 
 @contextmanager
 def mock_pylon_client_case_100(mock_pylon_client):

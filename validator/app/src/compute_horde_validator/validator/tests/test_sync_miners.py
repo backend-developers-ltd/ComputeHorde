@@ -5,7 +5,7 @@ from compute_horde_validator.validator.miner_sync import sync_miners
 from compute_horde_validator.validator.models import Miner, SystemEvent
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_sync_miners_fresh_db(mock_pylon_client):
     with mock_pylon_client_case_100(mock_pylon_client):
         sync_miners()

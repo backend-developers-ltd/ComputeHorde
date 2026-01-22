@@ -41,7 +41,7 @@ dependencies = [
     "pyyaml>=6.0.1",
     "compute-horde",
     "compute-horde-sdk",
-    "bittensor-pylon-client==1.4.0",
+    "bittensor-pylon-client==1.5.0",
     "PyJWT>=2.10.0,<3.0.0",
     "aiohttp>=3.12.0",
     "kombu[redis]>=5.5.4",
@@ -74,6 +74,7 @@ test = [
     "freezegun",
     "pytest-asyncio>=0.23.5",
     "responses>=0.25.0",
+    "pytest-mock>=3.14.0",
 ]
 format = [
     "ruff",
