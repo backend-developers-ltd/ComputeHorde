@@ -35,8 +35,6 @@ class Changelog(TypedDict):
     deduplicated_groups: list[list[ChangeEntry]]
 
 
-SPACER = {"type": "context", "elements": [{"type": "plain_text", "text": " "}]}
-DIVIDER = {"type": "divider"}
 
 
 def build_change_list_elements(
@@ -105,7 +103,6 @@ def build_slack_blocks(changelog: Changelog, title: str, repository: str) -> lis
     has_dropped = any(changelog["dropped_changes"].values())
 
     blocks: list[dict] = [
-        DIVIDER,
         {
             "type": "header",
             "text": {"type": "plain_text", "text": title, "emoji": True},
@@ -122,18 +119,15 @@ def build_slack_blocks(changelog: Changelog, title: str, repository: str) -> lis
             }
         )
 
-    blocks.extend([SPACER, DIVIDER])
+    blocks.append({"type": "divider"})
 
     if not has_changes and not has_dropped:
         blocks.extend(
             [
-                SPACER,
                 {
                     "type": "section",
                     "text": {"type": "mrkdwn", "text": "_no changes in this release_"},
                 },
-                SPACER,
-                DIVIDER,
             ]
         )
         return blocks
@@ -152,7 +146,6 @@ def build_slack_blocks(changelog: Changelog, title: str, repository: str) -> lis
         for category, changes in changelog["new_changes"].items():
             if changes:
                 blocks.append(build_changes_block(category, changes, repository))
-        blocks.extend([SPACER, DIVIDER])
 
     if has_dropped:
         blocks.append(
@@ -168,7 +161,6 @@ def build_slack_blocks(changelog: Changelog, title: str, repository: str) -> lis
         for category, changes in changelog["dropped_changes"].items():
             if changes:
                 blocks.append(build_changes_block(category, changes, repository))
-        blocks.extend([SPACER, DIVIDER])
 
     return blocks
 
