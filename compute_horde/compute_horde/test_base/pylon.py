@@ -56,7 +56,7 @@ def seed_neuron_list(pylon_client_instance_mock: Mock, neurons: SubnetNeurons):
     Seed the neron list returned by PylonClient with the provided response object.
     """
     validator_list = [n for n in neurons.neurons.values() if n.validator_permit]
-    validators = SubnetValidators(block=neurons.block, neurons=validator_list)
+    validators = SubnetValidators(block=neurons.block, validators=validator_list)
     with (
         patch.object(
             pylon_client_instance_mock.identity, "get_recent_neurons", new=lambda *a, **kw: neurons
@@ -116,62 +116,26 @@ def make_neuron(
 @contextmanager
 def mock_pylon_client_case_100(mock_pylon_client):
     neurons = {
-        "hotkey1": Neuron(
+        "hotkey1": PylonFactory.neuron(
             uid=1,
             hotkey="hotkey1",
             coldkey="coldkey1",
-            active=True,
-            axon_info=AxonInfo(ip=IPv4Address("1.1.1.1"), port=8000, protocol=AxonProtocol.TCP),
-            stake=0,
-            rank=0,
-            emission=0,
-            incentive=0,
-            consensus=0,
-            trust=0,
-            validator_trust=0,
-            dividends=0,
-            last_update=0,
-            validator_permit=False,
-            pruning_score=0,
-            stakes=Stakes(alpha=0, tao=0, total=0),
+            axon_info_ip="1.1.1.1",
+            axon_info_port=8000,
         ),
-        "hotkey2": Neuron(
+        "hotkey2": PylonFactory.neuron(
             uid=2,
             hotkey="hotkey2",
             coldkey="coldkey2",
-            active=True,
-            axon_info=AxonInfo(ip=IPv4Address("2.2.2.2"), port=8001, protocol=AxonProtocol.TCP),
-            stake=int(1e5),
-            rank=0,
-            emission=0,
-            incentive=0,
-            consensus=0,
-            trust=0,
-            validator_trust=0,
-            dividends=0,
-            last_update=0,
-            validator_permit=False,
-            pruning_score=0,
-            stakes=Stakes(alpha=int(1e5 / 2), tao=int(1e5 / 2), total=int(1e5)),
+            axon_info_ip="2.2.2.2",
+            axon_info_port=8001,
         ),
-        "hotkey3": Neuron(
+        "hotkey3": PylonFactory.neuron(
             uid=3,
             hotkey="hotkey3",
             coldkey="coldkey3",
-            active=True,
-            axon_info=AxonInfo(ip=IPv6Address("2001:db8::"), port=8003, protocol=AxonProtocol.TCP),
-            stake=0,
-            rank=0,
-            emission=0,
-            incentive=0,
-            consensus=0,
-            trust=0,
-            validator_trust=0,
-            dividends=0,
-            last_update=0,
-            validator_permit=False,
-            pruning_score=0,
-            stakes=Stakes(alpha=0, tao=0, total=0),
+            axon_info_ip=IPv6Address("2001:db8::"),
+            axon_info_port=8003,
         ),
     }
     with seed_neuron_list(
@@ -190,62 +154,30 @@ def mock_pylon_client_case_100(mock_pylon_client):
 @contextmanager
 def mock_pylon_client_case_200(mock_pylon_client):
     neurons = {
-        "hotkey1": Neuron(
+        "hotkey1": PylonFactory.neuron(
             uid=1,
             hotkey="hotkey1",
             coldkey="coldkey1",
-            active=True,
-            axon_info=AxonInfo(ip=IPv4Address("1.1.1.1"), port=8000, protocol=AxonProtocol.TCP),
-            stake=0,
-            rank=0,
-            emission=0,
-            incentive=0,
-            consensus=0,
-            trust=0,
-            validator_trust=0,
-            dividends=0,
-            last_update=0,
-            validator_permit=False,
-            pruning_score=0,
-            stakes=Stakes(alpha=0, tao=0, total=0),
+            axon_info_ip="1.1.1.1",
+            axon_info_port=8000,
         ),
-        "hotkey2": Neuron(
+        "hotkey2": PylonFactory.neuron(
             uid=2,
             hotkey="hotkey2",
             coldkey="coldkey2",
-            active=True,
-            axon_info=AxonInfo(ip=IPv6Address("2001:db9::"), port=8003, protocol=AxonProtocol.TCP),
+            axon_info_ip=IPv6Address("2001:db9::"),
+            axon_info_port=8003,
+            stakes_tao=int(1e5 / 2),
+            stakes_alpha=int(1e5 / 2),
+            stakes_total=int(1e5),
             stake=int(1e5),
-            rank=0,
-            emission=0,
-            incentive=0,
-            consensus=0,
-            trust=0,
-            validator_trust=0,
-            dividends=0,
-            last_update=0,
-            validator_permit=False,
-            pruning_score=0,
-            stakes=Stakes(alpha=int(1e5 / 2), tao=int(1e5 / 2), total=int(1e5)),
         ),
-        "hotkey4": Neuron(
+        "hotkey4": PylonFactory.neuron(
             uid=3,
             hotkey="hotkey4",
             coldkey="coldkey4",
-            active=True,
-            axon_info=AxonInfo(ip=IPv6Address("2001:db8::"), port=8003, protocol=AxonProtocol.TCP),
-            stake=0,
-            rank=0,
-            emission=0,
-            incentive=0,
-            consensus=0,
-            trust=0,
-            validator_trust=0,
-            dividends=0,
-            last_update=0,
-            validator_permit=False,
-            pruning_score=0,
-            stakes=Stakes(alpha=0, tao=0, total=0),
+            axon_info_ip=IPv6Address("2001:db8::"),
+            axon_info_port=8003,
         ),
     }
     with seed_neuron_list(

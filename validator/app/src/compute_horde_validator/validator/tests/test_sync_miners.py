@@ -1,28 +1,22 @@
 import pytest
 from compute_horde.test_base.factories import PylonFactory
-from compute_horde.test_base.pylon import mock_pylon_client_case_100
+from compute_horde.test_base.pylon import mock_pylon_client_case_100, mock_pylon_client_case_200
 
 from compute_horde_validator.validator.miner_sync import sync_miners
 from compute_horde_validator.validator.models import Miner, SystemEvent
 
 
-def test_dupa():
-    n1 = PylonFactory.neuron(total_stake=999999, hotkey="hotkey1")
-    n2 = PylonFactory.neuron(rank=1000000)
-
-    print(n1, n2)
-
 @pytest.mark.django_db(transaction=True)
 def test_sync_miners_fresh_db(mock_pylon_client):
-    n1 = PylonFactory.neuron()
-    n2 = PylonFactory.neuron(hotkey="hotkey2", coldkey="coldkey2", address="2.2.2.2", port=8001)
-
-    print(n1, n2)
-    return
     with mock_pylon_client_case_100(mock_pylon_client):
         sync_miners()
 
-    expected_miners_data = [
+    actual_miners_data = list(
+        Miner.objects.values("hotkey", "uid", "coldkey", "address", "port", "ip_version").order_by(
+            "hotkey"
+        )
+    )
+    assert actual_miners_data == [
         {
             "hotkey": "hotkey1",
             "uid": 1,
@@ -49,13 +43,6 @@ def test_sync_miners_fresh_db(mock_pylon_client):
         },
     ]
 
-    actual_miners_data = list(
-        Miner.objects.values("hotkey", "uid", "coldkey", "address", "port", "ip_version").order_by(
-            "hotkey"
-        )
-    )
-    assert actual_miners_data == sorted(expected_miners_data, key=lambda x: x["hotkey"])
-
     event = SystemEvent.objects.get(
         type=SystemEvent.EventType.VALIDATOR_MINERS_REFRESH,
         subtype=SystemEvent.EventSubType.SUCCESS,
@@ -65,3 +52,46 @@ def test_sync_miners_fresh_db(mock_pylon_client):
         "new_neurons": 3,
         "updated_axon_infos": 0,
     }
+
+    with mock_pylon_client_case_200(mock_pylon_client):
+        sync_miners()
+
+    actual_miners_data = list(
+        Miner.objects.values("hotkey", "uid", "coldkey", "address", "port", "ip_version").order_by(
+            "hotkey"
+        )
+    )
+    assert actual_miners_data == [
+        {
+            'address': '1.1.1.1',
+            'coldkey': 'coldkey1',
+            'hotkey': 'hotkey1',
+            'ip_version': 4,
+            'port': 8000,
+            'uid': 1,
+        },
+        {
+            'address': '2001:db9::',
+            'coldkey': 'coldkey2',
+            'hotkey': 'hotkey2',
+            'ip_version': 6,
+            'port': 8003,
+            'uid': 2,
+        },
+        {
+            'address': '2001:db8::',
+            'coldkey': 'coldkey3',
+            'hotkey': 'hotkey3',
+            'ip_version': 6,
+            'port': 8003,
+            'uid': 3,
+        },
+        {
+            'address': '2001:db8::',
+            'coldkey': 'coldkey4',
+            'hotkey': 'hotkey4',
+            'ip_version': 6,
+            'port': 8003,
+            'uid': 3,
+        }
+    ]
