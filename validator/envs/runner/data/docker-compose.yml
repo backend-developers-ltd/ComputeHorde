@@ -26,7 +26,7 @@ services:
       <<: *logging
 
   pylon:
-    image: docker.io/backenddevelopersltd/bittensor-pylon:1.1.0
+    image: docker.io/backenddevelopersltd/bittensor-pylon:1.1.1
     init: true
     restart: unless-stopped
     env_file: ./.env
