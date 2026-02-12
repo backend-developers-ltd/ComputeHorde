@@ -348,7 +348,7 @@ wheels = [
 
 [[package]]
 name = "bittensor-pylon-client"
-version = "1.4.0"
+version = "1.7.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "apscheduler", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
@@ -358,9 +358,9 @@ dependencies = [
     { name = "pydantic-settings", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "tenacity", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/52/08/58dd542f372582849abdc67ccad75a45a80f827c8c351bfba7c52de97d63/bittensor_pylon_client-1.4.0.tar.gz", hash = "sha256:b37b40803d46b1e6a29921881a10fa5292369c85a1cd8fe4c7f01324751fca24", size = 172991, upload-time = "2026-01-07T15:11:42.08Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/22/2f/fe0104d6d2a820172ad6c2108b0add1bfe7dbad0b233ed83d9e8a19be943/bittensor_pylon_client-1.7.0.tar.gz", hash = "sha256:8041413b29e368cfc7edbd19526cfbd5479006da923dc2e7c9628ecc7127e335", size = 24668, upload-time = "2026-02-12T09:58:58.54Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/d2/9a/e5059ab8668e07b03a6da583f5c37878d713fc84697a6da5cb1f5ca84af1/bittensor_pylon_client-1.4.0-py3-none-any.whl", hash = "sha256:13e72431b4b0e7e0a98a42de3bbea1428fe3b06187b4c0a1e51b92fcf56887ab", size = 31787, upload-time = "2026-01-07T15:11:40.011Z" },
+    { url = "https://files.pythonhosted.org/packages/fc/58/029cc473947789d43ede525d0ed6d0bc19f88e5b7146b902ee6d03bbd8b2/bittensor_pylon_client-1.7.0-py3-none-any.whl", hash = "sha256:9b7bf189476204dd9f1fc18d3bfe36f0f63123e1a6ff41f7cd06eae5dc07297a", size = 34744, upload-time = "2026-02-12T09:58:57.048Z" },
 ]
 
 [[package]]
@@ -629,7 +629,7 @@ dependencies = [
 requires-dist = [
     { name = "aiohttp", specifier = ">=3.12.0" },
     { name = "bittensor", specifier = "~=9.9" },
-    { name = "bittensor-pylon-client", specifier = "==1.4.0" },
+    { name = "bittensor-pylon-client", specifier = ">=1.7.0,<2.0.0" },
     { name = "celery", specifier = ">=5.3.0,<6" },
     { name = "compute-horde-sdk", editable = "../compute_horde_sdk" },
     { name = "cryptography", specifier = ">=42.0.8" },
@@ -1559,7 +1559,7 @@ requires-dist = [
     { name = "aiodocker", specifier = ">=0.24.0" },
     { name = "aiohttp", specifier = ">=3.12.0" },
     { name = "asyncssh", specifier = ">=2.21.0" },
-    { name = "bittensor-pylon-client", specifier = "==1.4.0" },
+    { name = "bittensor-pylon-client", specifier = ">=1.7.0,<2.0.0" },
     { name = "celery", extras = ["redis"], specifier = "~=5.3.1" },
     { name = "channels", extras = ["daphne"], specifier = "==4.*" },
     { name = "channels-redis", specifier = "==4.2.0" },
