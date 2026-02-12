@@ -13,7 +13,7 @@ services:
         tag: '{{.Name}}'
 
   pylon:
-    image: docker.io/backenddevelopersltd/bittensor-pylon:0.3.0
+    image: docker.io/backenddevelopersltd/bittensor-pylon:1.1.2
     init: true
     restart: unless-stopped
     env_file: ./.env
