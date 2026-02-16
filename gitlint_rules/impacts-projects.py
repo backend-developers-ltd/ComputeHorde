@@ -2,7 +2,10 @@ from gitlint.rules import CommitRule, RuleViolation
 import re
 import difflib
 
+NONE_PROJECT = 'none'
+
 PROJECTS = [
+    NONE_PROJECT,
     'lib',
     'sdk',
     'validator',
@@ -38,6 +41,7 @@ class ImpactsProjects(CommitRule):
                     projects.append(name)
 
         # If no Impacts header at all, or header without any project names
+        # or mixing none with real projects
         header_present = bool(matches)
         if not header_present:
             msg = ("Commit message is missing an 'Impacts:' footer. "
@@ -47,6 +51,11 @@ class ImpactsProjects(CommitRule):
         if not projects:
             msg = ("'Impacts:' footer is present but no projects were listed. "
                    f"Allowed projects: {', '.join(PROJECTS)}")
+            return [RuleViolation(self.id, msg, line_nr=1)]
+
+        if NONE_PROJECT in projects and len(projects) > 1:
+            msg = (f"'Impacts:' footer mixes '{NONE_PROJECT}' with project names. "
+                   f"Use only '{NONE_PROJECT}' for no-impact commits or list real projects.")
             return [RuleViolation(self.id, msg, line_nr=1)]
 
         # Validate project names
