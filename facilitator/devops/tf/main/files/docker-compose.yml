@@ -17,6 +17,21 @@ services:
         tag: '$${INSTANCE_ID_SUBST}-redis'
         awslogs-create-group: "true"
 
+  pylon:
+    image: docker.io/backenddevelopersltd/bittensor-pylon:1.1.2
+    init: true
+    restart: unless-stopped
+    env_file: ./.env
+    environment:
+      - PYLON_OPEN_ACCESS_TOKEN=$${PYLON_OPEN_ACCESS_TOKEN:-facilitator_token}
+    logging:
+      driver: awslogs
+      options:
+        awslogs-region: ${region}
+        awslogs-group: /aws/ec2/${name}-${env}
+        tag: '$${INSTANCE_ID_SUBST}-pylon'
+        awslogs-create-group: "true"
+
   app:
     image: ${ecr_base_url}/${ecr_image}
     init: true
@@ -30,6 +45,7 @@ services:
       - ./prometheus-metrics:/prometheus-multiproc-dir
     depends_on:
       - redis
+      - pylon
     logging: &logging-app
       driver: awslogs
       options:
@@ -54,6 +70,7 @@ services:
     tmpfs: /run
     depends_on:
       - redis
+      - pylon
 
   celery-beat:
     image: ${ecr_base_url}/${ecr_image}

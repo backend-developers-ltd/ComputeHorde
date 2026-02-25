@@ -3,6 +3,7 @@ data "aws_partition" "self" {}
 resource "aws_ssm_parameter" "compose" {
   name = "/application/${var.name}/${var.env}/docker-compose.yml"
   type = "SecureString"
+  tier = "Advanced"
   value = templatefile("../../files/docker-compose.yml", {
     name          = var.name
     env           = var.env
