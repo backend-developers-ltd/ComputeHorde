@@ -278,7 +278,7 @@ def _execute_organic_job_on_worker(job_request: JsonValue, job_route: JsonValue)
     request: OrganicJobRequest = TypeAdapter(OrganicJobRequest).validate_python(job_request)
     route: JobRoute = TypeAdapter(JobRoute).validate_python(job_route)
 
-    if config.SYNC_ORGANIC_JOBS:
+    if config.DYNAMIC_SYNC_ORGANIC_JOBS:
         execute_organic_job_request_sync(request, route)
     else:
         async_to_sync(execute_organic_job_request)(request, route)
