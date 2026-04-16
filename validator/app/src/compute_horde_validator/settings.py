@@ -134,12 +134,12 @@ BITTENSOR_APPROXIMATE_BLOCK_DURATION = timedelta(seconds=12)
 CONSTANCE_BACKEND = "constance.backends.database.DatabaseBackend"
 CONSTANCE_DATABASE_CACHE_BACKEND = "default"
 CONSTANCE_CONFIG = {
-    "SYNC_ORGANIC_JOBS": (False, "SYNC_ORGANIC_JOBS", bool),
     "SERVING": (
         not env.bool("MIGRATING", default=False),
         "Whether this validator is serving jobs and setting weights",
         bool,
     ),
+    "DYNAMIC_SYNC_ORGANIC_JOBS": (False, "Run the sync implementation of organic jobs", bool),
     "DYNAMIC_DUMMY": (0, "Dummy config for the purpose of testing", int),
     "DYNAMIC_MANIFEST_SCORE_MULTIPLIER": (
         1.05,
