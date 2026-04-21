@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import uuid
 from collections.abc import Generator
@@ -9,7 +10,7 @@ from compute_horde.executor_class import EXECUTOR_CLASS
 from compute_horde_core.executor_class import ExecutorClass
 from pylon_client.v1 import PylonClient
 
-from ..organic_jobs.miner_driver import execute_organic_job_request
+from ..organic_jobs.miner_driver_sync import execute_organic_job_request_sync
 from .helpers import MockNeuron
 
 logger = logging.getLogger(__name__)
@@ -25,7 +26,7 @@ def some() -> Generator[int, None, None]:
 @pytest.fixture(autouse=True)
 def _patch_current_block():
     with patch(
-        "compute_horde_validator.validator.organic_jobs.miner_driver._get_current_block",
+        "compute_horde_validator.validator.organic_jobs.miner_driver_sync._get_current_block_sync",
         return_value=1337,
     ):
         yield
@@ -33,9 +34,21 @@ def _patch_current_block():
 
 @pytest.fixture(autouse=True)
 def _patch_celery_job_execution():
+    async def _patched(job_request, job_route):
+        # RedisPubSubChannelLayer is fire-and-forget: messages published before a subscriber
+        # is ready are silently dropped. handle_job_status_updates must SUBSCRIBE before the
+        # sync driver fires its first channel send, so we yield here to let it establish the
+        # subscription first.
+        await asyncio.sleep(0.1)
+        # asyncio.to_thread (not asgiref.sync_to_async) is intentional: the sync driver calls
+        # async_to_sync(channel_layer.send) internally. With sync_to_async(thread_sensitive=True)
+        # the function runs in the event loop's own thread, blocking all coroutines, and that
+        # inner async_to_sync deadlocks trying to schedule back onto the blocked loop.
+        return await asyncio.to_thread(execute_organic_job_request_sync, job_request, job_route)
+
     with patch(
         "compute_horde_validator.validator.organic_jobs.facilitator_client.execute_organic_job_request_on_worker",
-        execute_organic_job_request,
+        _patched,
     ):
         yield
 
