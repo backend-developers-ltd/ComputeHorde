@@ -7,6 +7,7 @@ import bittensor_wallet
 import pytest
 from compute_horde.executor_class import EXECUTOR_CLASS
 from compute_horde_core.executor_class import ExecutorClass
+from pylon_client._internal.api.abstract_sync import AbstractIdentityApi, AbstractOpenAccessApi
 from pylon_client.v1 import PylonClient
 
 from ..organic_jobs.miner_driver import execute_organic_job_request
@@ -102,7 +103,7 @@ def pylon_client_mock(mocker):
     # This is a temporary solution until pylon client implements its own mocking utility.
     mocked = create_autospec(PylonClient)
     mocked.__enter__.return_value = mocked
-    mocked.open_access = create_autospec(PylonClient._open_access_api_cls, instance=True)
-    mocked.identity = create_autospec(PylonClient._identity_api_cls, instance=True)
+    mocked.open_access = create_autospec(AbstractOpenAccessApi, instance=True)
+    mocked.identity = create_autospec(AbstractIdentityApi, instance=True)
     mocker.patch("compute_horde_validator.validator.pylon.PylonClient", return_value=mocked)
     return mocked
