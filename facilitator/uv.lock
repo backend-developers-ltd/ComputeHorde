@@ -348,19 +348,21 @@ wheels = [
 
 [[package]]
 name = "bittensor-pylon-client"
-version = "1.7.0"
+version = "2.3.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "apscheduler", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
+    { name = "cryptography", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "docker", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "httpx", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "pydantic", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "pydantic-settings", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
+    { name = "pyyaml", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "tenacity", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/22/2f/fe0104d6d2a820172ad6c2108b0add1bfe7dbad0b233ed83d9e8a19be943/bittensor_pylon_client-1.7.0.tar.gz", hash = "sha256:8041413b29e368cfc7edbd19526cfbd5479006da923dc2e7c9628ecc7127e335", size = 24668, upload-time = "2026-02-12T09:58:58.54Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/17/10/e5e93f2bda4d0a156f629f1ea82fa91710433bee651cbb4ffa62b36a6716/bittensor_pylon_client-2.3.0.tar.gz", hash = "sha256:1d4ef30e16c55220b87df39bea46946b7e1e420c1d0383c38bf5784ed32257d4", size = 39198, upload-time = "2026-07-09T15:47:57.875Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/fc/58/029cc473947789d43ede525d0ed6d0bc19f88e5b7146b902ee6d03bbd8b2/bittensor_pylon_client-1.7.0-py3-none-any.whl", hash = "sha256:9b7bf189476204dd9f1fc18d3bfe36f0f63123e1a6ff41f7cd06eae5dc07297a", size = 34744, upload-time = "2026-02-12T09:58:57.048Z" },
+    { url = "https://files.pythonhosted.org/packages/b1/93/9dfb1824e48137692b55d984833b6d8de155eb6dd607f259e98138c118dd/bittensor_pylon_client-2.3.0-py3-none-any.whl", hash = "sha256:86687e62933d7d982780a83ffd39965d4b9fb32d055de704aeeb6172577309fb", size = 67707, upload-time = "2026-07-09T15:47:56.797Z" },
 ]
 
 [[package]]
@@ -617,7 +619,7 @@ dependencies = [
 requires-dist = [
     { name = "aiohttp", specifier = ">=3.12.0" },
     { name = "bittensor", specifier = "~=9.9" },
-    { name = "bittensor-pylon-client", specifier = ">=1.7.0,<2.0.0" },
+    { name = "bittensor-pylon-client", specifier = ">=2.3.0,<3.0.0" },
     { name = "celery", specifier = ">=5.3.0,<6" },
     { name = "compute-horde-sdk", editable = "../compute_horde_sdk" },
     { name = "cryptography", specifier = ">=42.0.8" },
@@ -1353,7 +1355,7 @@ type-check = [
 requires-dist = [
     { name = "aiohttp", specifier = ">=3.12.0" },
     { name = "bittensor", specifier = ">=7.2.0" },
-    { name = "bittensor-pylon-client", specifier = ">=1.7.0,<2.0.0" },
+    { name = "bittensor-pylon-client", specifier = ">=2.3.0,<3.0.0" },
     { name = "celery", extras = ["redis"], specifier = "~=5.3.1" },
     { name = "channels", extras = ["daphne"], specifier = ">=4.0.0" },
     { name = "channels-redis", specifier = ">=4.2.0" },
@@ -2846,7 +2848,7 @@ dependencies = [
     { name = "typing-extensions", marker = "sys_platform == 'darwin'" },
 ]
 wheels = [
-    { url = "https://download.pytorch.org/whl/cpu/torch-2.6.0-cp311-none-macosx_11_0_arm64.whl", hash = "sha256:94fc63b3b4bedd327af588696559f68c264440e2503cc9e6954019473d74ae21" },
+    { url = "https://download-r2.pytorch.org/whl/cpu/torch-2.6.0-cp311-none-macosx_11_0_arm64.whl", hash = "sha256:94fc63b3b4bedd327af588696559f68c264440e2503cc9e6954019473d74ae21", upload-time = "2025-01-30T00:39:47Z" },
 ]
 
 [[package]]
@@ -2865,8 +2867,8 @@ dependencies = [
     { name = "typing-extensions", marker = "sys_platform == 'linux'" },
 ]
 wheels = [
-    { url = "https://download.pytorch.org/whl/cpu/torch-2.6.0%2Bcpu-cp311-cp311-linux_x86_64.whl", hash = "sha256:5b6ae523bfb67088a17ca7734d131548a2e60346c622621e4248ed09dd0790cc" },
-    { url = "https://download.pytorch.org/whl/cpu/torch-2.6.0%2Bcpu-cp311-cp311-manylinux_2_28_aarch64.whl", hash = "sha256:d3dab9fb0294f268aec28e8aaba834e9d006b90a50db5bc2fe2191a9d48c6084" },
+    { url = "https://download-r2.pytorch.org/whl/cpu/torch-2.6.0%2Bcpu-cp311-cp311-linux_x86_64.whl", hash = "sha256:5b6ae523bfb67088a17ca7734d131548a2e60346c622621e4248ed09dd0790cc", upload-time = "2025-01-30T00:38:11Z" },
+    { url = "https://download-r2.pytorch.org/whl/cpu/torch-2.6.0%2Bcpu-cp311-cp311-manylinux_2_28_aarch64.whl", hash = "sha256:d3dab9fb0294f268aec28e8aaba834e9d006b90a50db5bc2fe2191a9d48c6084", upload-time = "2025-01-30T00:38:19Z" },
 ]
 
 [[package]]
