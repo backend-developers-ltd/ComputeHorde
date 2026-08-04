@@ -18,7 +18,7 @@ services:
         awslogs-create-group: "true"
 
   pylon:
-    image: docker.io/backenddevelopersltd/bittensor-pylon:1.1.2
+    image: docker.io/backenddevelopersltd/bittensor-pylon:2.3.1
     init: true
     restart: unless-stopped
     env_file: ./.env
