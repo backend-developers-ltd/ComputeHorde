@@ -117,7 +117,7 @@ services:
       - "com.centurylinklabs.watchtower.enable=true"
 
   watchtower:
-    image: containrrr/watchtower:latest
+    image: nickfedor/watchtower:1.20.3
     restart: unless-stopped
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
