@@ -1,9 +1,12 @@
+import asyncio
 import glob
 import logging
 import numbers
 import os
 import shlex
 import subprocess
+import threading
+from collections import deque
 from datetime import timedelta
 from pathlib import Path
 from time import monotonic
@@ -17,21 +20,22 @@ from bittensor.core.errors import SubstrateRequestException
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.fv_protocol.facilitator_requests import V0JobCheated, V2JobRequest
 from compute_horde.protocol_messages import (
+    MinerToValidatorMessage,
     V0AcceptJobRequest,
     V0ExecutionDoneRequest,
     V0ExecutorReadyRequest,
+    V0InitialJobRequest,
     V0JobFailedRequest,
     V0JobFinishedRequest,
     V0VolumesReadyRequest,
-    ValidatorToMinerMessage,
 )
-from compute_horde.utils import ValidatorInfo
 from compute_horde_core.signature import Signature
 from django.conf import settings
-from pydantic import TypeAdapter
 
 from compute_horde_validator.validator.models import SystemEvent
-from compute_horde_validator.validator.organic_jobs.miner_client import MinerClient
+from compute_horde_validator.validator.organic_jobs.miner_driver_sync import (
+    MinerClient as SyncMinerClient,
+)
 
 NUM_NEURONS = 5
 
@@ -47,99 +51,116 @@ def get_keypair():
     return settings.BITTENSOR_WALLET().get_hotkey()
 
 
-def get_miner_client(MINER_CLIENT, job_uuid: str) -> MinerClient:
-    return MINER_CLIENT(
-        miner_hotkey="miner_hotkey",
-        miner_address="ignore",
-        miner_port=9999,
-        job_uuid=job_uuid,
-        my_keypair=get_keypair(),
-    )
+class SyncMockMinerClient(SyncMinerClient):
+    ws = None
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._responses: list = []
 
-class MockAxonInfo:
-    def __init__(self, ip="0.0.0.0", port=8000, ip_type=0, hotkey="hotkey"):
-        self.ip = ip
-        self.port = port
-        self.ip_type = ip_type
-        hotkey = (hotkey,)
-
-    def is_serving(self):
-        return self.ip == "0.0.0.0"
-
-    async def connect(self) -> None:
+    def connect(self) -> None:
         pass
 
-    async def send(self, data: str | bytes, error_event_callback=None):
-        msg = TypeAdapter(ValidatorToMinerMessage).validate_json(data)
-        self._sent_models.append(msg)
+    def recv(self, timeout: float):
+        return self._responses.pop(0)
 
-    def _query_sent_models(self, condition=None, model_class=None):
-        result = []
-        for model in self._sent_models:
-            if model_class is not None and not isinstance(model, model_class):
-                continue
-            if not condition(model):
-                continue
-            result.append(model)
-        return result
+    def close(self) -> None:
+        pass
 
 
-class MockMinerClient(MinerClient):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self._sent_models = []
-
-    def miner_url(self) -> str:
-        return "ws://miner"
-
-    async def connect(self):
-        return
-
-    async def send_model(self, model, error_event_callback=None):
-        self._sent_models.append(model)
-
-    def _query_sent_models(self, condition=None, model_class=None):
-        result = []
-        for model in self._sent_models:
-            if model_class is not None and not isinstance(model, model_class):
-                continue
-            if not condition(model):
-                continue
-            result.append(model)
-        return result
+class SyncMockSuccessfulMinerClient(SyncMockMinerClient):
+    def send(self, msg) -> None:
+        if isinstance(msg, V0InitialJobRequest):
+            job_uuid = msg.job_uuid
+            self._responses = [
+                V0AcceptJobRequest(job_uuid=job_uuid),
+                V0ExecutorReadyRequest(job_uuid=job_uuid),
+                V0VolumesReadyRequest(job_uuid=job_uuid),
+                V0ExecutionDoneRequest(job_uuid=job_uuid),
+                V0JobFinishedRequest(
+                    job_uuid=job_uuid,
+                    docker_process_stdout="",
+                    docker_process_stderr="",
+                    artifacts={},
+                ),
+            ]
 
 
-class MockSuccessfulMinerClient(MockMinerClient):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.job_accepted_future.set_result(V0AcceptJobRequest(job_uuid=self.job_uuid))
-        self.executor_ready_future.set_result(V0ExecutorReadyRequest(job_uuid=self.job_uuid))
-        self.volumes_ready_future.set_result(V0VolumesReadyRequest(job_uuid=self.job_uuid))
-        self.execution_done_future.set_result(V0ExecutionDoneRequest(job_uuid=self.job_uuid))
-        self.job_finished_future.set_result(
-            V0JobFinishedRequest(
-                job_uuid=self.job_uuid,
-                docker_process_stdout="",
-                docker_process_stderr="",
-                artifacts={},
-            )
-        )
+class SyncMockFaillingMinerClient(SyncMockMinerClient):
+    def send(self, msg) -> None:
+        if isinstance(msg, V0InitialJobRequest):
+            job_uuid = msg.job_uuid
+            self._responses = [
+                V0AcceptJobRequest(job_uuid=job_uuid),
+                V0ExecutorReadyRequest(job_uuid=job_uuid),
+                V0VolumesReadyRequest(job_uuid=job_uuid),
+                V0ExecutionDoneRequest(job_uuid=job_uuid),
+                V0JobFailedRequest(
+                    job_uuid=job_uuid,
+                    docker_process_stdout="",
+                    docker_process_stderr="",
+                    docker_process_exit_status=1,
+                ),
+            ]
 
 
-class MockFaillingMinerClient(MockMinerClient):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.job_accepted_future.set_result(V0AcceptJobRequest(job_uuid=self.job_uuid))
-        self.executor_ready_future.set_result(V0ExecutorReadyRequest(job_uuid=self.job_uuid))
-        self.job_finished_future.set_result(
-            V0JobFailedRequest(
-                job_uuid=self.job_uuid,
-                docker_process_stdout="",
-                docker_process_stderr="",
-                docker_process_exit_status=1,
-            )
-        )
+class SyncSimulationMinerClient(SyncMockMinerClient):
+    """
+    Sync counterpart to SimulationTransport for use in test_happy_path.py.
+    Responses are queued via add_message() with send_before semantics identical
+    to SimulationTransport: a response is only delivered once at least
+    send_before messages have been sent by the driver to the miner.
+    """
+
+    def __init__(self, name: str, loop: asyncio.AbstractEventLoop) -> None:
+        # Bypass SyncMinerClient.__init__ — we don't have real connection params.
+        self._name = name
+        self._loop = loop
+        self._responses: list = []
+        self._threading_condition = threading.Condition()
+        self.sent: list[str] = []
+        self._to_receive: deque[tuple[int, MinerToValidatorMessage]] = deque()
+        self._receive_at_counter = 0
+        self.receive_condition = asyncio.Condition()
+
+    def connect(self) -> None:
+        pass
+
+    def close(self) -> None:
+        pass
+
+    def send(self, msg) -> None:
+        with self._threading_condition:
+            self.sent.append(msg.model_dump_json())
+            self._threading_condition.notify_all()
+        asyncio.run_coroutine_threadsafe(self._notify_async(), self._loop)
+
+    async def _notify_async(self) -> None:
+        async with self.receive_condition:
+            self.receive_condition.notify_all()
+
+    def recv(self, timeout: float) -> MinerToValidatorMessage:
+        if not self._to_receive:
+            raise TimeoutError(f"[{self._name}] No messages queued")
+        receive_at, message = self._to_receive.popleft()
+        with self._threading_condition:
+            if not self._threading_condition.wait_for(
+                lambda: len(self.sent) >= receive_at, timeout=timeout
+            ):
+                raise TimeoutError(
+                    f"[{self._name}] Timed out waiting for {receive_at} sends, got {len(self.sent)}"
+                )
+        return message
+
+    async def add_message(
+        self,
+        message: str | MinerToValidatorMessage,
+        send_before: int = 0,
+    ) -> None:
+        if isinstance(message, str):
+            message = MinerToValidatorMessage.model_validate_json(message)
+        self._receive_at_counter += send_before
+        self._to_receive.append((self._receive_at_counter, message))
 
 
 def get_dummy_signature() -> Signature:
@@ -314,13 +335,6 @@ class MockNeuron:
         self.uid = uid
         self.stake = bittensor.Balance((uid + 1) * 1001.0)
         self.axon_info = axon_info
-
-
-def neurons_to_validator_infos(neurons: list[MockNeuron]) -> list[ValidatorInfo]:
-    return [
-        ValidatorInfo(uid=neuron.uid, hotkey=neuron.hotkey, stake=neuron.stake.tao)
-        for neuron in neurons
-    ]
 
 
 class MockBlock:

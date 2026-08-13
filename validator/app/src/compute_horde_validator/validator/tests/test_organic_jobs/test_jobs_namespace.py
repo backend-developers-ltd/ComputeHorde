@@ -1,25 +1,26 @@
 import uuid
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from compute_horde_validator.validator.allowance.types import Miner as AllowanceMiner
 from compute_horde_validator.validator.models import Miner
-from compute_horde_validator.validator.organic_jobs.miner_driver import execute_organic_job_request
+from compute_horde_validator.validator.organic_jobs.miner_driver_sync import (
+    execute_organic_job_request_sync,
+)
 from compute_horde_validator.validator.routing.types import JobRoute
 from compute_horde_validator.validator.tests.helpers import get_dummy_job_request_v2
 
 
-@pytest.mark.asyncio
 @pytest.mark.django_db
 @pytest.mark.parametrize(
     "job_namespace,namespace_value", [("SN123.1.0", "SN123.1.0"), ("", "docker_image")]
 )
-async def test_organic_job_namespace_priority(job_namespace, namespace_value):
+def test_organic_job_namespace_priority(job_namespace, namespace_value):
     """
     Test OrganicJob uses namespace with fallback to docker_image.
     """
-    miner_model = await Miner.objects.acreate(
+    miner_model = Miner.objects.create(
         hotkey=f"test-miner-{str(uuid.uuid4())[:8]}",
         address="127.0.0.1",
         port=8000,
@@ -43,13 +44,13 @@ async def test_organic_job_namespace_priority(job_namespace, namespace_value):
     job_request.docker_image = "docker_image"
 
     with patch(
-        "compute_horde_validator.validator.organic_jobs.miner_driver._get_current_block"
+        "compute_horde_validator.validator.organic_jobs.miner_driver_sync._get_current_block_sync"
     ) as mock_block:
         mock_block.return_value = 1000
         with patch(
-            "compute_horde_validator.validator.organic_jobs.miner_driver.drive_organic_job"
-        ) as mock_drive:
-            mock_drive.return_value = True
+            "compute_horde_validator.validator.organic_jobs.miner_driver_sync.SyncOrganicJobDriver"
+        ) as mock_driver_cls:
+            mock_driver_cls.return_value = MagicMock()
 
-            job = await execute_organic_job_request(job_request, job_route)
+            job = execute_organic_job_request_sync(job_request, job_route)
             assert job.namespace == namespace_value

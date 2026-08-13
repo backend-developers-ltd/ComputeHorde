@@ -29,9 +29,6 @@ from compute_horde_validator.validator.models import (
     OrganicJob,
     SystemEvent,
 )
-from compute_horde_validator.validator.organic_jobs.miner_driver import (
-    execute_organic_job_request,
-)
 from compute_horde_validator.validator.routing.types import JobRoute
 
 from . import (
@@ -277,11 +274,7 @@ async def execute_organic_job_request_on_worker(
 def _execute_organic_job_on_worker(job_request: JsonValue, job_route: JsonValue) -> None:
     request: OrganicJobRequest = TypeAdapter(OrganicJobRequest).validate_python(job_request)
     route: JobRoute = TypeAdapter(JobRoute).validate_python(job_route)
-
-    if config.DYNAMIC_SYNC_ORGANIC_JOBS:
-        execute_organic_job_request_sync(request, route)
-    else:
-        async_to_sync(execute_organic_job_request)(request, route)
+    execute_organic_job_request_sync(request, route)
 
 
 @app.task(bind=True, max_retries=SLASH_COLLATERAL_TASK_MAX_RETRIES)
