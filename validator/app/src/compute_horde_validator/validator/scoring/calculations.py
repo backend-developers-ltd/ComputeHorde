@@ -167,15 +167,16 @@ def horde_score(
 def score_organic_jobs(jobs: Sequence[OrganicJob]) -> dict[str, float]:
     """Score organic jobs."""
     batch_scores: defaultdict[str, float] = defaultdict(float)
-    score = get_config("DYNAMIC_ORGANIC_JOB_SCORE")
+    per_job_score = get_config("DYNAMIC_ORGANIC_JOB_SCORE")
     limit = get_config("DYNAMIC_SCORE_ORGANIC_JOBS_LIMIT")
 
     for job in jobs:
-        batch_scores[job.miner.hotkey] += score
+        batch_scores[job.miner.hotkey] += per_job_score
 
     if limit >= 0:
-        for hotkey, score in batch_scores.items():
-            batch_scores[hotkey] = min(score, limit * score)
+        cap = per_job_score * limit
+        for hotkey, accumulated in batch_scores.items():
+            batch_scores[hotkey] = min(accumulated, cap)
 
     return batch_scores
 
