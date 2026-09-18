@@ -21,6 +21,7 @@ from compute_horde_validator.validator.models import (
     AllowanceMinerManifest,
     Block,
     BlockAllowance,
+    Neuron,
     SystemEvent,
 )
 
@@ -155,6 +156,8 @@ def evict_old_data():
         logger.info(f"Removed {removed} AllowanceMinerManifests")
         removed, _ = Block.objects.filter(block_number__lte=block_number).delete()
         logger.info(f"Removed {removed} Blocks")
+        removed, _ = Neuron.objects.filter(block__lte=block_number).delete()
+        logger.info(f"Removed {removed} Neurons")
         removed, _ = AllowanceBooking.objects.filter(
             ~Q(
                 id__in=Subquery(

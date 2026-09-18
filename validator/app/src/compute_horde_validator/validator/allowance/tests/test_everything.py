@@ -10,7 +10,7 @@ from compute_horde.test_wallet import get_test_validator_wallet
 from compute_horde_core.executor_class import ExecutorClass
 from freezegun import freeze_time
 
-from ...models import AllowanceBooking, AllowanceMinerManifest, Block, BlockAllowance
+from ...models import AllowanceBooking, AllowanceMinerManifest, Block, BlockAllowance, Neuron
 from .. import tasks
 from ..default import allowance
 from ..metrics import (
@@ -492,6 +492,7 @@ def test_complete(caplog, configure_logs):
     assert BlockAllowance.objects.count() == 8402380
     assert AllowanceMinerManifest.objects.count() == 7655
     assert Block.objects.count() == 1101
+    assert set(Neuron.objects.values_list("block", flat=True)) == set(range(1000, 1101))
     assert AllowanceBooking.objects.count() == 1
 
     with set_block_number(2906):
@@ -500,6 +501,7 @@ def test_complete(caplog, configure_logs):
     assert BlockAllowance.objects.count() == 2711500
     assert AllowanceMinerManifest.objects.count() == 7655
     assert Block.objects.count() == 360
+    assert set(Neuron.objects.values_list("block", flat=True)) == set(range(1000, 1101))
     assert AllowanceBooking.objects.count() == 1
 
     with set_block_number(4000):
@@ -508,6 +510,7 @@ def test_complete(caplog, configure_logs):
     assert BlockAllowance.objects.count() == 0
     assert AllowanceMinerManifest.objects.count() == 0
     assert Block.objects.count() == 0
+    assert Neuron.objects.count() == 0
     assert AllowanceBooking.objects.count() == 0
 
 
