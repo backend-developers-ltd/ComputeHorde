@@ -8,12 +8,12 @@ import pytest
 import pytest_asyncio
 from compute_horde.executor_class import EXECUTOR_CLASS
 from compute_horde.fv_protocol.facilitator_requests import V2JobRequest
-from compute_horde.miner_client.organic import OrganicMinerClient
 from compute_horde.transport import AbstractTransport
 from compute_horde_core.executor_class import ExecutorClass
 
 from compute_horde_validator.validator.models import Miner
 from compute_horde_validator.validator.organic_jobs.facilitator_client import FacilitatorClient
+from compute_horde_validator.validator.tests.helpers import SyncSimulationMinerClient
 from compute_horde_validator.validator.tests.transport import SimulationTransport
 
 
@@ -66,29 +66,25 @@ async def faci_transport():
 @pytest_asyncio.fixture
 async def miner_transports():
     """
-    In case of multiple job attempts within a single test, the transports will be used sequentially.
+    In case of multiple job attempts within a single test, the clients will be used sequentially.
     This does not mean each one will use a different miner - the miner used depends on actual job routing.
     """
-
-    transports = [
-        SimulationTransport("miner_connection_1"),
-        SimulationTransport("miner_connection_2"),
-        SimulationTransport("miner_connection_3"),
+    loop = asyncio.get_running_loop()
+    clients = [
+        SyncSimulationMinerClient("miner_connection_1", loop),
+        SyncSimulationMinerClient("miner_connection_2", loop),
+        SyncSimulationMinerClient("miner_connection_3", loop),
     ]
-
-    transports_iter = iter(transports)
+    clients_iter = iter(clients)
 
     def fake_miner_client_factory(*args, **kwargs):
-        """
-        Creates a real organic miner client, but replaces the WS transport with a pre-programmed sequence.
-        """
-        return OrganicMinerClient(*args, **kwargs, transport=next(transports_iter))
+        return next(clients_iter)
 
     with patch(
-        "compute_horde_validator.validator.organic_jobs.miner_driver.MinerClient",
+        "compute_horde_validator.validator.organic_jobs.miner_driver_sync.MinerClient",
         fake_miner_client_factory,
     ):
-        yield transports
+        yield clients
 
 
 @pytest_asyncio.fixture

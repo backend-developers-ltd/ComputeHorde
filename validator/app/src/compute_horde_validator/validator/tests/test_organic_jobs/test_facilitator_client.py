@@ -37,8 +37,8 @@ from compute_horde_validator.validator.organic_jobs.facilitator_client import (
 from compute_horde_validator.validator.utils import MACHINE_SPEC_CHANNEL, TRUSTED_MINER_FAKE_KEY
 
 from ..helpers import (
-    MockFaillingMinerClient,
-    MockSuccessfulMinerClient,
+    SyncMockFaillingMinerClient,
+    SyncMockSuccessfulMinerClient,
     get_dummy_job_cheated_request_v0,
     get_dummy_job_request_v2,
     get_keypair,
@@ -273,8 +273,8 @@ class FacilitatorJobStatusUpdatesWsV2Retries(FacilitatorWs):
     ],
 )
 @patch(
-    "compute_horde_validator.validator.organic_jobs.miner_driver.MinerClient",
-    MockSuccessfulMinerClient,
+    "compute_horde_validator.validator.organic_jobs.miner_driver_sync.MinerClient",
+    SyncMockSuccessfulMinerClient,
 )
 async def test_facilitator_client__job_completed(ws_server_cls):
     await setup_db()
@@ -363,8 +363,8 @@ async def test_facilitator_client__cheated_job():
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 @pytest.mark.skip(reason="Validator-side job retry is disabled for now")
 @patch(
-    "compute_horde_validator.validator.organic_jobs.miner_driver.MinerClient",
-    MockFaillingMinerClient,
+    "compute_horde_validator.validator.organic_jobs.miner_driver_sync.MinerClient",
+    SyncMockFaillingMinerClient,
 )
 async def test_facilitator_client__failed_job_retries():
     await setup_db()
@@ -423,8 +423,8 @@ class FacilitatorExpectMachineSpecsWs(FacilitatorWs):
 @pytest.mark.asyncio
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 @patch(
-    "compute_horde_validator.validator.organic_jobs.miner_driver.MinerClient",
-    MockSuccessfulMinerClient,
+    "compute_horde_validator.validator.organic_jobs.miner_driver_sync.MinerClient",
+    SyncMockSuccessfulMinerClient,
 )
 async def test_wait_for_specs(specs_msg: dict):
     layer = get_channel_layer()
@@ -447,8 +447,8 @@ async def test_wait_for_specs(specs_msg: dict):
 @pytest.mark.asyncio
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 @patch(
-    "compute_horde_validator.validator.organic_jobs.miner_driver.MinerClient",
-    MockSuccessfulMinerClient,
+    "compute_horde_validator.validator.organic_jobs.miner_driver_sync.MinerClient",
+    SyncMockSuccessfulMinerClient,
 )
 async def test_routing_to_trusted_miner():
     await setup_db()

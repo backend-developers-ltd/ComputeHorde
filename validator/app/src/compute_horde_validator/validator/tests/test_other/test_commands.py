@@ -9,7 +9,7 @@ from django.core import management
 from compute_horde_validator.validator.models import Miner, OrganicJob, SystemEvent
 
 from ..helpers import (
-    MockSuccessfulMinerClient,
+    SyncMockSuccessfulMinerClient,
     check_system_events,
     throw_error,
 )
@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 def patch_miner_client():
     with patch(
         "compute_horde_validator.validator.management.commands.debug_run_organic_job.MinerClient",
-        MockSuccessfulMinerClient,
+        SyncMockSuccessfulMinerClient,
     ):
         yield
 

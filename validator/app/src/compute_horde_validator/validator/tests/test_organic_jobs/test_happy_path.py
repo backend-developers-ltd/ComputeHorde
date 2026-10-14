@@ -116,7 +116,7 @@ async def test_two_jobs(
     # Job 1
     await faci_transport.add_message(job_request, send_before=0)
 
-    await miner_transport.add_message(V0AcceptJobRequest(job_uuid=job_request.uuid), send_before=2)
+    await miner_transport.add_message(V0AcceptJobRequest(job_uuid=job_request.uuid), send_before=1)
     await miner_transport.add_message(
         V0ExecutorReadyRequest(job_uuid=job_request.uuid), send_before=1
     )
@@ -139,7 +139,7 @@ async def test_two_jobs(
     await faci_transport.add_message(another_job_request, send_before=2)
 
     await miner_transport_2.add_message(
-        V0AcceptJobRequest(job_uuid=another_job_request.uuid), send_before=2
+        V0AcceptJobRequest(job_uuid=another_job_request.uuid), send_before=1
     )
     await miner_transport_2.add_message(
         V0ExecutorReadyRequest(job_uuid=another_job_request.uuid), send_before=1
@@ -157,16 +157,33 @@ async def test_two_jobs(
         send_before=0,
     )
 
-    # Expected messages: auth, job1 status=accepted, job1 status=finished, job2 status=accepted
     await execute_scenario(until=lambda: len(faci_transport.sent) >= 13, timeout_seconds=3)
     assert len(faci_transport.sent) >= 13
 
-    j1_accepted_msg = JobStatusUpdate.model_validate_json(faci_transport.sent[2])
-    j1_finished_msg = JobStatusUpdate.model_validate_json(faci_transport.sent[6])
-    j2_accepted_msg = JobStatusUpdate.model_validate_json(faci_transport.sent[8])
-    j2_finished_msg = JobStatusUpdate.model_validate_json(faci_transport.sent[12])
+    j1_updates = [
+        JobStatusUpdate.model_validate_json(msg).status
+        for msg in faci_transport.sent
+        if job_request.uuid in msg
+    ]
+    j2_updates = [
+        JobStatusUpdate.model_validate_json(msg).status
+        for msg in faci_transport.sent
+        if another_job_request.uuid in msg
+    ]
 
-    assert j1_accepted_msg.status == "accepted"
-    assert j1_finished_msg.status == "completed"
-    assert j2_accepted_msg.status == "accepted"
-    assert j2_finished_msg.status == "completed"
+    assert j1_updates == [
+        "received",
+        "accepted",
+        "executor_ready",
+        "volumes_ready",
+        "execution_done",
+        "completed",
+    ]
+    assert j2_updates == [
+        "received",
+        "accepted",
+        "executor_ready",
+        "volumes_ready",
+        "execution_done",
+        "completed",
+    ]

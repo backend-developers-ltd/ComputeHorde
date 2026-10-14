@@ -3,7 +3,6 @@ import sys
 import time
 import uuid
 
-from asgiref.sync import async_to_sync
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.fv_protocol.facilitator_requests import V2JobRequest
 from compute_horde.fv_protocol.validator_requests import JobStatusUpdate
@@ -12,14 +11,15 @@ from django.conf import settings
 from django.core.management.base import BaseCommand
 
 from compute_horde_validator.validator.allowance.default import allowance
+from compute_horde_validator.validator.dynamic_config import get_config
 from compute_horde_validator.validator.models import (
     Miner,
     MinerBlacklist,
     OrganicJob,
 )
-from compute_horde_validator.validator.organic_jobs.miner_client import MinerClient
-from compute_horde_validator.validator.organic_jobs.miner_driver import (
-    drive_organic_job,
+from compute_horde_validator.validator.organic_jobs.miner_driver_sync import (
+    MinerClient,
+    SyncOrganicJobDriver,
 )
 
 
@@ -27,7 +27,7 @@ def get_keypair():
     return settings.BITTENSOR_WALLET().get_hotkey()
 
 
-async def notify_job_status_update(msg: JobStatusUpdate):
+def notify_job_status_update(msg: JobStatusUpdate):
     print(f"\njob status: {msg.status}")
     if msg.metadata:
         if details := (
@@ -143,24 +143,29 @@ class Command(BaseCommand):
             block=block,
         )
 
-        async def _run_job():
+        try:
             keypair = get_keypair()
-            miner_client = MinerClient(
-                miner_hotkey=miner.hotkey,
-                miner_address=miner_address,
-                miner_port=miner_port,
-                job_uuid=str(job.job_uuid),
-                my_keypair=keypair,
+            ws_url = (
+                f"ws://{miner_address}:{miner_port}/v0.1/validator_interface/{keypair.ss58_address}"
             )
-            await drive_organic_job(
+            miner_client = MinerClient(
+                url=ws_url,
+                miner_hotkey=miner.hotkey,
+                validator_keypair=keypair,
+            )
+            driver = SyncOrganicJobDriver(
                 miner_client,
                 job,
                 job_request,
-                notify_callback=notify_job_status_update,
+                miner_hotkey=miner.hotkey,
+                my_keypair=keypair,
+                allowed_leeway=get_config("DYNAMIC_ORGANIC_JOB_ALLOWED_LEEWAY_TIME"),
+                reservation_time_limit=get_config("DYNAMIC_EXECUTOR_RESERVATION_TIME_LIMIT"),
+                executor_startup_time_limit=get_config("DYNAMIC_EXECUTOR_STARTUP_TIME_LIMIT"),
+                max_overall_time_limit=get_config("DYNAMIC_MAX_OVERALL_ORGANIC_JOB_TIME_LIMIT"),
+                status_callback=notify_job_status_update,
             )
-
-        try:
-            async_to_sync(_run_job)()
+            driver.run()
         except Exception as e:
             print(f"Failed to run job {job.job_uuid}: {e}")
             sys.exit(1)
