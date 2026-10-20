@@ -1,6 +1,7 @@
 import asyncio
 import dataclasses
 import datetime
+import json
 from collections.abc import Awaitable, Callable
 from functools import wraps
 from typing import Any, ParamSpec, TypeVar
@@ -148,6 +149,25 @@ def sign_blob(kp: bittensor.Keypair, blob: str) -> str:
     Signs a string blob with a bittensor keypair and returns the signature
     """
     return f"0x{kp.sign(blob).hex()}"
+
+
+def verify_blob_signature(hotkey: str, blob: str, signature: str) -> bool:
+    """
+    Checks a sign_blob signature of the blob against the hotkey; a malformed signature or
+    hotkey counts as invalid.
+    """
+    try:
+        return bool(bittensor.Keypair(ss58_address=hotkey).verify(blob, signature))
+    except ValueError:
+        return False
+
+
+def canonical_json(data: Any) -> str:
+    """
+    Serialises JSON-compatible data to text that depends only on its content: sorted keys,
+    no whitespace.
+    """
+    return json.dumps(data, sort_keys=True, separators=(",", ":"))
 
 
 P = ParamSpec("P")

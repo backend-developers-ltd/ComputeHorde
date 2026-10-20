@@ -6,6 +6,7 @@ from decimal import Decimal
 import pytest
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.fv_protocol.facilitator_requests import V2JobRequest
+from compute_horde.protocol_consts import TRUSTED_MINER_FAKE_KEY
 from compute_horde.receipts.models import JobFinishedReceipt, JobStartedReceipt
 from django.utils import timezone
 
@@ -20,7 +21,6 @@ from compute_horde_validator.validator.routing.types import (
     AllMinersBusy,
     NotEnoughCollateralException,
 )
-from compute_horde_validator.validator.utils import TRUSTED_MINER_FAKE_KEY
 
 JOB_REQUEST = V2JobRequest(
     uuid=str(uuid.uuid4()),

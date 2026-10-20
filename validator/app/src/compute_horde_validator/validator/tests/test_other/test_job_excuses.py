@@ -43,7 +43,7 @@ def test_filter_valid_excuse_receipts_valid():
 
     receipt = schemas.Receipt(
         payload=schemas.JobStartedReceiptPayload(
-            job_uuid="job-uuid-1",
+            job_uuid="00000000-0000-0000-0000-000000000001",
             miner_hotkey=miner,
             validator_hotkey=validator,
             is_organic=True,
@@ -58,7 +58,7 @@ def test_filter_valid_excuse_receipts_valid():
     valid_receipts = job_excuses.filter_valid_excuse_receipts(
         receipts_to_check=[receipt],
         check_time=now,
-        declined_job_uuid="declined",
+        declined_job_uuid="00000000-0000-0000-0000-00000000000b",
         declined_job_executor_class=executor_class,
         declined_job_is_synthetic=True,
         miner_hotkey=miner,
@@ -78,7 +78,7 @@ def test_filter_valid_excuse_receipts_with_duplicate_receipts():
     receipts = [
         schemas.Receipt(
             payload=schemas.JobStartedReceiptPayload(
-                job_uuid="job-with-duplicated-uuid-1",
+                job_uuid="00000000-0000-0000-0000-000000000002",
                 miner_hotkey=miner,
                 validator_hotkey=validator,
                 is_organic=True,
@@ -91,7 +91,7 @@ def test_filter_valid_excuse_receipts_with_duplicate_receipts():
         ),
         schemas.Receipt(
             payload=schemas.JobStartedReceiptPayload(
-                job_uuid="job-with-duplicated-uuid-1",
+                job_uuid="00000000-0000-0000-0000-000000000002",
                 miner_hotkey=miner,
                 validator_hotkey=validator,
                 is_organic=True,
@@ -107,7 +107,7 @@ def test_filter_valid_excuse_receipts_with_duplicate_receipts():
     valid_receipts = job_excuses.filter_valid_excuse_receipts(
         receipts_to_check=receipts,
         check_time=now,
-        declined_job_uuid="declined",
+        declined_job_uuid="00000000-0000-0000-0000-00000000000b",
         declined_job_executor_class=executor_class,
         declined_job_is_synthetic=True,
         miner_hotkey=miner,
@@ -116,7 +116,7 @@ def test_filter_valid_excuse_receipts_with_duplicate_receipts():
     )
 
     assert len(valid_receipts) == 1
-    assert valid_receipts[0].payload.job_uuid == "job-with-duplicated-uuid-1"
+    assert valid_receipts[0].payload.job_uuid == "00000000-0000-0000-0000-000000000002"
 
 
 @pytest.mark.parametrize(
@@ -127,7 +127,7 @@ def test_filter_valid_excuse_receipts_with_duplicate_receipts():
             lambda now, miner, validator, executor_class: [
                 schemas.Receipt(
                     payload=schemas.JobAcceptedReceiptPayload(
-                        job_uuid="job-accepted-uuid-1",
+                        job_uuid="00000000-0000-0000-0000-000000000003",
                         miner_hotkey=miner,
                         validator_hotkey=validator,
                         timestamp=now - timedelta(seconds=1),
@@ -144,7 +144,7 @@ def test_filter_valid_excuse_receipts_with_duplicate_receipts():
             lambda now, miner, validator, executor_class: [
                 schemas.Receipt(
                     payload=schemas.JobStartedReceiptPayload(
-                        job_uuid="job-synthetic-uuid-2",
+                        job_uuid="00000000-0000-0000-0000-000000000004",
                         miner_hotkey=miner,
                         validator_hotkey=validator,
                         is_organic=False,
@@ -162,7 +162,7 @@ def test_filter_valid_excuse_receipts_with_duplicate_receipts():
             lambda now, miner, validator, executor_class: [
                 schemas.Receipt(
                     payload=schemas.JobStartedReceiptPayload(
-                        job_uuid="job-from-other-miner-uuid-3",
+                        job_uuid="00000000-0000-0000-0000-000000000005",
                         miner_hotkey="other_miner",
                         validator_hotkey=validator,
                         is_organic=True,
@@ -180,7 +180,7 @@ def test_filter_valid_excuse_receipts_with_duplicate_receipts():
             lambda now, miner, validator, executor_class: [
                 schemas.Receipt(
                     payload=schemas.JobStartedReceiptPayload(
-                        job_uuid="declined",
+                        job_uuid="00000000-0000-0000-0000-00000000000b",
                         miner_hotkey=miner,
                         validator_hotkey=validator,
                         is_organic=True,
@@ -198,7 +198,7 @@ def test_filter_valid_excuse_receipts_with_duplicate_receipts():
             lambda now, miner, validator, executor_class: [
                 schemas.Receipt(
                     payload=schemas.JobStartedReceiptPayload(
-                        job_uuid="job-from-other-validator-uuid-4",
+                        job_uuid="00000000-0000-0000-0000-000000000006",
                         miner_hotkey=miner,
                         validator_hotkey="validator_not_allowed",
                         is_organic=True,
@@ -216,7 +216,7 @@ def test_filter_valid_excuse_receipts_with_duplicate_receipts():
             lambda now, miner, validator, executor_class: [
                 schemas.Receipt(
                     payload=schemas.JobStartedReceiptPayload(
-                        job_uuid="job-from-other-executor-class-uuid-5",
+                        job_uuid="00000000-0000-0000-0000-000000000007",
                         miner_hotkey=miner,
                         validator_hotkey=validator,
                         is_organic=True,
@@ -234,7 +234,7 @@ def test_filter_valid_excuse_receipts_with_duplicate_receipts():
             lambda now, miner, validator, executor_class: [
                 schemas.Receipt(
                     payload=schemas.JobStartedReceiptPayload(
-                        job_uuid="job-from-future-uuid-6",
+                        job_uuid="00000000-0000-0000-0000-000000000008",
                         miner_hotkey=miner,
                         validator_hotkey=validator,
                         is_organic=True,
@@ -252,7 +252,7 @@ def test_filter_valid_excuse_receipts_with_duplicate_receipts():
             lambda now, miner, validator, executor_class: [
                 schemas.Receipt(
                     payload=schemas.JobStartedReceiptPayload(
-                        job_uuid="job-expired-uuid-7",
+                        job_uuid="00000000-0000-0000-0000-000000000009",
                         miner_hotkey=miner,
                         validator_hotkey=validator,
                         is_organic=True,
@@ -270,7 +270,7 @@ def test_filter_valid_excuse_receipts_with_duplicate_receipts():
             lambda now, miner, validator, executor_class: [
                 schemas.Receipt(
                     payload=schemas.JobStartedReceiptPayload(
-                        job_uuid="job-from-validator-with-invalid-signature-uuid-8",
+                        job_uuid="00000000-0000-0000-0000-00000000000a",
                         miner_hotkey=miner,
                         validator_hotkey=validator,
                         is_organic=True,
@@ -300,7 +300,7 @@ def test_filter_valid_excuse_receipts_failures(case_name, make_receipts):
     res = job_excuses.filter_valid_excuse_receipts(
         receipts_to_check=receipts,
         check_time=now,
-        declined_job_uuid="declined",
+        declined_job_uuid="00000000-0000-0000-0000-00000000000b",
         declined_job_executor_class=executor_class,
         declined_job_is_synthetic=True,
         miner_hotkey=miner,

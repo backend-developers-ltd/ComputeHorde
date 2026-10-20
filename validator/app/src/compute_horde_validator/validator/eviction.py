@@ -3,6 +3,7 @@ from datetime import timedelta
 
 from compute_horde.receipts.models import JobAcceptedReceipt, JobFinishedReceipt, JobStartedReceipt
 from django.conf import settings
+from django.db.models import Q
 from django.utils.timezone import now
 
 from .models import (
@@ -25,6 +26,7 @@ logger = logging.getLogger(__name__)
 def evict_all() -> None:
     evict_organic_jobs()
     evict_receipts()
+    evict_malformed_receipts()
     evict_system_events()
     evict_miner_blacklist()
     evict_miner_preliminary_reservations()
@@ -43,11 +45,26 @@ def evict_organic_jobs() -> None:
 
 
 def evict_receipts() -> None:
-    logger.info("Evicting old receipts")
-    cutoff = now() - RECEIPTS_RETENTION_PERIOD
-    JobStartedReceipt.objects.filter(timestamp__lt=cutoff).delete()
-    JobAcceptedReceipt.objects.filter(timestamp__lt=cutoff).delete()
-    JobFinishedReceipt.objects.filter(timestamp__lt=cutoff).delete()
+    logger.info("Evicting receipts outside the retention window")
+    current_time = now()
+    # Receipts are dated by the issuing validator; a transferred receipt dated further ahead than
+    # the retention period would otherwise outlive it.
+    outside_retention_window = Q(timestamp__lt=current_time - RECEIPTS_RETENTION_PERIOD) | Q(
+        timestamp__gt=current_time + RECEIPTS_RETENTION_PERIOD
+    )
+    for receipt_model in (JobStartedReceipt, JobAcceptedReceipt, JobFinishedReceipt):
+        receipt_model.objects.filter(outside_retention_window).delete()
+
+
+def evict_malformed_receipts() -> None:
+    """
+    Deletes job finished receipts whose score cannot be read.
+
+    Such rows were transferred from miners before receipt fields were validated; scoring skips
+    them, so they only take up space and produce warnings.
+    """
+    logger.info("Evicting job finished receipts with a malformed score")
+    JobFinishedReceipt.with_malformed_score().delete()
 
 
 def evict_miner_blacklist() -> None:

@@ -13,6 +13,6 @@ class JobSpendingInfo(pydantic.BaseModel):
     validator_hotkey: str
     miner_hotkey: str
     executor_class: ExecutorClass
-    executor_seconds_cost: int
+    executor_seconds_cost: float
     paid_with_blocks: list[int]
     started_at: datetime

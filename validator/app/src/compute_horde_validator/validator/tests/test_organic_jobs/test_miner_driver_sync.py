@@ -1,3 +1,4 @@
+import datetime
 import uuid
 from collections.abc import Callable
 from functools import partial
@@ -17,13 +18,22 @@ from compute_horde.protocol_messages import (
     V0ExecutorManifestRequest,
     V0ExecutorReadyRequest,
     V0HordeFailedRequest,
+    V0InitialJobRequest,
     V0JobAcceptedReceiptRequest,
     V0JobFailedRequest,
     V0JobFinishedReceiptRequest,
     V0JobFinishedRequest,
+    V0JobRequest,
     V0VolumesReadyRequest,
     ValidatorToMinerMessage,
 )
+from compute_horde.receipts.models import JobFinishedReceipt
+from compute_horde.receipts.schemas import (
+    MAX_TTL_SECONDS,
+    JobAcceptedReceiptPayload,
+    JobFinishedReceiptPayload,
+)
+from freezegun import freeze_time
 
 from compute_horde_validator.validator.models import Miner
 from compute_horde_validator.validator.organic_jobs.facilitator_client import OrganicJob
@@ -82,10 +92,10 @@ class MockSyncMinerClient(MinerClient):
         return result
 
 
-def create_job_request(job_uuid: str) -> OrganicJobRequest:
+def create_job_request(job_uuid: str, **overrides) -> OrganicJobRequest:
     """Convert V2JobRequest to OrganicJobRequest for the sync driver."""
     v2_request = get_dummy_job_request_v2(job_uuid)
-    return OrganicJobRequest(
+    fields = dict(
         type="job.new",
         uuid=job_uuid,
         docker_image=v2_request.docker_image,
@@ -99,6 +109,60 @@ def create_job_request(job_uuid: str) -> OrganicJobRequest:
         streaming_start_time_limit=v2_request.streaming_start_time_limit,
         upload_time_limit=v2_request.upload_time_limit,
     )
+    return OrganicJobRequest(**{**fields, **overrides})
+
+
+SUCCESSFUL_FLOW = [
+    V0AcceptJobRequest,
+    V0ExecutorReadyRequest,
+    V0VolumesReadyRequest,
+    V0ExecutionDoneRequest,
+    partial(V0JobFinishedRequest, docker_process_stdout="", docker_process_stderr="", artifacts={}),
+]
+
+
+def _driver_for(
+    settings, job_request: OrganicJobRequest, messages_from_miner: list, **job_fields
+) -> tuple[SyncOrganicJobDriver, MockSyncMinerClient]:
+    miner, _ = Miner.objects.get_or_create(hotkey="miner_client")
+    job = OrganicJob.objects.create(
+        job_uuid=job_request.uuid,
+        miner=miner,
+        miner_address="irrelevant",
+        miner_address_ip_version=4,
+        miner_port=9999,
+        executor_class=DEFAULT_EXECUTOR_CLASS,
+        job_description="User job from facilitator",
+        block=42,
+        **job_fields,
+    )
+    my_keypair = settings.BITTENSOR_WALLET().hotkey
+    miner_client = MockSyncMinerClient(
+        url="ws://miner:9999/v0.1/validator_interface/test",
+        miner_hotkey="miner_hotkey",
+        validator_keypair=my_keypair,
+        messages_to_return=[message(job_uuid=job_request.uuid) for message in messages_from_miner],
+    )
+    driver = SyncOrganicJobDriver(
+        miner_client,
+        job,
+        job_request,
+        miner_hotkey="miner_hotkey",
+        my_keypair=my_keypair,
+        allowed_leeway=5,
+        reservation_time_limit=10,
+        executor_startup_time_limit=10,
+        max_overall_time_limit=60,
+    )
+    return driver, miner_client
+
+
+def _run(driver: SyncOrganicJobDriver) -> None:
+    with mock.patch(
+        "compute_horde_validator.validator.organic_jobs.miner_driver_sync.supertensor"
+    ) as mock_supertensor:
+        mock_supertensor.return_value.list_validators.return_value = []
+        driver.run()
 
 
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
@@ -285,6 +349,104 @@ def test_sync_miner_driver(
 
     if expected_job_finished_receipt:
         assert miner_client.query_sent_models(model_class=V0JobFinishedReceiptRequest)
+
+
+@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
+def test_sync_miner_driver_signs_job_requests(settings):
+    miner, _ = Miner.objects.get_or_create(hotkey="miner_client")
+    job_uuid = str(uuid.uuid4())
+    job_request = create_job_request(job_uuid)
+    job = OrganicJob.objects.create(
+        job_uuid=job_uuid,
+        miner=miner,
+        miner_address="irrelevant",
+        miner_address_ip_version=4,
+        miner_port=9999,
+        executor_class=DEFAULT_EXECUTOR_CLASS,
+        job_description="User job from facilitator",
+        block=42,
+    )
+    my_keypair = settings.BITTENSOR_WALLET().hotkey
+    miner_client = MockSyncMinerClient(
+        url="ws://miner:9999/v0.1/validator_interface/test",
+        miner_hotkey="miner_hotkey",
+        validator_keypair=my_keypair,
+        messages_to_return=[
+            V0AcceptJobRequest(job_uuid=job_uuid),
+            V0ExecutorReadyRequest(job_uuid=job_uuid),
+            V0VolumesReadyRequest(job_uuid=job_uuid),
+            V0ExecutionDoneRequest(job_uuid=job_uuid),
+            V0JobFinishedRequest(
+                job_uuid=job_uuid,
+                docker_process_stdout="mocked stdout",
+                docker_process_stderr="mocked stderr",
+                artifacts={},
+            ),
+        ],
+    )
+
+    with mock.patch(
+        "compute_horde_validator.validator.organic_jobs.miner_driver_sync.supertensor"
+    ) as mock_supertensor:
+        mock_supertensor.return_value.list_validators.return_value = []
+        SyncOrganicJobDriver(
+            miner_client,
+            job,
+            job_request,
+            miner_hotkey="miner_hotkey",
+            my_keypair=my_keypair,
+            allowed_leeway=5,
+            reservation_time_limit=10,
+            executor_startup_time_limit=10,
+            max_overall_time_limit=60,
+        ).run()
+
+    [initial_job_request] = miner_client.query_sent_models(model_class=V0InitialJobRequest)
+    [full_job_request] = miner_client.query_sent_models(model_class=V0JobRequest)
+    assert initial_job_request.model_dump(mode="json") == {
+        "message_type": "V0InitialJobRequest",
+        "job_uuid": job_uuid,
+        "executor_class": DEFAULT_EXECUTOR_CLASS,
+        "docker_image": "nvidia",
+        "timeout_seconds": None,
+        "volume": job_request.volume.model_dump(mode="json"),
+        "job_started_receipt_payload": {
+            "receipt_type": "JobStartedReceipt",
+            "job_uuid": job_uuid,
+            "miner_hotkey": "miner_hotkey",
+            "validator_hotkey": my_keypair.ss58_address,
+            "timestamp": mock.ANY,
+            "executor_class": DEFAULT_EXECUTOR_CLASS,
+            "is_organic": True,
+            "ttl": 10,
+        },
+        "job_started_receipt_signature": mock.ANY,
+        "streaming_details": None,
+        "executor_timing": {
+            "allowed_leeway": 5,
+            "download_time_limit": 1,
+            "execution_time_limit": 1,
+            "upload_time_limit": 1,
+            "streaming_start_time_limit": 1,
+        },
+        "validator_signature": mock.ANY,
+    }
+    assert initial_job_request.is_signed_by(my_keypair.ss58_address)
+    assert full_job_request.model_dump(mode="json") == {
+        "message_type": "V0JobRequest",
+        "job_uuid": job_uuid,
+        "executor_class": DEFAULT_EXECUTOR_CLASS,
+        "docker_image": "nvidia",
+        "raw_script": None,
+        "docker_run_options_preset": "nvidia_all",
+        "docker_run_cmd": [],
+        "env": {},
+        "volume": None,
+        "output_upload": job_request.output_upload.model_dump(mode="json"),
+        "artifacts_dir": None,
+        "validator_signature": mock.ANY,
+    }
+    assert full_job_request.is_signed_by(my_keypair.ss58_address)
 
 
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
@@ -723,3 +885,62 @@ def test_sync_miner_driver_fails_on_fatal_generic_error(settings):
     job.refresh_from_db()
     assert job.status == OrganicJob.Status.FAILED
     assert [u.status for u in job_status_updates] == [JobStatus.ACCEPTED, JobStatus.FAILED]
+
+
+@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
+@pytest.mark.parametrize(
+    "messages_from_miner,expected_score_str,expected_block_numbers",
+    [
+        pytest.param([V0DeclineJobRequest], "0.000000", [], id="failed_job"),
+        pytest.param(SUCCESSFUL_FLOW, "3.000000", [7, 8], id="completed_job"),
+    ],
+)
+def test_sync_miner_driver_job_finished_receipt_survives_a_backwards_clock_step(
+    messages_from_miner, expected_score_str, expected_block_numbers, settings
+):
+    started_at = datetime.datetime(2025, 3, 4, 12, 0, tzinfo=datetime.UTC)
+    finished_at = started_at - datetime.timedelta(minutes=5)
+    job_request = create_job_request(str(uuid.uuid4()))
+    with freeze_time(started_at):
+        driver, miner_client = _driver_for(
+            settings,
+            job_request,
+            messages_from_miner,
+            allowance_job_value=3,
+            allowance_blocks=[7, 8],
+        )
+    with freeze_time(finished_at):
+        _run(driver)
+
+    [receipt] = miner_client.query_sent_models(model_class=V0JobFinishedReceiptRequest)
+    assert receipt.payload == JobFinishedReceiptPayload(
+        job_uuid=job_request.uuid,
+        miner_hotkey="miner_hotkey",
+        validator_hotkey=settings.BITTENSOR_WALLET().hotkey.ss58_address,
+        timestamp=finished_at,
+        time_started=started_at,
+        time_took_us=0,
+        block_numbers=expected_block_numbers,
+        score_str=expected_score_str,
+    )
+    assert JobFinishedReceipt.objects.get(job_uuid=job_request.uuid).time_took_us == 0
+
+
+@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
+def test_sync_miner_driver_clamps_job_accepted_receipt_ttl(settings):
+    accepted_at = datetime.datetime(2025, 3, 4, 12, 0, tzinfo=datetime.UTC)
+    job_request = create_job_request(str(uuid.uuid4()), execution_time_limit=MAX_TTL_SECONDS)
+    with freeze_time(accepted_at):
+        driver, miner_client = _driver_for(settings, job_request, SUCCESSFUL_FLOW)
+        _run(driver)
+
+    [receipt] = miner_client.query_sent_models(model_class=V0JobAcceptedReceiptRequest)
+    assert receipt.payload == JobAcceptedReceiptPayload(
+        job_uuid=job_request.uuid,
+        miner_hotkey="miner_hotkey",
+        validator_hotkey=settings.BITTENSOR_WALLET().hotkey.ss58_address,
+        timestamp=accepted_at,
+        time_accepted=accepted_at,
+        ttl=MAX_TTL_SECONDS,
+    )
+    assert OrganicJob.objects.get(job_uuid=job_request.uuid).status == OrganicJob.Status.COMPLETED

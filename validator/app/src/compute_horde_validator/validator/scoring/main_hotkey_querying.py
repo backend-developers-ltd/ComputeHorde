@@ -72,17 +72,20 @@ async def _query_single_miner(miner: Miner) -> str | None:
     Returns:
         Main hotkey (or None)
     """
+
+    def greeting() -> str:
+        return _create_auth_message(miner.hotkey).model_dump_json()
+
     transport = None
     try:
         transport = WSTransport(
             f"main_hotkey_query_{miner.hotkey}",
             f"ws://{miner.address}:{miner.port}/v0.1/validator_interface/{settings.BITTENSOR_WALLET().get_hotkey().ss58_address}",
             max_retries=2,
+            reconnect_greeting=greeting,
         )
         await transport.start()
-
-        auth_msg = _create_auth_message(miner.hotkey)
-        await transport.send(auth_msg.model_dump_json())
+        await transport.send(greeting())
 
         request = V0MainHotkeyMessage()
         await transport.send(request.model_dump_json())

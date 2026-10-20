@@ -1,3 +1,4 @@
+import datetime
 import random
 from uuid import uuid4
 
@@ -14,6 +15,7 @@ _USE_RANDOM = object()
 def random_receipt(
     miner_keypair: Keypair = _USE_RANDOM,
     validator_keypair: Keypair = _USE_RANDOM,
+    timestamp: datetime.datetime | None = None,
 ):
     if miner_keypair is _USE_RANDOM:
         miner_keypair = random_keypair()
@@ -25,7 +27,7 @@ def random_receipt(
         job_uuid=str(uuid4()),
         miner_hotkey=miner_keypair.ss58_address,
         validator_hotkey=validator_keypair.ss58_address,
-        timestamp=timezone.now(),
+        timestamp=timestamp or timezone.now(),
         receipt_type=ReceiptType.JobStartedReceipt,
         executor_class=ExecutorClass.always_on__gpu_24gb,
         ttl=100,

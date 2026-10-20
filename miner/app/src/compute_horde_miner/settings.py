@@ -483,6 +483,10 @@ BITTENSOR_WALLET_DIRECTORY = env.path(
 BITTENSOR_WALLET_NAME = env.str("BITTENSOR_WALLET_NAME")
 BITTENSOR_WALLET_HOTKEY_NAME = env.str("BITTENSOR_WALLET_HOTKEY_NAME")
 DEBUG_TURN_AUTHENTICATION_OFF = env.bool("DEBUG_TURN_AUTHENTICATION_OFF", default=False)
+# Decline V0InitialJobRequest and V0JobRequest messages that carry no signature of the
+# authenticated validator. Turn off only while validators that do not sign yet are in use;
+# a signature that is present is verified either way.
+REQUIRE_SIGNED_JOB_REQUESTS = env.bool("REQUIRE_SIGNED_JOB_REQUESTS", default=True)
 
 DYNAMIC_CONFIG_ENV = env.str("DYNAMIC_CONFIG_ENV", default="prod")
 CONFIG_CONTRACT_ADDRESS = env.str(

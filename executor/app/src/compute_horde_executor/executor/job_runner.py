@@ -2,7 +2,6 @@ import asyncio
 import base64
 import json
 import logging
-import os
 import pathlib
 import re
 import shlex
@@ -26,6 +25,14 @@ from compute_horde_core.certificate import (
     start_nginx,
 )
 from compute_horde_core.output_upload import OutputUploader, OutputUploadFailed
+from compute_horde_core.untrusted_files import (
+    FileTooLarge,
+    UntrustedFileRejected,
+    list_entries,
+    open_directory,
+    read_regular_file,
+    write_regular_file,
+)
 from compute_horde_core.volume import (
     HuggingfaceVolume,
     Volume,
@@ -49,6 +56,8 @@ MAX_RESULT_SIZE_IN_RESPONSE = 1_000_000  # 1 MB
 TRUNCATED_RESPONSE_PREFIX_LEN = MAX_RESULT_SIZE_IN_RESPONSE // 2
 TRUNCATED_RESPONSE_SUFFIX_LEN = MAX_RESULT_SIZE_IN_RESPONSE // 2
 MAX_ARTIFACT_SIZE = 1_000_000
+MAX_ARTIFACTS_TOTAL_SIZE = 10_000_000
+MAX_ARTIFACTS_COUNT = 1_000
 DOCKER_STOP_TIMEOUT_SECONDS = 15
 
 NGINX_CONF = """
@@ -324,28 +333,11 @@ class BaseJobRunner(ABC):
         )
 
         # Save the streams in output volume and truncate them in response.
-        with open(self.output_volume_mount_dir / "stdout.txt", "w") as f:
-            f.write(self.execution_result.stdout)
+        self.save_output_streams()
         stdout = truncate(self.execution_result.stdout)
-        with open(self.output_volume_mount_dir / "stderr.txt", "w") as f:
-            f.write(self.execution_result.stderr)
         stderr = truncate(self.execution_result.stderr)
 
-        artifacts = {}
-        for artifact_filename in os.listdir(self.artifacts_mount_dir):
-            artifact_path = self.artifacts_mount_dir / artifact_filename
-            if os.path.isfile(artifact_path):
-                with open(artifact_path, "rb") as f:
-                    content = f.read()
-                artifact_size = len(content)
-                if artifact_size < MAX_ARTIFACT_SIZE:
-                    artifacts[f"{self.full_job_request.artifacts_dir}/{artifact_filename}"] = (
-                        base64.b64encode(content).decode()
-                    )
-                else:
-                    logger.error(f"Artifact {artifact_filename} too large: {artifact_size:,} bytes")
-            else:
-                logger.error(f"Directory found in artifacts: {artifact_filename}")
+        artifacts = self.collect_artifacts()
 
         upload_results = {}
 
@@ -371,6 +363,64 @@ class BaseJobRunner(ABC):
                 {key: json.dumps(value.dict()) for key, value in upload_results.items()}
             ),
         )
+
+    def save_output_streams(self) -> None:
+        """
+        Write the job's stdout and stderr as stdout.txt and stderr.txt in the output directory,
+        replacing whatever the job left under those names without following it.
+        """
+        assert self.execution_result is not None, "No execution result"
+        try:
+            with open_directory(self.output_volume_mount_dir) as dir_fd:
+                write_regular_file(dir_fd, "stdout.txt", self.execution_result.stdout)
+                write_regular_file(dir_fd, "stderr.txt", self.execution_result.stderr)
+        except UntrustedFileRejected as ex:
+            raise JobError(
+                f"Saving output streams failed: {ex}", JobFailureReason.UPLOAD_FAILED
+            ) from ex
+
+    def collect_artifacts(self) -> dict[str, str]:
+        """
+        Base64-encode the regular files the job left in the artifacts directory, keyed by
+        their path inside the job container. Anything else the job put there (symlinks,
+        directories, FIFOs, devices, files of MAX_ARTIFACT_SIZE bytes or more) is skipped.
+        Only the first MAX_ARTIFACTS_COUNT entries in name order are visited, and a file
+        that does not fit in what is left of the MAX_ARTIFACTS_TOTAL_SIZE bytes shared by
+        all artifacts is skipped without being read.
+        """
+        assert self.full_job_request is not None, (
+            "Full job request must be set. Call prepare_full() first."
+        )
+        artifacts = {}
+        budget_left = MAX_ARTIFACTS_TOTAL_SIZE
+        with open_directory(self.artifacts_mount_dir) as dir_fd:
+            artifact_filenames = sorted(list_entries(dir_fd))
+            if len(artifact_filenames) > MAX_ARTIFACTS_COUNT:
+                logger.error(
+                    f"Artifacts skipped: only the first {MAX_ARTIFACTS_COUNT:,} of "
+                    f"{len(artifact_filenames):,} entries in name order are collected"
+                )
+            for artifact_filename in artifact_filenames[:MAX_ARTIFACTS_COUNT]:
+                max_size = min(MAX_ARTIFACT_SIZE - 1, budget_left)
+                try:
+                    content = read_regular_file(dir_fd, artifact_filename, max_size=max_size)
+                except FileTooLarge as e:
+                    if max_size == budget_left:
+                        logger.error(
+                            f"Artifact skipped: {artifact_filename}: would exceed the "
+                            f"{MAX_ARTIFACTS_TOTAL_SIZE:,} bytes allowed for all artifacts together"
+                        )
+                    else:
+                        logger.error(f"Artifact skipped: {e}")
+                    continue
+                except (UntrustedFileRejected, OSError) as e:
+                    logger.error(f"Artifact skipped: {e}")
+                    continue
+                budget_left -= len(content)
+                artifacts[f"{self.full_job_request.artifacts_dir}/{artifact_filename}"] = (
+                    base64.b64encode(content).decode()
+                )
+        return artifacts
 
     async def clean(self):
         # remove input/output directories with docker, to deal with funky file permissions

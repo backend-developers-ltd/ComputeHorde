@@ -1,0 +1,1 @@
+Zipped output uploads accept files modified after 2107 and fail with `OutputUploadFailed` instead of an unhandled exception when a file name is not valid UTF-8. An output directory with directories nested more than 100 levels deep also fails with `OutputUploadFailed`. `MultiUpload` builds its system output zip before it sends any file.

@@ -1,13 +1,22 @@
 from asyncio import Semaphore
+from datetime import timedelta
 from functools import partial
 from unittest.mock import AsyncMock, Mock, patch
+from uuid import uuid4
 
 import aiohttp
 import pytest
+from django.db import DataError
+from django.utils import timezone
 from pydantic import ValidationError
 
-from compute_horde.receipts.models import JobStartedReceipt
-from compute_horde.receipts.transfer import ReceiptsTransfer
+from compute_horde.receipts.models import JobFinishedReceipt, JobStartedReceipt
+from compute_horde.receipts.schemas import JobFinishedReceiptPayload, Receipt, ReceiptType
+from compute_horde.receipts.transfer import (
+    MAX_RECEIPT_TIMESTAMP_SKEW,
+    FutureDatedReceipt,
+    ReceiptsTransfer,
+)
 from compute_horde.receipts.transfer_checkpoints import TransferCheckpointBackend
 from compute_horde.utils import sign_blob
 from tests.utils import random_keypair, random_receipt
@@ -90,6 +99,127 @@ async def test_rejects_bad_signatures(miner_keypair, validator_keypair):
     assert len(result.transfer_errors) == 0
     assert len(result.line_errors) == 3
     assert await JobStartedReceipt.objects.acount() == 0
+
+
+def malformed_finished_receipt_line(miner_keypair, validator_keypair, **overrides) -> bytes:
+    """
+    A JobFinishedReceipt line signed by both parties, built without validation so that it can
+    carry values the wire format rejects.
+    """
+    payload = JobFinishedReceiptPayload.model_construct(
+        **{
+            "receipt_type": ReceiptType.JobFinishedReceipt,
+            "job_uuid": str(uuid4()),
+            "miner_hotkey": miner_keypair.ss58_address,
+            "validator_hotkey": validator_keypair.ss58_address,
+            "timestamp": timezone.now(),
+            "time_started": timezone.now(),
+            "time_took_us": 1_000_000,
+            "score_str": "1.000000",
+            "block_numbers": [1, 2],
+            **overrides,
+        }
+    )
+    blob = payload.blob_for_signing()
+    receipt = Receipt.model_construct(
+        payload=payload,
+        miner_signature=sign_blob(miner_keypair, blob),
+        validator_signature=sign_blob(validator_keypair, blob),
+    )
+    return receipt.model_dump_json().encode()
+
+
+async def stored_started_job_uuids() -> list[str]:
+    return sorted(
+        [str(u) async for u in JobStartedReceipt.objects.values_list("job_uuid", flat=True)]
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.django_db(transaction=True)
+async def test_rejects_malformed_signed_receipts_and_keeps_the_rest(
+    miner_keypair, validator_keypair
+):
+    good_receipts = [random_receipt(miner_keypair, validator_keypair) for _ in range(4)]
+    lines_to_serve = [
+        good_receipts[0].model_dump_json().encode(),
+        malformed_finished_receipt_line(miner_keypair, validator_keypair, score_str="nan"),
+        good_receipts[1].model_dump_json().encode(),
+        malformed_finished_receipt_line(miner_keypair, validator_keypair, job_uuid="not-a-uuid"),
+        good_receipts[2].model_dump_json().encode(),
+        malformed_finished_receipt_line(miner_keypair, validator_keypair, time_took_us=2**70),
+        malformed_finished_receipt_line(miner_keypair, validator_keypair, block_numbers=[-1]),
+        good_receipts[3].model_dump_json().encode(),
+    ]
+
+    session = Mock()
+    session.get = AsyncMock()
+    session.get.return_value.status = 200
+    session.get.return_value.read = AsyncMock(return_value=b"\n".join(lines_to_serve))
+
+    result = await do_transfer(session=session)
+
+    assert result.n_receipts == 4
+    assert len(result.transfer_errors) == 0
+    assert [type(e.cause) for e in result.line_errors] == [ValidationError] * 4
+    assert await JobFinishedReceipt.objects.acount() == 0
+    assert await stored_started_job_uuids() == sorted(r.payload.job_uuid for r in good_receipts)
+
+
+@pytest.mark.asyncio
+@pytest.mark.django_db(transaction=True)
+async def test_rejects_receipts_dated_beyond_the_clock_skew(miner_keypair, validator_keypair):
+    now = timezone.now()
+    within_skew = random_receipt(
+        miner_keypair, validator_keypair, timestamp=now + MAX_RECEIPT_TIMESTAMP_SKEW / 2
+    )
+    beyond_skew = random_receipt(
+        miner_keypair, validator_keypair, timestamp=now + timedelta(days=3)
+    )
+
+    session = Mock()
+    session.get = AsyncMock()
+    session.get.return_value.status = 200
+    session.get.return_value.read = AsyncMock(
+        return_value=b"\n".join(r.model_dump_json().encode() for r in [within_skew, beyond_skew])
+    )
+
+    result = await do_transfer(session=session)
+
+    assert result.n_receipts == 1
+    assert len(result.transfer_errors) == 0
+    assert [type(e.cause) for e in result.line_errors] == [FutureDatedReceipt]
+    assert await stored_started_job_uuids() == [within_skew.payload.job_uuid]
+
+
+@pytest.mark.asyncio
+@pytest.mark.django_db(transaction=True)
+async def test_row_rejected_by_database_does_not_lose_the_batch(miner_keypair, validator_keypair):
+    receipts = [random_receipt(miner_keypair, validator_keypair) for _ in range(4)]
+    poisoned_job_uuid = receipts[1].payload.job_uuid
+    original_abulk_create = JobStartedReceipt.objects.abulk_create
+
+    async def abulk_create(objs, **kwargs):
+        if any(str(obj.job_uuid) == poisoned_job_uuid for obj in objs):
+            raise DataError("integer out of range")
+        return await original_abulk_create(objs, **kwargs)
+
+    session = Mock()
+    session.get = AsyncMock()
+    session.get.return_value.status = 200
+    session.get.return_value.read = AsyncMock(
+        return_value=b"\n".join(r.model_dump_json().encode() for r in receipts)
+    )
+
+    with patch.object(JobStartedReceipt.objects, "abulk_create", abulk_create):
+        result = await do_transfer(session=session)
+
+    assert result.n_receipts == 3
+    assert len(result.transfer_errors) == 0
+    assert [type(e.cause) for e in result.line_errors] == [DataError]
+    assert await stored_started_job_uuids() == sorted(
+        r.payload.job_uuid for r in receipts if r.payload.job_uuid != poisoned_job_uuid
+    )
 
 
 @pytest.mark.asyncio

@@ -1,15 +1,18 @@
 import asyncio
 import datetime as dt
 import logging
-import time
 import uuid
 from datetime import timedelta
 from functools import cached_property
 from typing import Protocol, assert_never
 
-import bittensor
 from compute_horde.executor_class import EXECUTOR_CLASS
-from compute_horde.protocol_consts import HordeFailureReason, JobParticipantType, JobRejectionReason
+from compute_horde.protocol_consts import (
+    TRUSTED_MINER_FAKE_KEY,
+    HordeFailureReason,
+    JobParticipantType,
+    JobRejectionReason,
+)
 from compute_horde.protocol_messages import (
     GenericError,
     V0AcceptJobRequest,
@@ -30,13 +33,15 @@ from compute_horde.protocol_messages import (
     V0VolumesReadyRequest,
     ValidatorAuthForMiner,
     ValidatorToMinerMessage,
+    parse_validator_to_miner_message,
 )
 from compute_horde.receipts.models import JobAcceptedReceipt, JobFinishedReceipt, JobStartedReceipt
-from compute_horde.receipts.schemas import JobStartedReceiptPayload, ReceiptPayload
+from compute_horde.receipts.schemas import ReceiptPayload
+from compute_horde.utils import verify_blob_signature
 from django.conf import settings
+from django.db import IntegrityError
 from django.db.models import DateTimeField, ExpressionWrapper, F
 from django.utils import timezone
-from pydantic import TypeAdapter
 
 from compute_horde_miner.miner.executor_manager import current
 from compute_horde_miner.miner.executor_manager.base import (
@@ -54,10 +59,20 @@ from compute_horde_miner.miner.models import (
     ValidatorBlacklist,
 )
 from compute_horde_miner.miner.receipts import current_store
+from compute_horde_miner.miner.validator_auth import (
+    AUTH_MESSAGE_MAX_CLOCK_SKEW,
+    auth_signature_bytes,
+    auth_timestamp_error,
+    consume_auth_signature,
+)
 
 logger = logging.getLogger(__name__)
 
-AUTH_MESSAGE_MAX_AGE = 10
+# Seconds a connected validator has to authenticate before the socket is closed.
+AUTH_TIMEOUT = 5
+# A validator dates the receipt right before sending the job request, but reconnecting to the
+# miner can delay the request by up to about 5 minutes.
+JOB_STARTED_RECEIPT_MAX_AGE = dt.timedelta(minutes=10)
 
 DONT_CHECK = "DONT_CHECK"
 
@@ -80,15 +95,17 @@ class MinerValidatorConsumer(BaseConsumer[ValidatorToMinerMessage], ValidatorInt
 
     def __init__(self, *a, **kw):
         super().__init__(*a, **kw)
-        if settings.DEBUG_TURN_AUTHENTICATION_OFF or settings.IS_LOCAL_MINER:
+        if settings.DEBUG_TURN_AUTHENTICATION_OFF:
             self.my_hotkey = DONT_CHECK
+        elif settings.IS_LOCAL_MINER:
+            # Validators address their trusted miner by this key, not by its wallet's hotkey.
+            self.my_hotkey = TRUSTED_MINER_FAKE_KEY
         else:
             self.my_hotkey = settings.BITTENSOR_WALLET().get_hotkey().ss58_address
         self.validator_authenticated = False
         self.msg_queue = []
-        self.defer_saving_jobs = []
-        self.defer_executor_ready = []
         self.pending_jobs: dict[str, AcceptedJob] = {}
+        self._auth_timeout_task: asyncio.Task[None] | None = None
 
         # Validator is populated only after the connection initialization succeeds
         self._maybe_validator: Validator | None = None
@@ -118,7 +135,28 @@ class MinerValidatorConsumer(BaseConsumer[ValidatorToMinerMessage], ValidatorInt
             await self.close_with_error_msg(f"Inactive validator: {self.validator_key}")
             return
 
+        # The validator hotkey in the URL is public, so until the socket authenticates it must
+        # not be subscribed to any job nor receive anything; see handle_authentication.
+        self._auth_timeout_task = asyncio.create_task(self._close_on_auth_timeout())
+
+    async def _close_on_auth_timeout(self):
+        await asyncio.sleep(AUTH_TIMEOUT)
+        await self.close_with_error_msg(
+            f"Validator {self.validator_key} did not authenticate within {AUTH_TIMEOUT}s"
+        )
+
+    def _cancel_auth_timeout(self):
+        if self._auth_timeout_task is not None:
+            self._auth_timeout_task.cancel()
+            self._auth_timeout_task = None
+
+    async def _resume_pending_jobs(self) -> list[AcceptedJob]:
+        """
+        Re-subscribes to the validator's in-progress jobs after a reconnect, failing the ones
+        that went stale; returns the jobs whose executor is still waiting for the payload.
+        """
         self.pending_jobs = await AcceptedJob.get_for_validator(self.validator)
+        jobs_awaiting_payload = []
         for job in self.pending_jobs.values():
             if job.status != AcceptedJob.Status.WAITING_FOR_PAYLOAD:
                 # TODO: this actually works only for temporary connection issue between validator and miner;
@@ -130,53 +168,46 @@ class MinerValidatorConsumer(BaseConsumer[ValidatorToMinerMessage], ValidatorInt
                 #       this only handles this one particular case of broken connection between miner and validator
                 if timezone.now() - job.updated_at > dt.timedelta(days=1):
                     job.status = AcceptedJob.Status.FAILED
-                    # we don't want to block accepting connection - we defer it until after authorized
-                    self.defer_saving_jobs.append(job)
+                    await job.asave()
                     logger.debug(f"Give up on job {job.job_uuid} after no status change for a day.")
                 else:
                     await self.group_add(job.executor_token)
                 continue
             if timezone.now() - job.updated_at > dt.timedelta(minutes=10):
                 job.status = AcceptedJob.Status.FAILED
-                # we don't want to block accepting connection - we defer it until after authorized
-                self.defer_saving_jobs.append(job)
+                await job.asave()
                 logger.debug(
                     f"Give up on job {job.job_uuid} after not receiving payload after 10 minutes"
                 )
             else:
-                logger.debug(
-                    f"Deferring executor ready msg for job {job.job_uuid}: {job.executor_token}"
-                )
                 await self.group_add(job.executor_token)
-                # we don't send anything until we get authorization confirmation
-                self.defer_executor_ready.append(job)
+                jobs_awaiting_payload.append(job)
+        return jobs_awaiting_payload
 
     async def close_with_error_msg(self, msg: str):
         await self.send(GenericError(details=msg).model_dump_json())
         logger.info(msg)
         await self.close(1000)
 
-    def verify_auth_msg(self, msg: ValidatorAuthForMiner) -> tuple[bool, str]:
-        if msg.timestamp < time.time() - AUTH_MESSAGE_MAX_AGE:
-            return False, "msg too old"
-        if not settings.IS_LOCAL_MINER and msg.miner_hotkey != self.my_hotkey:
+    async def verify_auth_msg(self, msg: ValidatorAuthForMiner) -> tuple[bool, str]:
+        if timestamp_error := auth_timestamp_error(msg):
+            return False, timestamp_error
+        if msg.miner_hotkey != self.my_hotkey:
             return False, f"wrong miner hotkey ({self.my_hotkey}!={msg.miner_hotkey})"
         if msg.validator_hotkey != self.validator_key:
             return (
                 False,
                 f"wrong validator hotkey ({self.validator_key}!={msg.validator_hotkey})",
             )
-
-        keypair = bittensor.Keypair(ss58_address=self.validator_key)
-        if keypair.verify(msg.blob_for_signing(), msg.signature):
-            return True, ""
-
-        return False, "Signature mismatches"
+        if (signature := auth_signature_bytes(msg)) is None:
+            return False, "malformed signature"
+        if not verify_blob_signature(self.validator_key, msg.blob_for_signing(), msg.signature):
+            return False, "Signature mismatches"
+        if not await consume_auth_signature(msg, signature):
+            return False, "auth message already used"
+        return True, ""
 
     def verify_receipt_payload(self, payload: ReceiptPayload, signature: str) -> bool:
-        if settings.IS_LOCAL_MINER:
-            return True
-
         if self.my_hotkey != DONT_CHECK and payload.miner_hotkey != self.my_hotkey:
             logger.warning(
                 f"Miner hotkey mismatch in receipt for job_uuid {payload.job_uuid} ({payload.miner_hotkey!r} != {self.my_hotkey!r})"
@@ -188,21 +219,49 @@ class MinerValidatorConsumer(BaseConsumer[ValidatorToMinerMessage], ValidatorInt
             )
             return False
 
-        keypair = bittensor.Keypair(ss58_address=self.validator_key)
-        if keypair.verify(payload.blob_for_signing(), signature):
+        if verify_blob_signature(self.validator_key, payload.blob_for_signing(), signature):
             return True
 
         logger.warning(f"Validator signature mismatch in receipt for job_uuid {payload.job_uuid}")
         return False
 
+    def job_request_signature_error(self, msg: V0InitialJobRequest | V0JobRequest) -> str | None:
+        """
+        Why the request cannot be attributed to the authenticated validator, or None.
+        A missing signature is tolerated only when REQUIRE_SIGNED_JOB_REQUESTS is off.
+        """
+        if msg.validator_signature is None:
+            if settings.REQUIRE_SIGNED_JOB_REQUESTS:
+                return "missing validator signature"
+            logger.warning(
+                f"Accepting unsigned {msg.message_type} for job {msg.job_uuid} from validator "
+                f"{self.validator_key} because REQUIRE_SIGNED_JOB_REQUESTS is off"
+            )
+            return None
+        if not msg.is_signed_by(self.validator_key):
+            return "invalid validator signature"
+        return None
+
+    async def decline_job(self, job_uuid: str, reason: JobRejectionReason, message: str) -> None:
+        logger.info(f"Declining job {job_uuid} from validator {self.validator_key}: {message}")
+        await self.send(
+            V0DeclineJobRequest(job_uuid=job_uuid, reason=reason, message=message).model_dump_json()
+        )
+
     async def handle_authentication(self, msg: ValidatorAuthForMiner):
+        if self.validator_authenticated:
+            logger.warning(
+                f"Ignoring repeated authentication message from validator {self.validator_key}"
+            )
+            return
+
         if settings.DEBUG_TURN_AUTHENTICATION_OFF:
             logger.critical(
                 f"Validator {self.validator_key} passed authentication without checking, because "
                 f'"DEBUG_TURN_AUTHENTICATION_OFF" is on'
             )
         else:
-            authenticated, auth_error_msg = self.verify_auth_msg(msg)
+            authenticated, auth_error_msg = await self.verify_auth_msg(msg)
             if not authenticated:
                 close_error_msg = (
                     f"Validator {self.validator_key} not authenticated due to: {auth_error_msg}"
@@ -211,8 +270,11 @@ class MinerValidatorConsumer(BaseConsumer[ValidatorToMinerMessage], ValidatorInt
                 return
 
         self.validator_authenticated = True
+        self._cancel_auth_timeout()
 
         # (!) We should not send any messages until the validator authorizes itself.
+
+        jobs_awaiting_payload = await self._resume_pending_jobs()
 
         manifest = await current.executor_manager.get_manifest()
         await self.send(V0ExecutorManifestRequest(manifest=manifest).model_dump_json())
@@ -256,20 +318,14 @@ class MinerValidatorConsumer(BaseConsumer[ValidatorToMinerMessage], ValidatorInt
         #     job.result_reported_to_validator = timezone.now()
         #     await job.asave()
 
-        while self.defer_executor_ready:
-            job = self.defer_executor_ready.pop()
+        for job in jobs_awaiting_payload:
             await self.send(V0ExecutorReadyRequest(job_uuid=str(job.job_uuid)).model_dump_json())
             logger.debug(
                 f"Readiness for job {job.job_uuid} reported to validator {self.validator_key}"
             )
 
-        # we could do this anywhere, but this sounds like a good enough place
-        while self.defer_saving_jobs:
-            job = self.defer_saving_jobs.pop()
-            await job.asave()
-
     def parse_message(self, raw_msg: str | bytes) -> ValidatorToMinerMessage:
-        return TypeAdapter(ValidatorToMinerMessage).validate_json(raw_msg)
+        return parse_validator_to_miner_message(raw_msg)
 
     async def handle(self, msg: ValidatorToMinerMessage) -> None:
         if self._maybe_validator is None:
@@ -290,7 +346,12 @@ class MinerValidatorConsumer(BaseConsumer[ValidatorToMinerMessage], ValidatorInt
             self.msg_queue.append(msg)
             return
 
-        if isinstance(msg, V0InitialJobRequest) or isinstance(msg, V0JobRequest):
+        if isinstance(msg, V0InitialJobRequest | V0JobRequest):
+            if signature_error := self.job_request_signature_error(msg):
+                await self.decline_job(
+                    msg.job_uuid, JobRejectionReason.INVALID_SIGNATURE, signature_error
+                )
+                return
             # Proactively check volume safety in both requests that may contain a volume
             if msg.volume and not msg.volume.is_safe():
                 error_msg = f"Received JobRequest with unsafe volume: {msg.volume}"
@@ -330,20 +391,14 @@ class MinerValidatorConsumer(BaseConsumer[ValidatorToMinerMessage], ValidatorInt
             validator=self.validator
         ).aexists()
         if validator_blacklisted:
-            logger.info(
-                f"Declining job {msg.job_uuid} from blacklisted validator: {self.validator_key}"
-            )
-            await self.send(
-                V0DeclineJobRequest(
-                    job_uuid=msg.job_uuid,
-                    reason=JobRejectionReason.VALIDATOR_BLACKLISTED,
-                ).model_dump_json()
+            await self.decline_job(
+                msg.job_uuid, JobRejectionReason.VALIDATOR_BLACKLISTED, "validator is blacklisted"
             )
             return
 
-        await self.handle_job_started_receipt(
-            msg.job_started_receipt_payload, msg.job_started_receipt_signature
-        )
+        if receipt_error := await self.accept_job_started_receipt(msg):
+            await self.decline_job(msg.job_uuid, JobRejectionReason.INVALID_RECEIPT, receipt_error)
+            return
 
         # TODO add rate limiting per validator key here
         executor_token = f"{msg.job_uuid}-{uuid.uuid4()}"
@@ -476,30 +531,54 @@ class MinerValidatorConsumer(BaseConsumer[ValidatorToMinerMessage], ValidatorInt
         job.full_job_details = msg.model_dump()
         await job.asave()
 
-    async def handle_job_started_receipt(self, payload: JobStartedReceiptPayload, signature: str):
+    async def accept_job_started_receipt(self, msg: V0InitialJobRequest) -> str | None:
+        """
+        Verifies the job-started receipt carried by the request and records it, unless this is a
+        local miner, which keeps no receipts; returns why the receipt was refused, or None.
+        Each receipt is accepted once and only while it is recent, so that a captured request
+        cannot start its job again.
+        """
+        payload = msg.job_started_receipt_payload
+        signature = msg.job_started_receipt_signature
         logger.info(
             f"Received job started receipt for"
             f" job_uuid={payload.job_uuid} validator_hotkey={payload.validator_hotkey}"
         )
 
-        if settings.IS_LOCAL_MINER:
-            return
-
+        if payload.job_uuid != msg.job_uuid:
+            return f"job started receipt is for job {payload.job_uuid}"
+        if payload.executor_class != msg.executor_class:
+            return f"job started receipt is for executor class {payload.executor_class}"
         if not self.verify_receipt_payload(payload, signature):
-            return
+            return "job started receipt could not be verified"
+        now = timezone.now()
+        if payload.timestamp < now - JOB_STARTED_RECEIPT_MAX_AGE:
+            return "job started receipt is too old"
+        if payload.timestamp > now + dt.timedelta(seconds=AUTH_MESSAGE_MAX_CLOCK_SKEW):
+            return "job started receipt is dated in the future"
+        if settings.IS_LOCAL_MINER:
+            if await AcceptedJob.objects.filter(
+                validator=self.validator, job_uuid=msg.job_uuid
+            ).aexists():
+                return "job was already accepted"
+            return None
 
-        receipt = await JobStartedReceipt.objects.acreate(
-            job_uuid=payload.job_uuid,
-            validator_hotkey=payload.validator_hotkey,
-            miner_hotkey=payload.miner_hotkey,
-            validator_signature=signature,
-            miner_signature=get_miner_signature(payload),
-            timestamp=payload.timestamp,
-            executor_class=payload.executor_class,
-            is_organic=payload.is_organic,
-            ttl=payload.ttl,
-        )
+        try:
+            receipt = await JobStartedReceipt.objects.acreate(
+                job_uuid=payload.job_uuid,
+                validator_hotkey=payload.validator_hotkey,
+                miner_hotkey=payload.miner_hotkey,
+                validator_signature=signature,
+                miner_signature=get_miner_signature(payload),
+                timestamp=payload.timestamp,
+                executor_class=payload.executor_class,
+                is_organic=payload.is_organic,
+                ttl=payload.ttl,
+            )
+        except IntegrityError:
+            return "job started receipt was already used"
         (await current_store()).store([receipt.to_receipt()])
+        return None
 
     async def handle_job_accepted_receipt(self, msg: V0JobAcceptedReceiptRequest):
         logger.info(
@@ -658,4 +737,5 @@ class MinerValidatorConsumer(BaseConsumer[ValidatorToMinerMessage], ValidatorInt
         await self.send(msg.model_dump_json())
 
     async def disconnect(self, close_code):
+        self._cancel_auth_timeout()
         logger.info(f"Validator {self.validator_key} disconnected")

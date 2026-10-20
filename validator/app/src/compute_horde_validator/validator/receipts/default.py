@@ -31,6 +31,7 @@ from prometheus_client import Counter, Gauge, Histogram
 from compute_horde_validator.validator.allowance.default import allowance
 from compute_horde_validator.validator.allowance.utils.supertensor import supertensor
 from compute_horde_validator.validator.dynamic_config import aget_config
+from compute_horde_validator.validator.models import SystemEvent
 from compute_horde_validator.validator.models.allowance.internal import Block
 
 from .base import ReceiptsBase
@@ -251,18 +252,45 @@ class Receipts(ReceiptsBase):
         # TODO(new scoring): this could be inefficient
         finished_qs = finished_qs.annotate(started_at=Subquery(starts.values("timestamp")[:1]))
 
-        return [
-            JobSpendingInfo(
-                job_uuid=str(r.job_uuid),
-                validator_hotkey=r.validator_hotkey,
-                miner_hotkey=r.miner_hotkey,
-                executor_class=executor_class,
-                executor_seconds_cost=r.score(),
-                paid_with_blocks=r.block_numbers,
-                started_at=r.started_at,
-            )
-            for r in finished_qs
-        ]
+        spendings: list[JobSpendingInfo] = []
+        for r in finished_qs:
+            try:
+                spendings.append(
+                    JobSpendingInfo(
+                        job_uuid=str(r.job_uuid),
+                        validator_hotkey=r.validator_hotkey,
+                        miner_hotkey=r.miner_hotkey,
+                        executor_class=executor_class,
+                        executor_seconds_cost=r.score(),
+                        paid_with_blocks=r.block_numbers,
+                        started_at=r.started_at,
+                    )
+                )
+            except ValueError as e:
+                # Rows stored before receipt fields were validated on transfer may hold anything;
+                # one such row must not stop the scoring of all the others.
+                self._report_malformed_receipt(r, e)
+        return spendings
+
+    def _report_malformed_receipt(self, receipt: JobFinishedReceipt, error: Exception) -> None:
+        logger.warning(
+            "Skipping malformed job finished receipt job_uuid=%s miner_hotkey=%s "
+            "validator_hotkey=%s: %s",
+            receipt.job_uuid,
+            receipt.miner_hotkey,
+            receipt.validator_hotkey,
+            error,
+        )
+        SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).create(
+            type=SystemEvent.EventType.RECEIPT_FAILURE,
+            subtype=SystemEvent.EventSubType.RECEIPT_MALFORMED,
+            long_description=str(error),
+            data={
+                "job_uuid": str(receipt.job_uuid),
+                "miner_hotkey": receipt.miner_hotkey,
+                "validator_hotkey": receipt.validator_hotkey,
+            },
+        )
 
     def get_busy_executor_count(
         self, executor_class: ExecutorClass, at_time: datetime.datetime

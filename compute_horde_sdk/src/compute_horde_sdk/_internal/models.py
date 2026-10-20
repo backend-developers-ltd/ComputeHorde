@@ -13,6 +13,7 @@ from pydantic import Field, JsonValue
 
 from compute_horde_core import output_upload as compute_horde_output_upload
 from compute_horde_core import volume as compute_horde_volume
+from compute_horde_core.untrusted_files import InvalidRelativePath, split_relative_path
 
 if sys.version_info >= (3, 11):  # noqa: UP036
     from enum import StrEnum
@@ -324,7 +325,14 @@ class HTTPOutputVolume(pydantic.BaseModel):
     def get_volume_relative_path(self, mount_path: str) -> str:
         if not mount_path.startswith(OUTPUT_MOUNT_PATH_PREFIX):
             raise ValueError(f"Output volume paths must start with {OUTPUT_MOUNT_PATH_PREFIX!r}")
-        return mount_path.removeprefix(OUTPUT_MOUNT_PATH_PREFIX)
+        relative_path = mount_path.removeprefix(OUTPUT_MOUNT_PATH_PREFIX)
+        try:
+            split_relative_path(relative_path)
+        except InvalidRelativePath as e:
+            raise ValueError(
+                f"Output volume path {mount_path!r}: the part after {OUTPUT_MOUNT_PATH_PREFIX!r} {e.reason}"
+            )
+        return relative_path
 
     def to_compute_horde_output_upload(self, mount_path: str) -> compute_horde_output_upload.OutputUpload:
         relative_path = self.get_volume_relative_path(mount_path)

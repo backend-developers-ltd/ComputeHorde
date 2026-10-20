@@ -12,7 +12,7 @@ from compute_horde.miner_client.organic import (
     OrganicJobDetails,
     OrganicMinerClient,
 )
-from compute_horde.protocol_consts import HordeFailureReason
+from compute_horde.protocol_consts import TRUSTED_MINER_FAKE_KEY, HordeFailureReason
 from compute_horde.protocol_messages import (
     V0InitialJobRequest,
     V0JobRequest,
@@ -86,7 +86,7 @@ async def run_streaming_job(options, wait_timeout: int = 300):
                 job_started_receipt_payload=receipt_payload,
                 job_started_receipt_signature=receipt_signature,
                 streaming_details=StreamingDetails(public_key=public_key),
-            ),
+            ).signed(client.my_keypair),
         )
 
         try:
@@ -125,7 +125,7 @@ async def run_streaming_job(options, wait_timeout: int = 300):
                     volume=job_details.volume,
                     output_upload=job_details.output,
                     artifacts_dir=job_details.artifacts_dir,
-                )
+                ).signed(client.my_keypair)
             )
 
             try:
@@ -192,7 +192,12 @@ async def run_streaming_job(options, wait_timeout: int = 300):
 
 class Command(BaseCommand):
     def add_arguments(self, parser):
-        parser.add_argument("--miner_hotkey", type=str, help="Miner hotkey", required=True)
+        parser.add_argument(
+            "--miner_hotkey",
+            type=str,
+            help=f"Miner hotkey; {TRUSTED_MINER_FAKE_KEY} for the validator's trusted miner",
+            required=True,
+        )
         parser.add_argument(
             "--miner_address", type=str, help="Miner IPv4 address", default="127.0.0.1"
         )

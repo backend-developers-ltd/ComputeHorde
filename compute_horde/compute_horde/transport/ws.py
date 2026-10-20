@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import random
+from collections.abc import Callable
 
 import websockets
 
@@ -16,7 +17,7 @@ class WSTransport(AbstractTransport):
     An instance needs to be started before sending or receiving messages and stopped after use. That's where the actual connection is established and terminated. Not started instances will raise a runtime error when trying to send or receive messages.
 
     ```python
-    transport = WSTransport("ws://example.com")
+    transport = WSTransport("miner", "ws://example.com")
     await transport.start()
 
     await transport.send("Hello, world!")
@@ -29,13 +30,19 @@ class WSTransport(AbstractTransport):
     Continuously receiving messages can be done using an async for loop.
 
     ```python
-    transport = WSTransport("ws://example.com")
+    transport = WSTransport("miner", "ws://example.com")
     await transport.start()
 
     async for message in transport:
         print(message)
-    ```
+
     await transport.stop()
+    ```
+
+    `send()` and `receive()` reopen a dropped connection, which the peer sees as a new one.
+    A protocol that starts with a greeting, such as an authentication message, passes
+    `reconnect_greeting`: it is called for every reopened connection and its result is sent
+    before anything else. `start()` does not send it; the caller sends the first greeting.
     """
 
     def __init__(
@@ -46,12 +53,14 @@ class WSTransport(AbstractTransport):
         max_retries: int = 5,
         base_retry_delay: float = 1,
         retry_jitter: float = 1,
+        reconnect_greeting: Callable[[], str] | None = None,
     ):
         super().__init__(name)
         self.url = url
         self.base_retry_delay = base_retry_delay
         self.retry_jitter = retry_jitter
         self.max_retries = max_retries
+        self.reconnect_greeting = reconnect_greeting
         self.connect_lock = asyncio.Lock()
         self._ws: websockets.ClientConnection | None = None
 
@@ -73,7 +82,13 @@ class WSTransport(AbstractTransport):
             if self._ws and self._ws.state is websockets.State.OPEN:
                 await self._ws.close()
 
-    async def connect(self):
+    async def connect(self, *, greeting: Callable[[], str] | None = None) -> None:
+        """
+        Opens the connection unless it is already open; `greeting` produces the message sent
+        on it before any other. An `OSError` or websockets error while producing or sending the
+        greeting counts as a failed attempt; any other error propagates. Either way the new
+        connection is closed.
+        """
         if self._ws and self._ws.state is websockets.State.OPEN:
             return
 
@@ -83,9 +98,7 @@ class WSTransport(AbstractTransport):
 
         while self.max_retries == 0 or attempt < self.max_retries:
             try:
-                self._ws = await websockets.connect(
-                    self.url, max_size=50 * (2**20), ping_timeout=120
-                )  # 50MB - ping timeout 2min in case of blocking job sends
+                self._ws = await self._open_connection(greeting)
                 logger.info(f"Connected to {self.name} after {attempt} attempts")
                 return
             except (websockets.WebSocketException, OSError):
@@ -99,6 +112,27 @@ class WSTransport(AbstractTransport):
             f"Could not connect to {self.name} after {attempt} attempts in {time_took:0.2f} seconds"
         )
 
+    async def _open_connection(
+        self, greeting: Callable[[], str] | None
+    ) -> websockets.ClientConnection:
+        ws = await websockets.connect(
+            self.url, max_size=50 * (2**20), ping_timeout=120
+        )  # 50MB - ping timeout 2min in case of blocking job sends
+        if greeting is not None:
+            # The connection is not self._ws yet, so stop() would not close it.
+            try:
+                await ws.send(greeting())
+            except BaseException:
+                await ws.close()
+                raise
+        return ws
+
+    async def _reconnect(self) -> None:
+        # send() and receive() notice a dropped connection independently; the lock makes the
+        # later one find the connection already reopened instead of opening a second one.
+        async with self.connect_lock:
+            await self.connect(greeting=self.reconnect_greeting)
+
     async def send(self, data: str | bytes) -> None:
         while True:
             try:
@@ -110,7 +144,7 @@ class WSTransport(AbstractTransport):
                 return
             except (websockets.WebSocketException, OSError):
                 logger.info(f"Could not send msg to {self.name}. Reconnecting...")
-                await self.connect()
+                await self._reconnect()
 
     async def receive(self) -> str | bytes:
         while True:
@@ -120,4 +154,4 @@ class WSTransport(AbstractTransport):
                 return msg
             except (websockets.WebSocketException, OSError):
                 logger.info(f"Could not receive msg from {self.name}. Reconnecting...")
-                await self.connect()
+                await self._reconnect()
