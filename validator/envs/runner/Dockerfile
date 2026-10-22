@@ -1,4 +1,4 @@
-FROM docker:26-cli
+FROM docker:29-cli
 WORKDIR /root/validator
 COPY data/docker-compose.yml docker-compose.yml
 COPY entrypoint.sh /entrypoint.sh

@@ -23,7 +23,7 @@ services:
       <<: *logging
 
   db:
-    image: postgres:14.0-alpine
+    image: postgres:14-alpine
     healthcheck:
       test: pg_isready -U ${POSTGRES_USER} || exit 1
     restart: unless-stopped
@@ -170,7 +170,7 @@ services:
       <<: *logging
 
   cadvisor:
-    image: gcr.io/cadvisor/cadvisor:v0.40.0
+    image: ghcr.io/google/cadvisor:v0.60.5
     container_name: cadvisor
     devices:
       - /dev/kmsg:/dev/kmsg
