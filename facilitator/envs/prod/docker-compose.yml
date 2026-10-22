@@ -186,8 +186,8 @@ services:
   
 
   
-  promtail:
-    image: grafana/promtail:2.9.2
+  alloy:
+    image: grafana/alloy:v1.21.1
     restart: unless-stopped
     environment:
       - LOKI_URL=${LOKI_URL}
@@ -197,14 +197,17 @@ services:
       - LOKI_CLIENT=${LOKI_CLIENT}
       - LOKI_CLIENT_SERVER_GROUP=${LOKI_CLIENT_SERVER_GROUP}
     volumes:
-      - ./promtail:/etc/promtail
+      - ./alloy:/etc/alloy
       - /var/run/docker.sock:/var/run/docker.sock:ro
+      - alloy-data:/var/lib/alloy
     command:
-      - -config.file=/etc/promtail/config.yml
-      - -config.expand-env=true
+      - run
+      - --storage.path=/var/lib/alloy/data
+      - /etc/alloy/config.alloy
     logging:
       <<: *logging
-  
+
 
 volumes:
   backend-static:
+  alloy-data:
