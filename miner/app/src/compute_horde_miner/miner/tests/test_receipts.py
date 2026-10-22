@@ -1,4 +1,5 @@
 from datetime import datetime
+from functools import partial
 from unittest.mock import AsyncMock
 from uuid import uuid4
 
@@ -24,7 +25,7 @@ from pytest_mock import MockerFixture
 
 from compute_horde_miner.miner.models import Validator
 from compute_horde_miner.miner.tests.executor_manager import fake_executor
-from compute_horde_miner.miner.tests.validator import fake_validator
+from compute_horde_miner.miner.tests.validator import fake_validator, wait_until
 
 
 @pytest.fixture
@@ -111,7 +112,9 @@ async def test_receipt_is_saved(
                 timeout_seconds=60,
                 job_started_receipt_payload=job_started_receipt_payload,
                 job_started_receipt_signature=job_started_receipt_signature,
-            ).model_dump_json()
+            )
+            .signed(validator_wallet.hotkey)
+            .model_dump_json()
         )
 
         # skip doing the job, and only send receipts
@@ -150,6 +153,7 @@ async def test_receipt_is_saved(
                 ),
             ).model_dump_json()
         )
+        await wait_until(partial(JobFinishedReceipt.objects.filter(job_uuid=job_uuid).aexists))
 
     assert await JobStartedReceipt.objects.filter(
         job_uuid=job_uuid, is_organic=organic_job

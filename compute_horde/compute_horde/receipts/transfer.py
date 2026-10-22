@@ -1,4 +1,5 @@
 import asyncio
+import datetime
 import logging
 from collections import defaultdict
 from collections.abc import Sequence
@@ -11,6 +12,7 @@ import pydantic
 from aiohttp import ClientTimeout
 from asgiref.sync import sync_to_async
 from django.core.exceptions import ImproperlyConfigured
+from django.db import DataError, IntegrityError
 
 from compute_horde.receipts.models import ReceiptModel, receipt_to_django_model
 from compute_horde.receipts.schemas import (
@@ -23,6 +25,29 @@ from compute_horde.receipts.transfer_checkpoints import checkpoint_backend
 logger = logging.getLogger(__name__)
 
 MinerInfo: TypeAlias = tuple[str, str, int]
+
+# Errors a single receipt row can cause while being written. Connection-level database errors are
+# deliberately not here: retrying rows one by one would not help and the transfer must fail loudly.
+_ROW_STORAGE_ERRORS = (DataError, IntegrityError, ValueError, TypeError, OverflowError)
+
+_STORAGE_BATCH_SIZE = 1000
+
+# Receipts age out by their own timestamp, so a future-dated receipt outlives the retention period.
+# The skew tolerates the issuing validator's clock running ahead of the local one.
+MAX_RECEIPT_TIMESTAMP_SKEW = datetime.timedelta(hours=1)
+
+
+class FutureDatedReceipt(Exception):
+    """
+    The receipt's timestamp is more than MAX_RECEIPT_TIMESTAMP_SKEW ahead of the local clock.
+    """
+
+    def __init__(self, receipt: Receipt):
+        super().__init__(
+            f"Receipt {receipt.payload.job_uuid} is dated {receipt.payload.timestamp.isoformat()}, "
+            f"more than {MAX_RECEIPT_TIMESTAMP_SKEW} ahead of the local clock"
+        )
+        self.receipt = receipt
 
 
 class TransferException(Exception):
@@ -38,13 +63,11 @@ class TransferException(Exception):
 
 class LineException(Exception):
     """
-    A line exception means that, while processing a correct response, one of the receipt lines could not be processed.
+    A line exception means that, while processing a correct response, one of the receipt lines
+    could not be processed: it failed validation, signature verification or storage.
     """
 
-    def __init__(
-        self,
-        cause: pydantic.ValidationError | BadMinerReceiptSignature | BadValidatorReceiptSignature,
-    ):
+    def __init__(self, cause: Exception):
         super().__init__(f"Transferred line skipped: {type(cause).__name__}: {cause}")
         self.__cause__ = self.cause = cause
 
@@ -112,6 +135,15 @@ class ReceiptsTransfer:
         transfer_errors: list[TransferException] = []
         line_errors: list[LineException] = []
 
+        async def store_bucket(model_type: type[ReceiptModel]) -> None:
+            nonlocal total_receipts
+            bucket = receipts_by_type[model_type]
+            n_stored, storage_errors = await _store_receipts(model_type, bucket)
+            total_receipts += n_stored
+            line_errors.extend(storage_errors)
+            logger.info(f"Stored {n_stored} {model_type.__name__} receipts")
+            bucket.clear()
+
         # Wait for transfer tasks in parallel, handle a batch of receipts as soon as any is available
         for transfer_task in asyncio.as_completed(transfer_tasks):
             try:
@@ -120,23 +152,16 @@ class ReceiptsTransfer:
                 successful_transfers += 1
                 for receipt in transferred_batch:
                     model = receipt_to_django_model(receipt)
-                    model_type = type(model)
-                    bucket = receipts_by_type[model_type]
-                    bucket.append(model)
-                    if len(bucket) >= 1000:
-                        await model_type.objects.abulk_create(bucket, ignore_conflicts=True)  # type: ignore
-                        total_receipts += len(bucket)
-                        logger.info(f"Stored {len(bucket)} {model_type.__name__} receipts")
-                        bucket.clear()
+                    receipts_by_type[type(model)].append(model)
+                    if len(receipts_by_type[type(model)]) >= _STORAGE_BATCH_SIZE:
+                        await store_bucket(type(model))
             except TransferException as e:
                 transfer_errors.append(e)
                 continue
 
         # Insert the remainder of the receipts
-        for model_type, bucket in receipts_by_type.items():
-            await model_type.objects.abulk_create(bucket, ignore_conflicts=True)  # type: ignore
-            total_receipts += len(bucket)
-            logger.info(f"Stored {len(bucket)} {model_type.__name__} receipts")
+        for model_type in receipts_by_type:
+            await store_bucket(model_type)
 
         return TransferResult(total_receipts, successful_transfers, transfer_errors, line_errors)
 
@@ -219,9 +244,12 @@ class ReceiptsTransfer:
         """
         receipts: list[Receipt] = []
         line_errors: list[LineException] = []
+        latest_accepted_timestamp = datetime.datetime.now(datetime.UTC) + MAX_RECEIPT_TIMESTAMP_SKEW
         for line in BytesIO(received_bytes):
             try:
                 receipt = Receipt.model_validate_json(line)
+                if receipt.payload.timestamp > latest_accepted_timestamp:
+                    raise FutureDatedReceipt(receipt)
                 receipt.verify_miner_signature(throw=True)
                 receipt.verify_validator_signature(throw=True)
                 receipts.append(receipt)
@@ -253,4 +281,52 @@ class ReceiptsTransfer:
                 )
                 line_errors.append(LineException(e))
                 continue
+            except FutureDatedReceipt as e:
+                logger.info(
+                    "Skipping %s dated %s, beyond the accepted clock skew: %s",
+                    e.receipt.payload.receipt_type,
+                    e.receipt.payload.timestamp.isoformat(),
+                    e.receipt.payload.job_uuid,
+                )
+                line_errors.append(LineException(e))
+                continue
         return receipts, line_errors
+
+
+async def _store_receipts(
+    model_type: type[ReceiptModel], receipts: list[ReceiptModel]
+) -> tuple[int, list[LineException]]:
+    """
+    Insert receipts in one batch, skipping the ones already stored.
+
+    Validated receipts fit the receipt tables, so the batch insert is expected to succeed. If the
+    database still rejects it, the rows are retried one by one so that only the offending receipt
+    is lost: receipts of all miners share a batch and one miner must not be able to drop the others.
+    Returns the number of rows handed to the database and the errors of the skipped rows.
+    """
+    try:
+        await model_type.objects.abulk_create(receipts, ignore_conflicts=True)  # type: ignore
+        return len(receipts), []
+    except _ROW_STORAGE_ERRORS as e:
+        logger.warning(
+            "Batch insert of %d %s receipts rejected by the database, retrying one by one: %s",
+            len(receipts),
+            model_type.__name__,
+            e,
+        )
+
+    n_stored = 0
+    line_errors: list[LineException] = []
+    for receipt in receipts:
+        try:
+            await model_type.objects.abulk_create([receipt], ignore_conflicts=True)  # type: ignore
+            n_stored += 1
+        except _ROW_STORAGE_ERRORS as e:
+            logger.info(
+                "Skipping %s receipt %s rejected by the database: %s",
+                model_type.__name__,
+                receipt.job_uuid,
+                e,
+            )
+            line_errors.append(LineException(e))
+    return n_stored, line_errors

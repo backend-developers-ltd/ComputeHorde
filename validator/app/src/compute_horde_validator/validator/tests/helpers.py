@@ -4,7 +4,8 @@ import numbers
 import os
 import shlex
 import subprocess
-from datetime import timedelta
+import uuid
+from datetime import datetime, timedelta
 from pathlib import Path
 from time import monotonic
 from typing import Any
@@ -25,7 +26,9 @@ from compute_horde.protocol_messages import (
     V0VolumesReadyRequest,
     ValidatorToMinerMessage,
 )
+from compute_horde.receipts.models import JobFinishedReceipt, JobStartedReceipt
 from compute_horde.utils import ValidatorInfo
+from compute_horde_core.executor_class import ExecutorClass
 from compute_horde_core.signature import Signature
 from django.conf import settings
 from pydantic import TypeAdapter
@@ -360,6 +363,45 @@ class MockMetagraph:
         self.total_stake = np.array([1001.0 * (i + 1) for i in range(num_neurons)])
         self.uids = np.array(list(range(num_neurons)))
         self.block = MockBlock(block_num)
+
+
+def persist_finished_job(
+    miner_hotkey: str,
+    validator_hotkey: str,
+    started_at: datetime,
+    finished_at: datetime,
+    executor_class: ExecutorClass = ExecutorClass.always_on__gpu_24gb,
+    **finished_fields: Any,
+) -> str:
+    """
+    Stores a job started receipt and the matching job finished receipt, returning the job uuid.
+
+    finished_fields are written to the finished receipt unchecked, so a test can store values
+    the wire format would reject, such as a malformed score_str.
+    """
+    job_uuid = str(uuid.uuid4())
+    JobStartedReceipt.objects.create(
+        job_uuid=job_uuid,
+        miner_hotkey=miner_hotkey,
+        validator_hotkey=validator_hotkey,
+        validator_signature="sig",
+        timestamp=started_at,
+        executor_class=str(executor_class),
+        is_organic=True,
+        ttl=60,
+    )
+    JobFinishedReceipt.objects.create(
+        job_uuid=job_uuid,
+        miner_hotkey=miner_hotkey,
+        validator_hotkey=validator_hotkey,
+        validator_signature="sig",
+        miner_signature="sig",
+        timestamp=finished_at,
+        time_started=started_at,
+        time_took_us=1,
+        **finished_fields,
+    )
+    return job_uuid
 
 
 def check_system_events(

@@ -1,11 +1,13 @@
 import enum
-from typing import Annotated, Literal, TypeAlias
+import json
+from typing import Annotated, Any, Literal, Self, TypeAlias
 
+import bittensor
 from compute_horde_core.executor_class import ExecutorClass
 from compute_horde_core.output_upload import OutputUpload
 from compute_horde_core.streaming import StreamingDetails
 from compute_horde_core.volume import Volume
-from pydantic import AliasChoices, BaseModel, Field, JsonValue
+from pydantic import AliasChoices, BaseModel, Field, JsonValue, PrivateAttr, TypeAdapter
 from typing_extensions import deprecated
 
 from compute_horde.base.docker import DockerRunOptionsPreset
@@ -22,7 +24,7 @@ from compute_horde.receipts.schemas import (
     JobStartedReceiptPayload,
     Receipt,
 )
-from compute_horde.utils import MachineSpecs
+from compute_horde.utils import MachineSpecs, canonical_json, sign_blob, verify_blob_signature
 
 # NOTE:
 # miner.ec = Miner's executor consumer
@@ -78,8 +80,43 @@ class V0MainHotkeyMessage(BaseModel):
     main_hotkey: str | None = None
 
 
+# validator -> miner.vc
+class ValidatorSignedMessage(BaseModel):
+    """
+    Message whose whole content is signed with the validator hotkey, so the miner can tell a
+    request authored by the authenticated validator from one injected into its socket.
+
+    The signature covers the message's JSON object without validator_signature, in canonical
+    form. A message from parse_validator_to_miner_message is verified against the object as it
+    arrived rather than against its own fields, so a field known to only one side keeps the
+    signature valid. Copies keep that object too, so verify a received message before changing
+    it.
+    """
+
+    validator_signature: str | None = None
+    _received_content: dict[str, Any] | None = PrivateAttr(default=None)
+
+    def blob_for_signing(self) -> str:
+        content = self._received_content
+        if content is None:
+            content = json.loads(self.model_dump_json(exclude={"validator_signature"}))
+        return canonical_json(content)
+
+    def signed(self, keypair: bittensor.Keypair) -> Self:
+        return self.model_copy(
+            update={"validator_signature": sign_blob(keypair, self.blob_for_signing())}
+        )
+
+    def is_signed_by(self, validator_hotkey: str) -> bool:
+        if self.validator_signature is None:
+            return False
+        return verify_blob_signature(
+            validator_hotkey, self.blob_for_signing(), self.validator_signature
+        )
+
+
 # validator -> miner.vc -> miner.ec -> executor
-class V0InitialJobRequest(BaseModel):
+class V0InitialJobRequest(ValidatorSignedMessage):
     class ExecutorTimingDetails(BaseModel):
         allowed_leeway: int
         download_time_limit: int
@@ -172,7 +209,7 @@ class V0ExecutionDoneRequest(BaseModel):
 
 
 # validator -> miner.vc -> miner.ec -> executor
-class V0JobRequest(BaseModel):
+class V0JobRequest(ValidatorSignedMessage):
     message_type: Literal["V0JobRequest"] = "V0JobRequest"
     job_uuid: str
     executor_class: ExecutorClass
@@ -263,6 +300,32 @@ ValidatorToMinerMessage = Annotated[
     | V0MainHotkeyMessage,
     Field(discriminator="message_type"),
 ]
+
+_validator_to_miner_message: TypeAdapter[ValidatorToMinerMessage] = TypeAdapter(
+    ValidatorToMinerMessage
+)
+
+
+def parse_validator_to_miner_message(raw: str | bytes) -> ValidatorToMinerMessage:
+    """
+    Parses a frame sent by a validator. A signed message is validated from the same JSON object
+    that its signature is checked against, so with duplicate keys, too, the miner acts only on
+    content the validator signed.
+
+    Raises ValueError, such as json.JSONDecodeError or pydantic.ValidationError, for a malformed
+    frame.
+    """
+    try:
+        content = json.loads(raw)
+        message = _validator_to_miner_message.validate_python(content)
+    except RecursionError as ex:
+        raise ValueError("JSON is nested too deeply") from ex
+    if isinstance(message, ValidatorSignedMessage):
+        message._received_content = {
+            key: value for key, value in content.items() if key != "validator_signature"
+        }
+    return message
+
 
 MinerToExecutorMessage = Annotated[
     GenericError | V0InitialJobRequest | V0JobRequest,

@@ -6,7 +6,7 @@ from typing import Generic, ParamSpec, TypeAlias, TypeVar
 
 from channels.generic.websocket import AsyncWebsocketConsumer
 from compute_horde.protocol_messages import GenericError
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +33,10 @@ TReceived = TypeVar("TReceived", bound=BaseModel)
 class BaseConsumer(AsyncWebsocketConsumer, Generic[TReceived], metaclass=abc.ABCMeta):
     @abc.abstractmethod
     def parse_message(self, raw_msg: str | bytes) -> TReceived:
-        """Parse raw message into a pydantic model"""
+        """
+        Parses a raw message into a pydantic model; raises ValueError, such as
+        pydantic.ValidationError or json.JSONDecodeError, when it is malformed.
+        """
 
     @abc.abstractmethod
     async def handle(self, msg: TReceived) -> None: ...
@@ -43,11 +46,13 @@ class BaseConsumer(AsyncWebsocketConsumer, Generic[TReceived], metaclass=abc.ABC
 
     @log_errors_explicitly
     async def receive(self, text_data=None, bytes_data=None) -> None:
+        if text_data is None:
+            await self.reject_malformed_message("expected a text frame")
+            return
         try:
             msg = self.parse_message(text_data)
-        except ValidationError as ex:
-            logger.error(f"Malformed message: {str(ex)}")
-            await self.send(GenericError(details=f"Malformed message: {str(ex)}").model_dump_json())
+        except ValueError as ex:
+            await self.reject_malformed_message(str(ex))
             return
 
         if isinstance(msg, GenericError):
@@ -58,3 +63,7 @@ class BaseConsumer(AsyncWebsocketConsumer, Generic[TReceived], metaclass=abc.ABC
                 return
 
         await self.handle(msg)
+
+    async def reject_malformed_message(self, reason: str) -> None:
+        logger.error(f"Malformed message: {reason}")
+        await self.send(GenericError(details=f"Malformed message: {reason}").model_dump_json())

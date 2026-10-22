@@ -7,6 +7,7 @@ from compute_horde.fv_protocol.facilitator_requests import (
     OrganicJobRequest,
     V2JobRequest,
 )
+from compute_horde.protocol_consts import TRUSTED_MINER_FAKE_KEY
 from compute_horde_core.executor_class import ExecutorClass
 from django.conf import settings
 from django.db.models import Count
@@ -33,7 +34,6 @@ from compute_horde_validator.validator.routing.types import (
     NotEnoughCollateralException,
 )
 from compute_horde_validator.validator.routing.utils import weighted_shuffle
-from compute_horde_validator.validator.utils import TRUSTED_MINER_FAKE_KEY
 
 logger = logging.getLogger(__name__)
 

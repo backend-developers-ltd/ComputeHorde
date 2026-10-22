@@ -1,5 +1,6 @@
 import datetime
 import uuid
+from typing import Any
 
 import bittensor_wallet
 import pytest
@@ -15,10 +16,11 @@ from compute_horde.utils import sign_blob
 from compute_horde_core.executor_class import ExecutorClass
 from django.utils import timezone
 
-from compute_horde_validator.validator.models import Miner
+from compute_horde_validator.validator.models import Miner, SystemEvent
 from compute_horde_validator.validator.models.allowance.internal import Block
 from compute_horde_validator.validator.receipts import receipts
-from compute_horde_validator.validator.tests.helpers import patch_constance
+from compute_horde_validator.validator.receipts.types import JobSpendingInfo
+from compute_horde_validator.validator.tests.helpers import patch_constance, persist_finished_job
 
 
 @pytest.mark.asyncio
@@ -639,3 +641,68 @@ def test_get_busy_executor_count__two_miners_saturated():
     busy_map = receipts().get_busy_executor_count(executor_class=executor, at_time=now)
     for miner, count in miners_counts.items():
         assert busy_map.get(miner) == count
+
+
+@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
+def test_get_finished_jobs_for_block_range_skips_malformed_receipts(settings):
+    start_block, end_block = 100, 105
+    start_ts = datetime.datetime(2025, 1, 1, tzinfo=datetime.UTC)
+    end_ts = start_ts + datetime.timedelta(minutes=10)
+    Block.objects.create(block_number=start_block, creation_timestamp=start_ts)
+    Block.objects.create(block_number=end_block, creation_timestamp=end_ts)
+    validator_hotkey = settings.BITTENSOR_WALLET().get_hotkey().ss58_address
+    started_at = start_ts - datetime.timedelta(seconds=30)
+    finished_at = start_ts + datetime.timedelta(minutes=5)
+
+    good_job_uuid = persist_finished_job(
+        "honest_miner",
+        validator_hotkey,
+        started_at,
+        finished_at,
+        score_str="3.000000",
+        block_numbers=[100, 101],
+    )
+    malformed_fields: list[dict[str, Any]] = [
+        {"score_str": "abc"},
+        {"score_str": "nan"},
+        {"score_str": "inf"},
+        {"score_str": "-1"},
+        {"score_str": "1e3"},
+        {"score_str": "", "block_numbers": [100]},
+        {"score_str": "1.000000", "block_numbers": [[100]]},
+        {"score_str": "1.000000", "block_numbers": {"100": 1}},
+        {"score_str": "1.000000", "block_numbers": "100"},
+    ]
+    malformed_job_uuids = [
+        persist_finished_job("rogue_miner", validator_hotkey, started_at, finished_at, **fields)
+        for fields in malformed_fields
+    ]
+
+    rows = receipts().get_finished_jobs_for_block_range(
+        start_block, end_block, executor_class=ExecutorClass.always_on__gpu_24gb
+    )
+
+    assert rows == [
+        JobSpendingInfo(
+            job_uuid=good_job_uuid,
+            validator_hotkey=validator_hotkey,
+            miner_hotkey="honest_miner",
+            executor_class=ExecutorClass.always_on__gpu_24gb,
+            executor_seconds_cost=3,
+            paid_with_blocks=[100, 101],
+            started_at=started_at,
+        )
+    ]
+    reported = sorted(
+        (event.type, event.subtype, event.data["job_uuid"], event.data["miner_hotkey"])
+        for event in SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).all()
+    )
+    assert reported == sorted(
+        (
+            SystemEvent.EventType.RECEIPT_FAILURE,
+            SystemEvent.EventSubType.RECEIPT_MALFORMED,
+            job_uuid,
+            "rogue_miner",
+        )
+        for job_uuid in malformed_job_uuids
+    )

@@ -1,13 +1,21 @@
+import asyncio
+import datetime
 import uuid
+from unittest import mock
 
 import bittensor
 import pytest
-from pydantic import BaseModel
+from compute_horde_core.executor_class import ExecutorClass
+from compute_horde_core.streaming import StreamingDetails
+from compute_horde_core.volume import InlineVolume
+from freezegun import freeze_time
+from pydantic import BaseModel, TypeAdapter
 
 from compute_horde.miner_client.organic import (
     MinerRejectedJob,
     MinerReportedHordeFailed,
     MinerReportedJobFailed,
+    OrganicJobDetails,
     OrganicMinerClient,
 )
 from compute_horde.protocol_consts import HordeFailureReason, JobParticipantType
@@ -16,10 +24,15 @@ from compute_horde.protocol_messages import (
     V0DeclineJobRequest,
     V0ExecutorReadyRequest,
     V0HordeFailedRequest,
+    V0InitialJobRequest,
     V0JobFailedRequest,
     V0JobFinishedRequest,
+    ValidatorAuthForMiner,
+    ValidatorToMinerMessage,
 )
+from compute_horde.receipts.schemas import JobFinishedReceiptPayload
 from compute_horde.transport import StubTransport
+from tests.ws_server import ReconnectingWSTestServer
 
 JOB_UUID = "b4793a02-33a2-4a49-b4e2-4a7b903847e7"
 
@@ -176,3 +189,103 @@ async def test_organic_miner_client__skip_different_job__final_future(final_msg,
     await miner_client.handle_message(final_msg)
 
     assert not miner_client.job_finished_future.done()
+
+
+@pytest.mark.asyncio
+async def test_organic_miner_client__reauthenticates_after_reconnect(keypair, unused_tcp_port):
+    # The reconnect handshake takes a second, so the renewed authentication message carries a
+    # later timestamp than the first one.
+    async with ReconnectingWSTestServer(
+        port=unused_tcp_port, drop_first_connection_after=1, handshake_delay=1
+    ) as miner:
+        async with OrganicMinerClient(
+            miner_hotkey="mock",
+            miner_address=miner.host,
+            miner_port=miner.port,
+            job_uuid=JOB_UUID,
+            my_keypair=keypair,
+        ):
+            received = [await asyncio.wait_for(miner.received.get(), 3) for _ in range(2)]
+
+    messages = [
+        (connection, TypeAdapter(ValidatorToMinerMessage).validate_json(raw))
+        for connection, raw in received
+    ]
+    auth = ValidatorAuthForMiner.model_construct(
+        validator_hotkey=keypair.ss58_address,
+        miner_hotkey="mock",
+        timestamp=mock.ANY,
+        signature=mock.ANY,
+    )
+    assert messages == [(1, auth), (2, auth)]
+    (_, first_auth), (_, second_auth) = messages
+    assert second_auth.timestamp > first_auth.timestamp
+    assert keypair.verify(second_auth.blob_for_signing(), second_auth.signature)
+
+
+@pytest.mark.asyncio
+async def test_organic_miner_client__signs_initial_job_request(keypair):
+    miner_client = get_miner_client(keypair)
+    volume = InlineVolume(contents="aW5wdXQ=", relative_path="input")
+    job_details = OrganicJobDetails(
+        job_uuid=JOB_UUID,
+        executor_class=ExecutorClass.always_on__llm__a6000,
+        docker_image="mock",
+        job_timing=OrganicJobDetails.TimingDetails(1, 2, 3, 4, 5),
+        volume=volume,
+        streaming_details=StreamingDetails(public_key="certificate"),
+    )
+    receipt_payload, receipt_signature = miner_client.generate_job_started_receipt_message(
+        ExecutorClass.always_on__llm__a6000, ttl=5
+    )
+
+    await miner_client.send_initial_job_request(job_details, receipt_payload, receipt_signature)
+
+    [sent] = [
+        TypeAdapter(ValidatorToMinerMessage).validate_json(message)
+        for message in miner_client.transport.sent_messages
+    ]
+    assert sent == V0InitialJobRequest(
+        job_uuid=JOB_UUID,
+        executor_class=ExecutorClass.always_on__llm__a6000,
+        docker_image="mock",
+        timeout_seconds=300,
+        volume=volume,
+        job_started_receipt_payload=receipt_payload,
+        job_started_receipt_signature=receipt_signature,
+        streaming_details=StreamingDetails(public_key="certificate"),
+        executor_timing=V0InitialJobRequest.ExecutorTimingDetails(
+            allowed_leeway=1,
+            download_time_limit=2,
+            execution_time_limit=3,
+            upload_time_limit=4,
+            streaming_start_time_limit=5,
+        ),
+        validator_signature=sent.validator_signature,
+    )
+    assert sent.is_signed_by(keypair.ss58_address)
+
+
+@pytest.mark.asyncio
+async def test_organic_miner_client__job_finished_receipt_clamps_negative_duration(keypair):
+    miner_client = get_miner_client(keypair)
+    started_at = datetime.datetime(2025, 3, 4, 12, 0, tzinfo=datetime.UTC)
+
+    with freeze_time(started_at):
+        message = miner_client.generate_job_finished_receipt_message(
+            started_timestamp=started_at.timestamp(),
+            time_took_seconds=-0.5,
+            score=1.5,
+            allowance_blocks=[7, 8],
+        )
+
+    assert message.payload == JobFinishedReceiptPayload(
+        job_uuid=JOB_UUID,
+        miner_hotkey="mock",
+        validator_hotkey=keypair.ss58_address,
+        timestamp=started_at,
+        time_started=started_at,
+        time_took_us=0,
+        block_numbers=[7, 8],
+        score_str="1.500000",
+    )

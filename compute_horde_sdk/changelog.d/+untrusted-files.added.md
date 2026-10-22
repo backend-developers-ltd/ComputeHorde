@@ -1,0 +1,1 @@
+Added `compute_horde_core.untrusted_files` for reading files from, and writing files into, a directory populated by an untrusted process without following symlinks and with a size bound checked before reading.

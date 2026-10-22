@@ -5,9 +5,23 @@ from typing import Annotated, Literal
 from urllib.parse import urlparse
 
 import pydantic
-from pydantic import Field
+from pydantic import AfterValidator, Field
+
+from ..untrusted_files import split_relative_path
 
 SAFE_DOMAIN_REGEX = re.compile(r".*")
+
+
+def _validate_relative_path(value: str) -> str:
+    split_relative_path(value)
+    return value
+
+
+RelativePath = Annotated[str, AfterValidator(_validate_relative_path)]
+"""
+Path of a file inside the output directory, as sent over the wire: rejected unless it is
+already in its canonical relative spelling (see `split_relative_path`), never rewritten.
+"""
 
 
 class OutputUploadType(str, enum.Enum):
@@ -39,7 +53,7 @@ class SingleFilePostUpload(pydantic.BaseModel):
     output_upload_type: Literal[OutputUploadType.single_file_post] = OutputUploadType.single_file_post
     url: str
     form_fields: Mapping[str, str] | None = None
-    relative_path: str
+    relative_path: RelativePath
     signed_headers: Mapping[str, str] | None = None
 
     def is_safe(self) -> bool:
@@ -54,7 +68,7 @@ class SingleFilePutUpload(pydantic.BaseModel):
     url: str
     # TODO: PUT implementation does not support it - find out why and clean up
     # form_fields: Mapping[str, str] | None = None
-    relative_path: str
+    relative_path: RelativePath
     signed_headers: Mapping[str, str] | None = None
 
     def is_safe(self) -> bool:

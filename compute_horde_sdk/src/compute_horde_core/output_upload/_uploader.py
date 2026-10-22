@@ -4,20 +4,29 @@ import abc
 import asyncio
 import contextlib
 import logging
+import os
 import pathlib
+import shutil
 import tempfile
+import time
 import zipfile
-from collections.abc import AsyncIterable, Callable, Iterable, Iterator
+from collections.abc import AsyncIterator, Callable, Coroutine, Iterable, Iterator
 from functools import wraps
-from typing import IO, Any
+from typing import IO, Any, TypeVar
 
 import httpx
 
+from ..untrusted_files import (
+    OpenedFile,
+    UntrustedFileRejected,
+    open_directory,
+    open_regular_file,
+    walk_regular_files,
+)
 from ._models import (
     HttpOutputVolumeResponse,
     MultiUpload,
     OutputUpload,
-    OutputUploadType,
     SingleFilePostUpload,
     SingleFilePutUpload,
     ZipAndHttpPostUpload,
@@ -26,9 +35,14 @@ from ._models import (
 
 logger = logging.getLogger(__name__)
 
+_T = TypeVar("_T")
+
 OUTPUT_UPLOAD_TIMEOUT_SECONDS = 300
 MAX_NUMBER_OF_FILES = 1000
 MAX_CONCURRENT_UPLOADS = 3
+_PUT_CHUNK_SIZE = 64 * 1024
+_ZIP_FIRST_DATE_TIME = (1980, 1, 1, 0, 0, 0)
+_ZIP_LAST_DATE_TIME = (2107, 12, 31, 23, 59, 59)
 
 
 def retry(
@@ -96,16 +110,17 @@ class ZipAndHTTPPostOutputUploader(OutputUploader):
         return ZipAndHttpPostUpload
 
     async def upload(self, directory: pathlib.Path) -> dict[str, HttpOutputVolumeResponse]:
-        with zipped_directory(directory, max_size_bytes=self.max_size_bytes) as (file_size, fp):
-            async with self._semaphore:
-                file_name = "output.zip"
-                response = await upload_post(
-                    fp,
-                    file_name,
-                    self.upload_output.url,
-                    form_fields=self.upload_output.form_fields,
-                )
-                return {file_name: response}
+        with open_directory(directory) as dir_fd:
+            with zipped_directory(dir_fd, max_size_bytes=self.max_size_bytes) as (file_size, fp):
+                async with self._semaphore:
+                    file_name = "output.zip"
+                    response = await upload_post(
+                        fp,
+                        file_name,
+                        self.upload_output.url,
+                        form_fields=self.upload_output.form_fields,
+                    )
+                    return {file_name: response}
 
 
 class ZipAndHTTPPutOutputUploader(OutputUploader):
@@ -120,10 +135,11 @@ class ZipAndHTTPPutOutputUploader(OutputUploader):
         return ZipAndHttpPutUpload
 
     async def upload(self, directory: pathlib.Path) -> dict[str, HttpOutputVolumeResponse]:
-        with zipped_directory(directory, max_size_bytes=self.max_size_bytes) as (file_size, fp):
-            async with self._semaphore:
-                response = await upload_put(fp, file_size, self.upload_output.url)
-                return {"output.zip": response}
+        with open_directory(directory) as dir_fd:
+            with zipped_directory(dir_fd, max_size_bytes=self.max_size_bytes) as (file_size, fp):
+                async with self._semaphore:
+                    response = await upload_put(fp, file_size, self.upload_output.url)
+                    return {"output.zip": response}
 
 
 class MultiUploadOutputUploader(OutputUploader):
@@ -138,95 +154,41 @@ class MultiUploadOutputUploader(OutputUploader):
         return MultiUpload
 
     async def upload(self, directory: pathlib.Path) -> dict[str, HttpOutputVolumeResponse]:
-        single_file_uploads = []
-        tasks = []
-        for upload in self.upload_output.uploads:
-            file_path = directory / upload.relative_path
-            if not file_path.exists():
-                raise OutputUploadFailed(f"File not found: {file_path}")
-
-            if upload.output_upload_type == OutputUploadType.single_file_post:
-                # we run those concurrently but for loop changes slots - we need to bind
-                async def _single_post_upload_task(
-                    file_path: pathlib.Path, upload: SingleFilePostUpload
-                ) -> tuple[str, HttpOutputVolumeResponse]:
-                    with file_path.open("rb") as fp:
-                        response = await upload_post(
-                            fp,
-                            file_path.name,
-                            upload.url,
-                            form_fields=upload.form_fields,
-                            headers=upload.signed_headers,
-                        )
-                        return upload.relative_path, response
-
-                async with self._semaphore:
-                    tasks.append(_single_post_upload_task(file_path, upload))
-                single_file_uploads.append(upload.relative_path)
-            elif upload.output_upload_type == OutputUploadType.single_file_put:
-                # we run those concurrently but for loop changes slots - we need to bind
-                async def _single_put_upload_task(
-                    file_path: pathlib.Path, upload: SingleFilePutUpload
-                ) -> tuple[str, HttpOutputVolumeResponse]:
-                    with file_path.open("rb") as fp:
-                        response = await upload_put(
-                            fp, file_path.stat().st_size, upload.url, headers=upload.signed_headers
-                        )
-                        return upload.relative_path, response
-
-                async with self._semaphore:
-                    tasks.append(_single_put_upload_task(file_path, upload))
-                single_file_uploads.append(upload.relative_path)
-            else:
-                raise OutputUploadFailed(f"Unsupported upload type: {upload.output_upload_type}")
-
-        system_output_upload = self.upload_output.system_output
-        if system_output_upload:
-            if isinstance(system_output_upload, ZipAndHttpPostUpload):
-                # we don't need to bind any vars because we don't run it in a loop
-                async def _output_post_upload_task(
-                    upload: ZipAndHttpPostUpload,
-                ) -> tuple[str, HttpOutputVolumeResponse]:
-                    with zipped_directory(
-                        directory, exclude=single_file_uploads, max_size_bytes=self.max_size_bytes
-                    ) as (
-                        file_size,
-                        fp,
-                    ):
-                        response = await upload_post(
-                            fp,
-                            "output.zip",
-                            upload.url,
-                            form_fields=upload.form_fields,
-                        )
-                        return "system_output", response
-
-                async with self._semaphore:
-                    tasks.append(_output_post_upload_task(system_output_upload))
-            elif isinstance(system_output_upload, ZipAndHttpPutUpload):
-                # we don't need to bind any vars because we don't run it in a loop
-                async def _output_put_upload_task(upload: ZipAndHttpPutUpload) -> tuple[str, HttpOutputVolumeResponse]:
-                    with zipped_directory(
-                        directory, exclude=single_file_uploads, max_size_bytes=self.max_size_bytes
-                    ) as (
-                        file_size,
-                        fp,
-                    ):
-                        response = await upload_put(
-                            fp,
-                            file_size,
-                            upload.url,
-                        )
-                        return "system_output", response
-
-                async with self._semaphore:
-                    tasks.append(_output_put_upload_task(system_output_upload))
-            else:
-                raise OutputUploadFailed(
-                    f"Unsupported system output upload type: {system_output_upload.output_upload_type}"
+        # Every file is opened and the system output is zipped before the first request, so a bad
+        # path fails the upload before anything is sent. When one request fails the others are
+        # cancelled, but uploads that already finished stay delivered.
+        with contextlib.ExitStack() as stack:
+            dir_fd = stack.enter_context(open_directory(directory))
+            files = [
+                stack.enter_context(open_output_file(dir_fd, upload.relative_path, self.max_size_bytes))
+                for upload in self.upload_output.uploads
+            ]
+            system_output_upload = self.upload_output.system_output
+            if system_output_upload:
+                exclude = [upload.relative_path for upload in self.upload_output.uploads]
+                zip_size, zip_fp = stack.enter_context(
+                    zipped_directory(dir_fd, exclude=exclude, max_size_bytes=self.max_size_bytes)
                 )
-        responses = await asyncio.gather(*tasks)
-        return {path: result for path, result in responses}
+
+            tasks = []
+            for file, upload in zip(files, self.upload_output.uploads):
+                async with self._semaphore:
+                    tasks.append(upload_single_file(file, upload))
+            if system_output_upload:
+                async with self._semaphore:
+                    tasks.append(self._upload_system_output(system_output_upload, zip_fp, zip_size))
+
+            responses = await _gather_or_cancel(tasks)
+        return dict(responses)
+
+    async def _upload_system_output(
+        self, upload: ZipAndHttpPostUpload | ZipAndHttpPutUpload, fp: IO[bytes], file_size: int
+    ) -> tuple[str, HttpOutputVolumeResponse]:
+        if isinstance(upload, ZipAndHttpPostUpload):
+            response = await upload_post(fp, "output.zip", upload.url, form_fields=upload.form_fields)
+        else:
+            response = await upload_put(fp, file_size, upload.url)
+        return "system_output", response
 
 
 class SingleFilePutOutputUploader(OutputUploader):
@@ -239,14 +201,7 @@ class SingleFilePutOutputUploader(OutputUploader):
         return SingleFilePutUpload
 
     async def upload(self, directory: pathlib.Path) -> dict[str, HttpOutputVolumeResponse]:
-        file_path = directory / self.upload_output.relative_path
-        if not file_path.exists():
-            raise OutputUploadFailed(f"File not found: {file_path}")
-        with file_path.open("rb") as fp:
-            response = await upload_put(
-                fp, file_path.stat().st_size, self.upload_output.url, headers=self.upload_output.signed_headers
-            )
-            return {self.upload_output.relative_path: response}
+        return await upload_single_file_from_directory(directory, self.upload_output, self.max_size_bytes)
 
 
 class SingleFilePostOutputUploader(OutputUploader):
@@ -259,28 +214,81 @@ class SingleFilePostOutputUploader(OutputUploader):
         return SingleFilePostUpload
 
     async def upload(self, directory: pathlib.Path) -> dict[str, HttpOutputVolumeResponse]:
-        file_path = directory / self.upload_output.relative_path
-        if not file_path.exists():
-            raise OutputUploadFailed(f"File not found: {file_path}")
-        with file_path.open("rb") as fp:
+        return await upload_single_file_from_directory(directory, self.upload_output, self.max_size_bytes)
+
+
+@contextlib.contextmanager
+def open_output_file(dir_fd: int, relative_path: str, max_size_bytes: int) -> Iterator[OpenedFile]:
+    """
+    Open the regular file `relative_path` beneath the output directory `dir_fd` for uploading.
+
+    Raises OutputUploadFailed when the file is missing, is not a regular file reachable
+    without following symlinks, cannot be opened, or is larger than `max_size_bytes`.
+    """
+    with contextlib.ExitStack() as stack:
+        try:
+            file = stack.enter_context(open_regular_file(dir_fd, relative_path))
+        except FileNotFoundError:
+            raise OutputUploadFailed(f"File not found: {relative_path}")
+        except UntrustedFileRejected as e:
+            raise OutputUploadFailed(f"Output file {relative_path!r} cannot be uploaded: {e.reason}")
+        except OSError as e:
+            raise OutputUploadFailed(f"Output file {relative_path!r} cannot be uploaded: {e.strerror}")
+        if file.stat.st_size > max_size_bytes:
+            raise OutputUploadFailed(
+                f"Output file {relative_path!r} is {file.stat.st_size:,} bytes, "
+                f"more than the allowed {max_size_bytes:,} bytes"
+            )
+        yield file
+
+
+async def upload_single_file_from_directory(
+    directory: pathlib.Path, upload: SingleFilePostUpload | SingleFilePutUpload, max_size_bytes: int
+) -> dict[str, HttpOutputVolumeResponse]:
+    with open_directory(directory) as dir_fd:
+        with open_output_file(dir_fd, upload.relative_path, max_size_bytes) as file:
+            relative_path, response = await upload_single_file(file, upload)
+    return {relative_path: response}
+
+
+async def upload_single_file(
+    file: OpenedFile, upload: SingleFilePostUpload | SingleFilePutUpload
+) -> tuple[str, HttpOutputVolumeResponse]:
+    with os.fdopen(file.fd, "rb", closefd=False) as fp:
+        if isinstance(upload, SingleFilePostUpload):
             response = await upload_post(
                 fp,
-                file_path.name,
-                self.upload_output.url,
-                form_fields=self.upload_output.form_fields,
-                headers=self.upload_output.signed_headers,
+                pathlib.PurePosixPath(upload.relative_path).name,
+                upload.url,
+                form_fields=upload.form_fields,
+                headers=upload.signed_headers,
             )
-            return {self.upload_output.relative_path: response}
+        else:
+            response = await upload_put(fp, file.stat.st_size, upload.url, headers=upload.signed_headers)
+    return upload.relative_path, response
 
 
-async def make_iterator_async(it: Iterable[Any]) -> AsyncIterable[Any]:
+async def _gather_or_cancel(coros: Iterable[Coroutine[Any, Any, _T]]) -> list[_T]:
     """
-    Make an iterator async.
+    Await `coros` concurrently and return their results in order, like `asyncio.gather`.
 
-    This is stupid.
+    When one fails, or the caller is cancelled, the others are cancelled and then awaited.
+    If the caller is cancelled during that wait, this stops waiting and raises
+    `CancelledError`, and some of the others may still be unwinding.
     """
-    for x in it:
-        yield x
+    tasks = [asyncio.create_task(coro) for coro in coros]
+    try:
+        return await asyncio.gather(*tasks)
+    finally:
+        for task in tasks:
+            task.cancel()
+        if tasks:
+            await asyncio.wait(tasks)
+
+
+async def _read_in_chunks(fp: IO[bytes]) -> AsyncIterator[bytes]:
+    while chunk := fp.read(_PUT_CHUNK_SIZE):
+        yield chunk
 
 
 @retry(max_retries=3, exceptions=OutputUploadFailed)
@@ -335,6 +343,9 @@ async def read_stream_with_cap(response: httpx.Response, max_allowed_size: int =
     """
     Reads the response in a streaming fashion, enforcing a maximum allowed response size.
 
+    Reading stops at the first chunk that takes the total over the limit, so at most
+    `max_allowed_size` bytes are ever kept in memory.
+
     Args:
         response: The httpx response object.
         max_allowed_size: Maximum allowed size in bytes for the response body, defaults to 10MB.
@@ -355,7 +366,7 @@ async def read_stream_with_cap(response: httpx.Response, max_allowed_size: int =
     total_bytes = 0
     chunks: list[bytes] = []
     async for chunk in response.aiter_bytes():
-        total_bytes += len(chunks)
+        total_bytes += len(chunk)
         if total_bytes > max_allowed_size:
             raise OutputUploadFailed("Response size exceeds allowed limit")
         chunks.append(chunk)
@@ -391,7 +402,7 @@ async def upload_put(
             async with client.stream(
                 method="PUT",
                 url=url,
-                content=make_iterator_async(fp),
+                content=_read_in_chunks(fp),
                 headers=headers,
                 timeout=OUTPUT_UPLOAD_TIMEOUT_SECONDS,
             ) as response:
@@ -407,30 +418,28 @@ async def upload_put(
 
 @contextlib.contextmanager
 def zipped_directory(
-    directory: pathlib.Path, exclude: list[str] | None = None, max_size_bytes: int = 2147483648
+    dir_fd: int, exclude: list[str] | None = None, max_size_bytes: int = 2147483648
 ) -> Iterator[tuple[int, IO[bytes]]]:
     """
-    Context manager that creates a temporary zip file with the files from given directory.
+    Context manager that creates a temporary zip file with the regular files from the given directory.
     The temporary file is cleared after the context manager exits.
 
-    :param directory: The directory to zip.
+    Symlinks and other non-regular entries are left out, so the archive never contains
+    anything from outside the directory. Empty directories are left out as well. Any
+    failure to build the archive, such as a file name that is not valid UTF-8, raises
+    OutputUploadFailed.
+
+    :param dir_fd: Descriptor of the directory to zip, from `open_directory`.
     :param exclude: A list of relative paths to exclude from the zip file.
     :param max_size_bytes: Maximum allowed size of the zip file in bytes. Defaults to 2147483648.
 
     :return: tuple of size and the file object of the zip file
     """
-    files = list(directory.glob("**/*"))
-    exclude_set = set(exclude) if exclude else set()
-
-    filtered_files = [file for file in files if str(file.relative_to(directory)) not in exclude_set]
-
-    if len(filtered_files) > MAX_NUMBER_OF_FILES:
-        raise OutputUploadFailed("Attempting to upload too many files")
-
     with tempfile.TemporaryFile() as fp:
-        with zipfile.ZipFile(fp, mode="w") as zipf:
-            for file in filtered_files:
-                zipf.write(filename=file, arcname=file.relative_to(directory))
+        try:
+            _write_zip(fp, dir_fd, exclude=set(exclude or ()))
+        except (UntrustedFileRejected, OSError, UnicodeEncodeError) as e:
+            raise OutputUploadFailed(f"Output directory cannot be zipped: {e}") from e
 
         file_size = fp.tell()
         fp.seek(0)
@@ -439,3 +448,33 @@ def zipped_directory(
             raise OutputUploadFailed("Attempting to upload too large file")
 
         yield file_size, fp
+
+
+def _write_zip(fp: IO[bytes], dir_fd: int, exclude: set[str]) -> None:
+    relative_paths = [path for path in walk_regular_files(dir_fd) if path not in exclude]
+
+    if len(relative_paths) > MAX_NUMBER_OF_FILES:
+        raise OutputUploadFailed("Attempting to upload too many files")
+
+    with zipfile.ZipFile(fp, mode="w") as zipf:
+        for relative_path in relative_paths:
+            with open_regular_file(dir_fd, relative_path) as file:
+                _add_to_zip(zipf, file)
+
+
+def _add_to_zip(zipf: zipfile.ZipFile, file: OpenedFile) -> None:
+    # Same metadata as ZipFile.write, taken from the open descriptor instead of the path.
+    info = zipfile.ZipInfo(file.path, date_time=_zip_date_time(file.stat.st_mtime))
+    info.external_attr = (file.stat.st_mode & 0xFFFF) << 16
+    info.file_size = file.stat.st_size
+    with os.fdopen(file.fd, "rb", closefd=False) as source, zipf.open(info, "w") as target:
+        shutil.copyfileobj(source, target)
+
+
+def _zip_date_time(mtime: float) -> tuple[int, int, int, int, int, int]:
+    # Zip dates span 1980 to 2107; clamped as ZipInfo.from_file does with strict_timestamps=False.
+    try:
+        date_time = time.localtime(mtime)[:6]
+    except (OverflowError, OSError, ValueError):
+        return _ZIP_FIRST_DATE_TIME
+    return min(max(date_time, _ZIP_FIRST_DATE_TIME), _ZIP_LAST_DATE_TIME)

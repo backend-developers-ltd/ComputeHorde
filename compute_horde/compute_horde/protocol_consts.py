@@ -6,6 +6,10 @@ if sys.version_info >= (3, 11):  # noqa: UP036
 else:
     from backports.strenum import StrEnum  #  noqa: UP035
 
+# Miner hotkey that a validator puts in the authentication frames and receipts it sends to its
+# trusted miner, which it reaches by address rather than by a hotkey registered on the subnet.
+TRUSTED_MINER_FAKE_KEY = "0" * 48
+
 
 class JobParticipantType(StrEnum):
     UNKNOWN = "unknown"
@@ -151,6 +155,7 @@ class JobRejectionReason(StrEnum):
     UNKNOWN = "unknown"
     BUSY = "busy"
     INVALID_SIGNATURE = "invalid_signature"
+    INVALID_RECEIPT = "invalid_receipt"
     NO_MINER_FOR_JOB = "no_miner_for_job"
     VALIDATOR_BLACKLISTED = "validator_blacklisted"
 

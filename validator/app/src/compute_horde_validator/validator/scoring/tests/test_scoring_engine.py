@@ -118,7 +118,7 @@ class TestMainHotkeyScoringEngine(TestCase):
     def _get_mock_wstransport_constructor(self):
         """Get a mock WSTransport constructor that returns simulation transports."""
 
-        def mock_wstransport_constructor(name, url, max_retries=2):
+        def mock_wstransport_constructor(name, url, **kwargs):
             if ":8081" in url:
                 return self.transport1
             elif ":8082" in url:

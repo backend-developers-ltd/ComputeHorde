@@ -56,6 +56,7 @@ from compute_horde.receipts.schemas import (
     JobAcceptedReceiptPayload,
     JobFinishedReceiptPayload,
     JobStartedReceiptPayload,
+    clamp_ttl,
 )
 from compute_horde.transport import (
     AbstractTransport,
@@ -107,11 +108,11 @@ class OrganicMinerClient(AbstractMinerClient[MinerToValidatorMessage, ValidatorT
         client = OrganicMinerClient(...)
         async with client:
             try:
-                await client.send_model(V0InitialJobRequest(...))
+                await client.send_model(V0InitialJobRequest(...).signed(client.my_keypair))
                 msg = await client.job_accepted_future
                 # handle msg
 
-                await client.send_model(V0JobRequest(...))
+                await client.send_model(V0JobRequest(...).signed(client.my_keypair))
                 msg = client.job_finished_future
                 # handle msg
             except MinerRejectedJob:
@@ -160,7 +161,9 @@ class OrganicMinerClient(AbstractMinerClient[MinerToValidatorMessage, ValidatorT
         self.miner_machine_specs: MachineSpecs | None = None
 
         name = f"{miner_hotkey}({miner_address}:{miner_port})"
-        transport = transport or WSTransport(name, self.miner_url())
+        transport = transport or WSTransport(
+            name, self.miner_url(), reconnect_greeting=self._serialized_authentication_message
+        )
         super().__init__(name, transport)
 
     @cached_property
@@ -344,6 +347,9 @@ class OrganicMinerClient(AbstractMinerClient[MinerToValidatorMessage, ValidatorT
         msg.signature = sign_blob(self.my_keypair, msg.blob_for_signing())
         return msg
 
+    def _serialized_authentication_message(self) -> str:
+        return self.generate_authentication_message().model_dump_json()
+
     def generate_job_started_receipt_message(
         self,
         executor_class: ExecutorClass,
@@ -373,7 +379,7 @@ class OrganicMinerClient(AbstractMinerClient[MinerToValidatorMessage, ValidatorT
             validator_hotkey=self.my_hotkey,
             timestamp=datetime.datetime.now(datetime.UTC),
             time_accepted=time_accepted,
-            ttl=ttl,
+            ttl=clamp_ttl(ttl),
         )
         return V0JobAcceptedReceiptRequest(
             payload=receipt_payload,
@@ -415,7 +421,8 @@ class OrganicMinerClient(AbstractMinerClient[MinerToValidatorMessage, ValidatorT
             validator_hotkey=self.my_hotkey,
             timestamp=datetime.datetime.now(datetime.UTC),
             time_started=time_started,
-            time_took_us=int(time_took_seconds * 1_000_000),
+            # Wall-clock durations go negative after a backwards clock step; the payload rejects that.
+            time_took_us=max(0, int(time_took_seconds * 1_000_000)),
             block_numbers=allowance_blocks,
             score_str=f"{score:.6f}",
         )
@@ -471,7 +478,7 @@ class OrganicMinerClient(AbstractMinerClient[MinerToValidatorMessage, ValidatorT
                 if job_details.job_timing is not None
                 else None,
                 streaming_details=job_details.streaming_details,
-            ),
+            ).signed(self.my_keypair),
         )
 
     async def send_model(
@@ -484,7 +491,8 @@ class OrganicMinerClient(AbstractMinerClient[MinerToValidatorMessage, ValidatorT
 
     async def connect(self) -> None:
         await super().connect()
-        await self.transport.send(self.generate_authentication_message().model_dump_json())
+        # The default WSTransport authenticates every reopened connection via reconnect_greeting.
+        await self.transport.send(self._serialized_authentication_message())
 
 
 @dataclass
@@ -619,7 +627,7 @@ async def execute_organic_job_on_miner(
                     volume=None,  # Was sent in the initial request
                     output_upload=job_details.output,
                     artifacts_dir=job_details.artifacts_dir,
-                )
+                ).signed(client.my_keypair)
             )
 
             ## STAGE: Volume download

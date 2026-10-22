@@ -124,6 +124,21 @@ class AcceptedJob(models.Model):
         ]
 
 
+class ConsumedValidatorAuth(models.Model):
+    """
+    Signature of a validator authentication frame the miner has accepted, as 128 lowercase hex
+    digits. The same frame presented again is a replay; keying on the signature keeps separate,
+    legitimately signed frames apart even when they share a timestamp.
+    """
+
+    signature = models.CharField(max_length=128, unique=True)
+    validator_hotkey = models.CharField(max_length=256)
+    timestamp = models.DateTimeField(db_index=True)
+
+    def __str__(self):
+        return f"validator hotkey: {self.validator_hotkey} - {self.timestamp}"
+
+
 class ClusterMiner(models.Model):
     hotkey = models.CharField(max_length=48, primary_key=True)
     block = models.BigIntegerField(null=True)

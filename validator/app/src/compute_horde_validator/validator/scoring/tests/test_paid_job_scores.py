@@ -11,7 +11,7 @@ from compute_horde_validator.validator.receipts.types import JobSpendingInfo
 from compute_horde_validator.validator.scoring.calculations import (
     calculate_allowance_paid_job_scores,
 )
-from compute_horde_validator.validator.tests.helpers import patch_constance
+from compute_horde_validator.validator.tests.helpers import patch_constance, persist_finished_job
 
 pytestmark = [
     pytest.mark.django_db,
@@ -245,3 +245,38 @@ def test_paid_job_scores(job_spendings, expected_scores):
             assert scores == {}
         else:
             assert scores == {EXECUTOR_CLASS: {MINER: expected_scores}}
+
+
+@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
+def test_paid_job_scores__malformed_persisted_receipts_do_not_break_scoring():
+    """
+    Receipts stored before wire-format validation may carry anything; scoring must skip them
+    and still score the well-formed ones.
+    """
+    started_at = _block_time(50)
+    persist_finished_job(
+        MINER,
+        VALIDATOR,
+        started_at,
+        _block_time(55),
+        score_str="3.000000",
+        block_numbers=[40, 41, 42],
+    )
+    persist_finished_job(
+        "rogue_miner", VALIDATOR, started_at, _block_time(56), score_str="nan", block_numbers=[43]
+    )
+    persist_finished_job(
+        "rogue_miner", VALIDATOR, started_at, _block_time(57), score_str="abc", block_numbers=[44]
+    )
+    persist_finished_job(
+        "rogue_miner",
+        VALIDATOR,
+        started_at,
+        _block_time(58),
+        score_str="1.000000",
+        block_numbers=[[45]],
+    )
+
+    assert calculate_allowance_paid_job_scores(CYCLE_START, CYCLE_END) == {
+        EXECUTOR_CLASS: {MINER: 3}
+    }

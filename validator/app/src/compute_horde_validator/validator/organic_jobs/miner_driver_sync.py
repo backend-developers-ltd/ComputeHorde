@@ -27,6 +27,7 @@ from compute_horde.fv_protocol.validator_requests import (
 )
 from compute_horde.job_errors import HordeError
 from compute_horde.protocol_consts import (
+    TRUSTED_MINER_FAKE_KEY,
     HordeFailureReason,
     JobFailureReason,
     JobParticipantType,
@@ -60,6 +61,7 @@ from compute_horde.receipts.schemas import (
     JobAcceptedReceiptPayload,
     JobFinishedReceiptPayload,
     JobStartedReceiptPayload,
+    clamp_ttl,
 )
 from compute_horde.utils import Timer, sign_blob
 from django.conf import settings
@@ -77,7 +79,6 @@ from compute_horde_validator.validator.models import (
 )
 from compute_horde_validator.validator.routing.default import routing
 from compute_horde_validator.validator.routing.types import JobRoute, MinerIncidentType
-from compute_horde_validator.validator.utils import TRUSTED_MINER_FAKE_KEY
 
 logger = logging.getLogger(__name__)
 
@@ -637,6 +638,21 @@ class SyncOrganicJobDriver:
             self._undo_allowance_if_failed()
             self.miner_client.close()
 
+    def _job_finished_receipt_payload(
+        self, score_str: str, block_numbers: list[int]
+    ) -> JobFinishedReceiptPayload:
+        return JobFinishedReceiptPayload(
+            job_uuid=str(self.job.job_uuid),
+            miner_hotkey=self.miner_hotkey,
+            validator_hotkey=self.my_keypair.ss58_address,
+            timestamp=datetime.datetime.now(datetime.UTC),
+            time_started=datetime.datetime.fromtimestamp(self._started_at, datetime.UTC),
+            # Wall-clock durations go negative after a backwards clock step; the payload rejects that.
+            time_took_us=max(0, int((time.time() - self._started_at) * 1_000_000)),
+            block_numbers=block_numbers,
+            score_str=score_str,
+        )
+
     def _send_job_finished_receipt_if_failed(self) -> None:
         if self._state == DriverState.COMPLETE:
             return
@@ -645,16 +661,8 @@ class SyncOrganicJobDriver:
             return
 
         try:
-            started_timestamp = datetime.datetime.fromtimestamp(self._started_at, datetime.UTC)
-            receipt_payload = JobFinishedReceiptPayload(
-                job_uuid=str(self.job.job_uuid),
-                miner_hotkey=self.miner_hotkey,
-                validator_hotkey=self.my_keypair.ss58_address,
-                timestamp=datetime.datetime.now(datetime.UTC),
-                time_started=started_timestamp,
-                time_took_us=int((time.time() - self._started_at) * 1_000_000),
-                block_numbers=[],
-                score_str="0.000000",
+            receipt_payload = self._job_finished_receipt_payload(
+                score_str="0.000000", block_numbers=[]
             )
             receipt_signature = sign_blob(self.my_keypair, receipt_payload.blob_for_signing())
             self.miner_client.send(
@@ -776,7 +784,7 @@ class SyncOrganicJobDriver:
             job_started_receipt_signature=receipt_signature,
             streaming_details=self.request.streaming_details,
             executor_timing=executor_timing,
-        )
+        ).signed(self.my_keypair)
 
         try:
             self.miner_client.send(msg)
@@ -840,7 +848,7 @@ class SyncOrganicJobDriver:
             validator_hotkey=self.my_keypair.ss58_address,
             timestamp=datetime.datetime.now(datetime.UTC),
             time_accepted=datetime.datetime.now(datetime.UTC),
-            ttl=job_accepted_receipt_ttl,
+            ttl=clamp_ttl(job_accepted_receipt_ttl),
         )
         receipt_signature = sign_blob(self.my_keypair, receipt_payload.blob_for_signing())
         receipt_msg = V0JobAcceptedReceiptRequest(
@@ -910,7 +918,7 @@ class SyncOrganicJobDriver:
             volume=None,  # already sent in V0InitialJobRequest
             output_upload=self.request.output_upload,
             artifacts_dir=self.request.artifacts_dir,
-        )
+        ).signed(self.my_keypair)
 
         try:
             self.miner_client.send(msg)
@@ -1045,16 +1053,9 @@ class SyncOrganicJobDriver:
         )
 
         try:
-            started_timestamp = datetime.datetime.fromtimestamp(self._started_at, datetime.UTC)
-            receipt_payload = JobFinishedReceiptPayload(
-                job_uuid=str(self.job.job_uuid),
-                miner_hotkey=self.miner_hotkey,
-                validator_hotkey=self.my_keypair.ss58_address,
-                timestamp=datetime.datetime.now(datetime.UTC),
-                time_started=started_timestamp,
-                time_took_us=int((time.time() - self._started_at) * 1_000_000),
-                block_numbers=self.job.allowance_blocks or [],
+            receipt_payload = self._job_finished_receipt_payload(
                 score_str=f"{float(self.job.allowance_job_value or 0):.6f}",
+                block_numbers=self.job.allowance_blocks or [],
             )
             receipt_signature = sign_blob(self.my_keypair, receipt_payload.blob_for_signing())
             self.miner_client.send(

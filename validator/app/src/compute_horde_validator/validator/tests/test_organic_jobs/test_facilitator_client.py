@@ -18,6 +18,7 @@ from compute_horde.fv_protocol.validator_requests import (
     V0AuthenticationRequest,
     V0MachineSpecsUpdate,
 )
+from compute_horde.protocol_consts import TRUSTED_MINER_FAKE_KEY
 from django.utils import timezone
 
 from compute_horde_validator.validator.allowance.default import allowance
@@ -34,7 +35,7 @@ from compute_horde_validator.validator.models import (
 from compute_horde_validator.validator.organic_jobs.facilitator_client import (
     FacilitatorClient,
 )
-from compute_horde_validator.validator.utils import MACHINE_SPEC_CHANNEL, TRUSTED_MINER_FAKE_KEY
+from compute_horde_validator.validator.utils import MACHINE_SPEC_CHANNEL
 
 from ..helpers import (
     MockFaillingMinerClient,

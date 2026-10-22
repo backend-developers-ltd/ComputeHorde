@@ -66,7 +66,7 @@ rows: list[JobSpendingInfo] = receipts().get_finished_jobs_for_block_range(
 - validator_hotkey: str
 - miner_hotkey: str
 - executor_class: ExecutorClass
-- executor_seconds_cost: int
+- executor_seconds_cost: float
 - paid_with_blocks: list[int]
 - started_at: datetime
 """

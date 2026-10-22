@@ -1,6 +1,9 @@
+import datetime
+
 import pytest
 from compute_horde_core.executor_class import ExecutorClass
 from compute_horde_core.streaming import StreamingDetails
+from freezegun import freeze_time
 from pydantic import TypeAdapter
 
 from compute_horde.executor_class import EXECUTOR_CLASS, ExecutorClassSpec
@@ -30,6 +33,7 @@ from compute_horde.protocol_messages import (
     ValidatorAuthForMiner,
     ValidatorToMinerMessage,
 )
+from compute_horde.receipts.schemas import MAX_TTL_SECONDS, JobAcceptedReceiptPayload
 from compute_horde.transport import StubTransport
 from compute_horde.transport.base import TransportConnectionError
 
@@ -55,24 +59,26 @@ class FailingTransport(StubTransport):
         raise self.exception_to_raise
 
 
+@pytest.fixture
+def successful_job_flow() -> list[str]:
+    return [
+        V0AcceptJobRequest(job_uuid=JOB_UUID).model_dump_json(),
+        V0ExecutorReadyRequest(job_uuid=JOB_UUID).model_dump_json(),
+        V0VolumesReadyRequest(job_uuid=JOB_UUID).model_dump_json(),
+        V0ExecutionDoneRequest(job_uuid=JOB_UUID).model_dump_json(),
+        V0JobFinishedRequest(
+            job_uuid=JOB_UUID,
+            docker_process_stdout="stdout",
+            docker_process_stderr="stderr",
+            artifacts={},
+        ).model_dump_json(),
+    ]
+
+
 @pytest.mark.asyncio
 @pytest.mark.django_db(transaction=True)
-async def test_run_organic_job__success(keypair):
-    mock_transport = MinerStubTransport(
-        "mock",
-        [
-            V0AcceptJobRequest(job_uuid=JOB_UUID).model_dump_json(),
-            V0ExecutorReadyRequest(job_uuid=JOB_UUID).model_dump_json(),
-            V0VolumesReadyRequest(job_uuid=JOB_UUID).model_dump_json(),
-            V0ExecutionDoneRequest(job_uuid=JOB_UUID).model_dump_json(),
-            V0JobFinishedRequest(
-                job_uuid=JOB_UUID,
-                docker_process_stdout="stdout",
-                docker_process_stderr="stderr",
-                artifacts={},
-            ).model_dump_json(),
-        ],
-    )
+async def test_run_organic_job__success(keypair, successful_job_flow):
+    mock_transport = MinerStubTransport("mock", successful_job_flow)
     client = OrganicMinerClient(
         miner_hotkey="mock",
         miner_address="0.0.0.0",
@@ -101,6 +107,66 @@ async def test_run_organic_job__success(keypair):
         V0JobRequest,
         V0JobFinishedReceiptRequest,
     ]
+    _, initial_job_request, _, job_request, _ = mock_transport.sent_models
+    assert initial_job_request.is_signed_by(keypair.ss58_address)
+    assert job_request == V0JobRequest(
+        job_uuid=JOB_UUID,
+        executor_class=ExecutorClass.always_on__llm__a6000,
+        docker_image="mock",
+        docker_run_options_preset="nvidia_all",
+        docker_run_cmd=[],
+        env={},
+        volume=None,
+        output_upload=None,
+        artifacts_dir=None,
+        validator_signature=job_request.validator_signature,
+    )
+    assert job_request.is_signed_by(keypair.ss58_address)
+
+
+@pytest.mark.asyncio
+@pytest.mark.django_db(transaction=True)
+async def test_run_organic_job__clamps_job_accepted_receipt_ttl(keypair, successful_job_flow):
+    accepted_at = datetime.datetime(2025, 3, 4, 12, 0, tzinfo=datetime.UTC)
+    mock_transport = MinerStubTransport("mock", successful_job_flow)
+    client = OrganicMinerClient(
+        miner_hotkey="mock",
+        miner_address="0.0.0.0",
+        miner_port=1234,
+        job_uuid=JOB_UUID,
+        my_keypair=keypair,
+        transport=mock_transport,
+    )
+    job_details = OrganicJobDetails(
+        job_uuid=JOB_UUID,
+        executor_class=ExecutorClass.always_on__llm__a6000,
+        docker_image="mock",
+        job_timing=OrganicJobDetails.TimingDetails(
+            allowed_leeway=5,
+            download_time_limit=5,
+            execution_time_limit=MAX_TTL_SECONDS,
+            upload_time_limit=5,
+            streaming_start_time_limit=0,
+        ),
+    )
+    with freeze_time(accepted_at, real_asyncio=True):
+        await execute_organic_job_on_miner(
+            client, job_details, reservation_time_limit=2, executor_startup_time_limit=2
+        )
+
+    [receipt] = [
+        model
+        for model in mock_transport.sent_models
+        if isinstance(model, V0JobAcceptedReceiptRequest)
+    ]
+    assert receipt.payload == JobAcceptedReceiptPayload(
+        job_uuid=JOB_UUID,
+        miner_hotkey="mock",
+        validator_hotkey=keypair.ss58_address,
+        timestamp=accepted_at,
+        time_accepted=accepted_at,
+        ttl=MAX_TTL_SECONDS,
+    )
 
 
 @pytest.mark.asyncio

@@ -8,10 +8,12 @@ from django.db import models
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.receipts import ReceiptType
 from compute_horde.receipts.schemas import (
+    SCORE_STR_PATTERN,
     JobAcceptedReceiptPayload,
     JobFinishedReceiptPayload,
     JobStartedReceiptPayload,
     Receipt,
+    parse_score_str,
 )
 
 
@@ -181,8 +183,18 @@ class JobFinishedReceipt(AbstractReceipt):
     def time_took(self):
         return timedelta(microseconds=self.time_took_us)
 
-    def score(self):
-        return float(self.score_str)
+    def score(self) -> float:
+        """
+        Raises ValueError for a persisted row whose score_str predates wire-format validation.
+        """
+        return parse_score_str(self.score_str)
+
+    @classmethod
+    def with_malformed_score(cls) -> models.QuerySet["JobFinishedReceipt"]:
+        """
+        Rows for which score() raises ValueError.
+        """
+        return cls.objects.exclude(score_str__regex=SCORE_STR_PATTERN.pattern)
 
     def to_receipt(self) -> Receipt:
         if self.miner_signature is None:

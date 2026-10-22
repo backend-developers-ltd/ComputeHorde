@@ -5,14 +5,18 @@ from unittest import mock
 from channels.testing import WebsocketCommunicator
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.protocol_messages import V0ExecutionDoneRequest, V0VolumesReadyRequest
+from compute_horde.test_wallet import get_test_miner_wallet, get_test_validator_wallet
 
-from compute_horde_miner import asgi
 from compute_horde_miner.miner.executor_manager import v1
 
 WEBSOCKET_TIMEOUT = 100000
 
 
 async def fake_executor(token, streaming=False):
+    # The test settings make the executor manager load this module while the consumers that
+    # make up the ASGI application are still being imported, so asgi cannot be imported above.
+    from compute_horde_miner import asgi
+
     communicator = WebsocketCommunicator(asgi.application, f"v0.1/executor_interface/{token}")
     connected, _ = await communicator.connect()
     assert connected
@@ -27,14 +31,16 @@ async def fake_executor(token, streaming=False):
         "job_started_receipt_payload": {
             "receipt_type": "JobStartedReceipt",
             "job_uuid": fake_executor.job_uuid,
-            "miner_hotkey": "miner_hotkey",
-            "validator_hotkey": "some_public_key",
-            "timestamp": "2020-01-01T00:00:00Z",
+            "miner_hotkey": fake_executor.miner_hotkey
+            or get_test_miner_wallet().hotkey.ss58_address,
+            "validator_hotkey": get_test_validator_wallet().hotkey.ss58_address,
+            "timestamp": mock.ANY,
             "executor_class": DEFAULT_EXECUTOR_CLASS,
             "is_organic": True,
-            "ttl": 5,
+            "ttl": 60,
         },
-        "job_started_receipt_signature": "gibberish",
+        "job_started_receipt_signature": mock.ANY,
+        "validator_signature": mock.ANY,
         "executor_timing": None,
         "streaming_details": None
         if not streaming
@@ -63,6 +69,7 @@ async def fake_executor(token, streaming=False):
         "volume": {"volume_type": "inline", "contents": "nonsense", "relative_path": None},
         "output_upload": mock.ANY,
         "artifacts_dir": None,
+        "validator_signature": mock.ANY,
     }, response
     if streaming:
         await communicator.send_json_to(
@@ -96,6 +103,8 @@ async def fake_executor(token, streaming=False):
 
 
 fake_executor.job_uuid = None
+# Miner hotkey the receipt names, when the validator does not address the test miner.
+fake_executor.miner_hotkey = None
 
 
 class StubExecutorManager(v1.BaseExecutorManager):
