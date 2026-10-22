@@ -23,7 +23,7 @@ services:
       <<: *logging
 
   db:
-    image: postgres:14-alpine
+    image: postgres:14.24-alpine@sha256:e73790e2702b489f664605acbec5f5da6981bc7e432f0489e52a53c9d1e7467f
     healthcheck:
       test: pg_isready -U ${POSTGRES_USER} || exit 1
     restart: unless-stopped
@@ -170,7 +170,7 @@ services:
       <<: *logging
 
   cadvisor:
-    image: ghcr.io/google/cadvisor:v0.60.5
+    image: ghcr.io/google/cadvisor:v0.60.5@sha256:763aecf1c32c2be8a1a75f9abfc2fc461005c9dbbaa39cb356b354aac1296dbe
     container_name: cadvisor
     devices:
       - /dev/kmsg:/dev/kmsg
@@ -187,7 +187,7 @@ services:
 
   
   alloy:
-    image: grafana/alloy:v1.21.1
+    image: grafana/alloy:v1.21.1@sha256:4039c971193053a84e53dd9ed3e7d4561c069256b024631cd3498a353ed7ece8
     restart: unless-stopped
     environment:
       - LOKI_URL=${LOKI_URL}

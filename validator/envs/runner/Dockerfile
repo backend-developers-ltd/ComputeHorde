@@ -1,4 +1,4 @@
-FROM docker:29-cli
+FROM docker:29.9.2-cli@sha256:5e6baf67325a79f64ed3bed6863954d5e05d0f3d4e57cbdb14809346814bbfdb
 WORKDIR /root/validator
 COPY data/docker-compose.yml docker-compose.yml
 COPY entrypoint.sh /entrypoint.sh

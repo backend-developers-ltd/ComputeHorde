@@ -1,11 +1,11 @@
-ARG BASE_IMAGE=python:3.11-slim
+ARG BASE_IMAGE=python:3.11.17-slim@sha256:cce12316475d7d56d605f76e1d811d0dc4e7227f2d4afd29951521264f504ff8
 
 
 FROM $BASE_IMAGE AS base-image
 LABEL builder=true
 
 RUN apt-get update && apt-get install -y ca-certificates git
-COPY --from=ghcr.io/astral-sh/uv:0.13.4 /uv /uvx /bin/
+COPY --from=ghcr.io/astral-sh/uv:0.13.4@sha256:9f130421e930bfbdc563c00740466603f8723158e90297d07957c2294640262b /uv /uvx /bin/
 
 COPY --from=compute-horde-sdk . /root/compute_horde_sdk
 
