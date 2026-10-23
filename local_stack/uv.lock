@@ -319,7 +319,7 @@ wheels = [
 
 [[package]]
 name = "bittensor-pylon-client"
-version = "2.3.0"
+version = "2.3.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "apscheduler", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
@@ -331,9 +331,9 @@ dependencies = [
     { name = "pyyaml", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "tenacity", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/17/10/e5e93f2bda4d0a156f629f1ea82fa91710433bee651cbb4ffa62b36a6716/bittensor_pylon_client-2.3.0.tar.gz", hash = "sha256:1d4ef30e16c55220b87df39bea46946b7e1e420c1d0383c38bf5784ed32257d4", size = 39198, upload-time = "2026-07-09T15:47:57.875Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/e0/a3/c46f0e6f8c0a1caf3dd4d58d1b95af78db0f7611219597a8a168b5710a10/bittensor_pylon_client-2.3.1.tar.gz", hash = "sha256:c062529c519ebe7a9278fc70229e368084ce6c07c4d40fdb4956d447fdb9330d", size = 39236, upload-time = "2026-10-22T22:27:30.303Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/b1/93/9dfb1824e48137692b55d984833b6d8de155eb6dd607f259e98138c118dd/bittensor_pylon_client-2.3.0-py3-none-any.whl", hash = "sha256:86687e62933d7d982780a83ffd39965d4b9fb32d055de704aeeb6172577309fb", size = 67707, upload-time = "2026-07-09T15:47:56.797Z" },
+    { url = "https://files.pythonhosted.org/packages/ed/1e/931672841cb97459cba211ecbc99bad90ce40dad7a716db7f37c6b5c4516/bittensor_pylon_client-2.3.1-py3-none-any.whl", hash = "sha256:f6dde7450ce2da3d87f46562c978ad78a2d45cd764776cd5277b031e9f0c2814", size = 67706, upload-time = "2026-10-22T22:27:28.531Z" },
 ]
 
 [[package]]
