@@ -14,7 +14,7 @@ services:
         tag: '{{.Name}}'
 
   db:
-    image: postgres:14.0-alpine
+    image: postgres:14.24-alpine@sha256:e73790e2702b489f664605acbec5f5da6981bc7e432f0489e52a53c9d1e7467f
     healthcheck:
       test: pg_isready -U postgres || exit 1
     environment:
@@ -150,7 +150,7 @@ services:
     command: ./celery-entrypoint.sh -Q organic_jobs
 
   cadvisor:
-    image: gcr.io/cadvisor/cadvisor:v0.40.0
+    image: ghcr.io/google/cadvisor:v0.60.5@sha256:763aecf1c32c2be8a1a75f9abfc2fc461005c9dbbaa39cb356b354aac1296dbe
     devices:
       - /dev/kmsg:/dev/kmsg
     volumes:

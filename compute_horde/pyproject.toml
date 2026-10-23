@@ -11,6 +11,7 @@ dependencies = [
     "websockets>=14.0,<15.0",
     "more-itertools>=10.2.0",
     "requests>=2.32.2",
+    "certifi>=2026.10.19",  # earlier releases trust the compromised eMudhra/emSign CAs
     "Django~=4.2.4",
     "cryptography>=42.0.8",
     "celery<6,>=5.3.0",

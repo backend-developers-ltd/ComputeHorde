@@ -14,7 +14,7 @@ services:
         tag: '{{.Name}}'
 
   db:
-    image: postgres:14.0-alpine
+    image: postgres:14.24-alpine@sha256:e73790e2702b489f664605acbec5f5da6981bc7e432f0489e52a53c9d1e7467f
     healthcheck:
       test: pg_isready -U postgres || exit 1
     environment:
@@ -143,7 +143,7 @@ services:
     command: [
       "--threshold", "${DOCKER_STORAGE_THRESHOLD:-50 GB}",
       "--keep", "^redis:8.2-alpine",
-      "--keep", "^postgres:14.0-alpine",
+      "--keep", "^postgres:",
       "--keep", "^nickfedor/watchtower",
       "--keep", "^stephanmisc/docuum:0.23.1",
       "--keep", "^backenddevelopersltd/compute-horde-miner-runner:v0-latest",

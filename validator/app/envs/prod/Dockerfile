@@ -1,11 +1,11 @@
-ARG BASE_IMAGE=python:3.11-slim
+ARG BASE_IMAGE=python:3.11.17-slim@sha256:cce12316475d7d56d605f76e1d811d0dc4e7227f2d4afd29951521264f504ff8
 
 
 FROM $BASE_IMAGE AS base-image
 LABEL builder=true
 
-RUN apt-get update && apt-get install -y git
-COPY --from=ghcr.io/astral-sh/uv:0.5 /uv /uvx /bin/
+RUN apt-get update && apt-get install -y ca-certificates git
+COPY --from=ghcr.io/astral-sh/uv:0.13.4@sha256:9f130421e930bfbdc563c00740466603f8723158e90297d07957c2294640262b /uv /uvx /bin/
 
 COPY --from=compute-horde-sdk . /root/compute_horde_sdk
 COPY --from=compute-horde . /root/compute_horde
@@ -39,8 +39,13 @@ FROM $BASE_IMAGE AS secondary-image
 LABEL builder=false
 
 RUN apt-get update \
-	&& apt-get install -y wget \
+	&& apt-get install -y ca-certificates wget \
 	&& rm -rf /var/lib/apt/lists/*
+
+# The base image's pip vendors a certifi that trusts the compromised eMudhra CAs (fixed in pip 26.2.2).
+# The hash pin protects the download, which that old pip still performs.
+RUN python -m pip install --no-cache-dir \
+	"pip @ https://files.pythonhosted.org/packages/3f/06/3e4420302363fbb71be3c7f35ce042f54bfca330e3e66b3a2e3c4cca579f/pip-26.2.2-py3-none-any.whl#sha256=fd7f4dfa8190e014013b9f08f3e973f4e4c26ffd179a204895533a7254813a70"
 
 WORKDIR /root/src/
 ENV PYTHONUNBUFFERED=1

@@ -25,10 +25,7 @@ runs:
   using: composite
   steps:
     - name: Install uv
-      uses: astral-sh/setup-uv@v6
-      with:
-        version: "0.8.x"
-        enable-cache: true
+      uses: ./.github/actions/setup-uv
     - name: Generate changelog
       shell: bash
       run: |

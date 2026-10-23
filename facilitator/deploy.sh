@@ -32,7 +32,8 @@ docker image tag "${BASE_IMAGE}" project/app-builder
 # collect static files to external storage while old app is still running
 # docker compose run --rm app sh -c "python manage.py collectstatic --no-input"
 
-SERVICES=$(docker compose ps --services 2>&1 > /dev/stderr \
+# `docker compose ps --services` also lists orphaned services, which `docker compose stop` rejects.
+SERVICES=$(docker compose config --services 2>&1 > /dev/stderr \
            | grep -v -e 'is not set' -e db -e redis)
 
 # shellcheck disable=2086
@@ -43,7 +44,7 @@ docker compose up -d db  # in case it hasn't been launched before
 docker compose run --rm app sh -c "python manage.py wait_for_database --timeout 10; python manage.py migrate"
 
 # start everything
-docker compose up -d
+docker compose up -d --remove-orphans
 
 # Clean all dangling images
 docker images --quiet --filter=dangling=true \
