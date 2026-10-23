@@ -216,7 +216,7 @@ services:
             type: Bearer
             credentials: $${PYLON_METRICS_TOKEN:-validator_metrics_token}
       remote_write:
-        - url: "http://prometheus-proxy:8000/prometheus_outbound_proxy/"
+        - url: "http://prometheus-proxy:8000/prometheus/outbound"
       EOF
       exec /entrypoint.sh --log.level=debug --storage.tsdb.retention.size=1GB'
 
@@ -224,10 +224,11 @@ services:
       - "host.docker.internal:host-gateway"
 
   prometheus-proxy:
-    image: backenddevelopersltd/bittensor-prometheus-proxy:latest
+    image: ghcr.io/bittensor-church/bittensor-prometheus-proxy:1.0.2@sha256:c0681b54ecd0d13da5ecb2f88b7f0dc2e5e17c4063ab2f8d4613be2532860100
     restart: unless-stopped
     environment:
       - CENTRAL_PROMETHEUS_PROXY_URL=https://prometheus.bactensor.io
+      - BITTENSOR_NETUID=${BITTENSOR_NETUID:-12}
       - ENV=prometheus-proxy-prod
       - SECRET_KEY=${SECRET_KEY}
       - BITTENSOR_WALLET_NAME=${BITTENSOR_WALLET_NAME}
