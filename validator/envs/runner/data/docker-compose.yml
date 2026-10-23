@@ -178,7 +178,7 @@ services:
       <<: *logging
 
   prometheus:
-    image: backenddevelopersltd/bittensor_prometheus:latest
+    image: backenddevelopersltd/bittensor_prometheus:1.0.2@sha256:d518ca70e0083946f97c77795f9095dc42baf33b4863606317df91108a25dfbc
     restart: unless-stopped
     depends_on:
       - cadvisor
