@@ -218,7 +218,7 @@ services:
       remote_write:
         - url: "http://prometheus-proxy:8000/prometheus/outbound"
       EOF
-      exec /entrypoint.sh --log.level=debug --storage.tsdb.retention.size=1GB'
+      exec sh /entrypoint.sh --log.level=debug --storage.tsdb.retention.size=1GB'
 
     extra_hosts:
       - "host.docker.internal:host-gateway"
