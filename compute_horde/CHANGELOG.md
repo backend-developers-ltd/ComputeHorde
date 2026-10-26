@@ -2,6 +2,13 @@
 
 <!-- towncrier release notes start -->
 
+## [0.0.27](https://github.com/backend-developers-ltd/ComputeHorde/releases/tag/library-v0.0.27) - 2026-10-26
+
+### Fixed
+
+- The library requires `certifi>=2026.10.19`, because earlier certifi releases trust the compromised eMudhra/emSign CAs.
+
+
 ## [0.0.26](https://github.com/backend-developers-ltd/ComputeHorde/releases/tag/library-v0.0.26) - 2025-08-13
 
 No significant changes.
