@@ -28,6 +28,8 @@ TEST_JOB_UUID = "1c4904f0-b614-4e27-8e50-7bfc5ddab8fd"
 TEST_JOB_UUID2 = "a9c0ccd4-0900-46b1-b8ff-9a958157c2f5"
 TEST_DOCKER_IMAGE = "example-com/test-image"
 
+pytestmark = pytest.mark.apiver(to_ver=1)
+
 
 def get_job_response(uuid: str = TEST_JOB_UUID, status: str | list[str] = "accepted", **kwargs):
     statuses = [status] if isinstance(status, str) else status
