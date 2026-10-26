@@ -178,7 +178,7 @@ services:
       <<: *logging
 
   prometheus:
-    image: backenddevelopersltd/bittensor_prometheus:1.0.2@sha256:d518ca70e0083946f97c77795f9095dc42baf33b4863606317df91108a25dfbc
+    image: backenddevelopersltd/bittensor_prometheus:1.0.3@sha256:35112f61ffdeb2627f6626ad5ce6cabf0d1598e63f6758cd0b81cd28b494767a
     restart: unless-stopped
     depends_on:
       - cadvisor
@@ -218,13 +218,13 @@ services:
       remote_write:
         - url: "http://prometheus-proxy:8000/prometheus/outbound"
       EOF
-      exec /entrypoint.sh --log.level=debug --storage.tsdb.retention.size=1GB'
+      exec sh /entrypoint.sh --log.level=debug --storage.tsdb.retention.size=1GB'
 
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
   prometheus-proxy:
-    image: ghcr.io/bittensor-church/bittensor-prometheus-proxy:1.0.2@sha256:c0681b54ecd0d13da5ecb2f88b7f0dc2e5e17c4063ab2f8d4613be2532860100
+    image: ghcr.io/bittensor-church/bittensor-prometheus-proxy:1.0.3@sha256:39caeb310b1b29baef8e7794157fa66953e0e610e9bd712589bb84bf7cff2286
     restart: unless-stopped
     environment:
       - CENTRAL_PROMETHEUS_PROXY_URL=https://prometheus.bactensor.io
