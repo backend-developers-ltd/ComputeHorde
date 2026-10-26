@@ -26,7 +26,7 @@ services:
       <<: *logging
 
   pylon:
-    image: docker.io/backenddevelopersltd/bittensor-pylon:2.3.1
+    image: docker.io/backenddevelopersltd/bittensor-pylon:2.3.4@sha256:2e7a3470b1ff6f4a72f53a075c1f215cd352a0d289387bad10f328825f396dbb
     init: true
     restart: unless-stopped
     env_file: ./.env
@@ -178,7 +178,7 @@ services:
       <<: *logging
 
   prometheus:
-    image: backenddevelopersltd/bittensor_prometheus:latest
+    image: backenddevelopersltd/bittensor_prometheus:1.0.2@sha256:d518ca70e0083946f97c77795f9095dc42baf33b4863606317df91108a25dfbc
     restart: unless-stopped
     depends_on:
       - cadvisor
@@ -216,7 +216,7 @@ services:
             type: Bearer
             credentials: $${PYLON_METRICS_TOKEN:-validator_metrics_token}
       remote_write:
-        - url: "http://prometheus-proxy:8000/prometheus_outbound_proxy/"
+        - url: "http://prometheus-proxy:8000/prometheus/outbound"
       EOF
       exec /entrypoint.sh --log.level=debug --storage.tsdb.retention.size=1GB'
 
@@ -224,10 +224,11 @@ services:
       - "host.docker.internal:host-gateway"
 
   prometheus-proxy:
-    image: backenddevelopersltd/bittensor-prometheus-proxy:latest
+    image: ghcr.io/bittensor-church/bittensor-prometheus-proxy:1.0.2@sha256:c0681b54ecd0d13da5ecb2f88b7f0dc2e5e17c4063ab2f8d4613be2532860100
     restart: unless-stopped
     environment:
       - CENTRAL_PROMETHEUS_PROXY_URL=https://prometheus.bactensor.io
+      - BITTENSOR_NETUID=${BITTENSOR_NETUID:-12}
       - ENV=prometheus-proxy-prod
       - SECRET_KEY=${SECRET_KEY}
       - BITTENSOR_WALLET_NAME=${BITTENSOR_WALLET_NAME}
