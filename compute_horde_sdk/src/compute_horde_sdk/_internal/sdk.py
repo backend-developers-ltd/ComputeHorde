@@ -520,6 +520,9 @@ class ComputeHordeClient:
         :return: A :class:`ComputeHordeJob` class instance representing the created job.
         """
 
+        if not isinstance(job_spec, ComputeHordeJobSpec):
+            raise TypeError("Remote execution requires a v1 ComputeHordeJobSpec; v2 jobs require LocalDockerClient")
+
         # TODO: make this a pydantic model?
         data: dict[str, pydantic.JsonValue] = {
             "target_validator_hotkey": self.compute_horde_validator_hotkey,

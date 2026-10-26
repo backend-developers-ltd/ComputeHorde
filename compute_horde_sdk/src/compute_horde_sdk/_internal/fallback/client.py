@@ -130,6 +130,8 @@ class FallbackClient:
         :param job_spec: Job specification to run.
         :return: A :class:`FallbackJob` class instance representing the created job.
         """
+        if not isinstance(job_spec, FallbackJobSpec):
+            raise TypeError("Fallback execution requires FallbackJobSpec; v2 jobs require LocalDockerClient")
         logger.info("Running fallback job...")
         logger.debug("Fallback job spec: %s", job_spec)
 

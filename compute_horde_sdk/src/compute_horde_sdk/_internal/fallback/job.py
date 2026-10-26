@@ -96,6 +96,8 @@ class FallbackJobSpec:
 
     @classmethod
     def from_job_spec(cls, job_spec: ComputeHordeJobSpec, **kwargs: Any) -> Self:
+        if not isinstance(job_spec, ComputeHordeJobSpec):
+            raise TypeError("Fallback conversion requires a v1 ComputeHordeJobSpec; v2 jobs require LocalDockerClient")
         if job_spec.executor_class == job_spec.executor_class.__class__.always_on__llm__a6000:
             accelerators = {"RTXA6000": 1}
         else:
