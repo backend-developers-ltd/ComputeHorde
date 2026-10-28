@@ -32,4 +32,5 @@ but the logic around when and how to use it depends on the **nature of your jobs
    installation
    quickstart
    fallback
+   local_docker
    api_reference

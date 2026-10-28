@@ -1,3 +1,8 @@
+import pytest
+
+pytestmark = pytest.mark.apiver(to_ver=1)
+
+
 def test_apiver_exports(apiver_module):
     assert {name for name in dir(apiver_module) if not name.startswith("_")} == {
         "ComputeHordeClient",
