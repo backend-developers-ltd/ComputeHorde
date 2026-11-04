@@ -1,3 +1,4 @@
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
 import pytest
@@ -61,6 +62,7 @@ FAKE_UUID = "deadbeef-face-4fed-abad-cafeaddeddad"
 def test_fallback_job_spec_from_job_spec(job_spec_args, expected_run, expected_image_id, expected_accelerators):
     job_spec = ComputeHordeJobSpec(**job_spec_args)
     fallback_job = FallbackJobSpec.from_job_spec(job_spec)
+    assert FallbackJobSpec.from_job_spec(SimpleNamespace(**vars(job_spec))) == fallback_job
 
     assert fallback_job.run == expected_run
     assert fallback_job.envs == job_spec_args.get("env", {})

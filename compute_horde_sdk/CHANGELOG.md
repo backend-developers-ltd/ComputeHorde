@@ -9,6 +9,14 @@ upcoming release can be found in [changelog.d](changelog.d).
 
 <!-- towncrier release notes start -->
 
+## [0.0.20](https://github.com/backend-developers-ltd/compute-horde-sdk/releases/tag/v0.0.20) - 2026-11-04
+
+### Added
+
+- Added support for Python 3.13 and 3.14.
+- Added a local Docker executor and direct bind mounts through `compute_horde_sdk.v1.local`, available with the `[local]` extra.
+
+
 ## [0.0.19](https://github.com/backend-developers-ltd/compute-horde-sdk/releases/tag/v0.0.19) - 2026-10-26
 
 ### Changed

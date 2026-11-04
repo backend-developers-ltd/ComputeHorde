@@ -1,5 +1,8 @@
 import json
+import pickle
+from dataclasses import asdict
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
 import bittensor_wallet
@@ -27,6 +30,40 @@ TEST_FACILITATOR_URL = "http://localhost:4321"
 TEST_JOB_UUID = "1c4904f0-b614-4e27-8e50-7bfc5ddab8fd"
 TEST_JOB_UUID2 = "a9c0ccd4-0900-46b1-b8ff-9a958157c2f5"
 TEST_DOCKER_IMAGE = "example-com/test-image"
+
+
+@pytest.mark.asyncio
+async def test_duck_typed_spec_preserves_request(compute_horde_client, job_spec, httpx_mock):
+    httpx_mock.add_response(json=get_job_response(), is_reusable=True)
+    await compute_horde_client.create_job(job_spec)
+    await compute_horde_client.create_job(SimpleNamespace(**vars(job_spec)))
+    requests = httpx_mock.get_requests()
+    assert [json.loads(request.content) for request in requests] == [json.loads(requests[0].content)] * 2
+
+
+def test_spec_remains_mutable_and_serializable(apiver_module):
+    spec = apiver_module.ComputeHordeJobSpec(
+        apiver_module.ExecutorClass.spin_up_4min__gpu_24gb, "test", "busybox", 1, 2, 3
+    )
+    spec.docker_image = "alpine"
+    spec.args.append("echo")
+    spec.env["KEY"] = "value"
+    restored = pickle.loads(pickle.dumps(spec))
+    assert asdict(restored) == {
+        "executor_class": apiver_module.ExecutorClass.spin_up_4min__gpu_24gb,
+        "job_namespace": "test",
+        "docker_image": "alpine",
+        "download_time_limit_sec": 1,
+        "execution_time_limit_sec": 2,
+        "upload_time_limit_sec": 3,
+        "args": ["echo"],
+        "env": {"KEY": "value"},
+        "artifacts_dir": None,
+        "input_volumes": None,
+        "output_volumes": None,
+        "streaming": False,
+        "streaming_start_time_limit_sec": 5,
+    }
 
 
 def get_job_response(uuid: str = TEST_JOB_UUID, status: str | list[str] = "accepted", **kwargs):

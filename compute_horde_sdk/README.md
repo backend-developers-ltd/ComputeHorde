@@ -261,6 +261,16 @@ The SDK includes an optional `FallbackClient` that mirrors the standard `Compute
 
 See the [Fallback docs](https://sdk.computehorde.io/master/fallback.html) for usage examples and limitations.
 
+## Local Docker execution
+
+Install with `pip install "compute-horde-sdk[local]"` and import
+`LocalDockerClient`, `LocalDockerJobSpec`, and `LocalBindVolume` from
+`compute_horde_sdk.v1.local`.
+
+`compute_horde_sdk.v1.local` provides local Docker jobs with direct bind mounts,
+per-container resource limits, full output capture or stdout file streaming,
+and race-safe cancellation. See [the local Docker guide](docs/source/local_docker.rst).
+
 ## Versioning
 
 This package uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
