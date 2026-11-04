@@ -1,3 +1,4 @@
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -34,7 +35,10 @@ class TestClient:
         return FallbackJobSpec(run="echo test")
 
     @pytest.mark.asyncio
-    async def test_create_job(self, job_spec, mock_sky_job):
+    @pytest.mark.parametrize("duck_typed", [False, True])
+    async def test_create_job(self, job_spec, mock_sky_job, duck_typed):
+        if duck_typed:
+            job_spec = SimpleNamespace(**vars(job_spec))
         with patch("compute_horde_sdk._internal.fallback.client.sky.SkyJob", return_value=mock_sky_job):
             client = FallbackClient(cloud=FAKE_CLOUD)
             job = await client.create_job(job_spec)

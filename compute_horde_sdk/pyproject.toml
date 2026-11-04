@@ -4,7 +4,7 @@ requires-python = ">=3.10,<3.15"
 keywords = []
 license = {text = "MIT"}
 readme = "README.md"
-version = "0.0.19"
+version = "0.0.20"
 authors = [
     {name = "Reef Technologies", email = "opensource@reef.pl"},
 ]
@@ -38,6 +38,7 @@ dependencies = [
 "Issue Tracker" = "https://github.com/backend-developers-ltd/compute-horde-sdk/issues"
 
 [project.optional-dependencies]
+local = ["docker>=7.1,<8"]
 fallback = [
     "build",
     "wheel",
@@ -66,6 +67,7 @@ type_check = [
     "django-stubs[compatible-mypy]",
     "djangorestframework-stubs[compatible-mypy]>=3.15.1",
     "mypy",
+    "types-docker",
     "types-freezegun",
     "types-python-dateutil",
     "types-requests",
