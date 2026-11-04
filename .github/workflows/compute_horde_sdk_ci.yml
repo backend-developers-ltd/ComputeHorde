@@ -50,7 +50,7 @@ jobs:
       fail-fast: false
       matrix:
         os: ["ubuntu-latest"]
-        python-version: ["3.10", "3.11", "3.12"]
+        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
     defaults:
       run:
         working-directory: ./compute_horde_sdk
@@ -65,4 +65,4 @@ jobs:
       - name: Install dependencies
         run: uv tool install nox
       - name: Run unit tests
-        run: nox -vs test
+        run: nox -vs test-${{ matrix.python-version }}
