@@ -12,7 +12,7 @@ subnet_cidrs     = ["10.20.1.0/24", "10.20.2.0/24"]
 azs              = ["us-east-1a", "us-east-1b"]
 
 # By default, we have an ubuntu image
-base_ami_image        = "*ubuntu-focal-20.04-amd64-minimal-*"
+base_ami_image        = "ubuntu-minimal/images/hvm-ssd-gp3/ubuntu-resolute-26.04-amd64-minimal-*"
 base_ami_image_owner  = "099720109477"
 
 # domain setting

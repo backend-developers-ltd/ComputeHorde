@@ -10,7 +10,11 @@ write_files:
   - path: /home/ubuntu/installer.sh
     permissions: '0755'
     content: |
-      apt-get clean && apt-get update && apt-get install -y ca-certificates curl gnupg lsb-release unzip jq rng-tools
+      #!/bin/bash
+      set -euo pipefail
+      export DEBIAN_FRONTEND=noninteractive
+
+      apt-get clean && apt-get update && apt-get install -y ca-certificates curl wget gnupg lsb-release unzip jq rng-tools
 
       curl https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip -o awscliv2.zip
       unzip awscliv2.zip
@@ -20,18 +24,16 @@ write_files:
       curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
       echo "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
       apt-get update
-      apt-get install -y docker-ce docker-ce-cli containerd.io
+      apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
       gpasswd -a ubuntu docker
       mkdir -p /etc/docker/
       service docker restart
-
-      curl -L "https://github.com/docker/compose/releases/download/1.29.2/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-      chmod +x /usr/local/bin/docker-compose
 
   - path: /home/ubuntu/cloud-init.sh
     permissions: '0755'
     content: |
       #!/bin/bash
+      set -euo pipefail
 
       export APP_NAME=${name}
       export APP_ENV=${env}
@@ -43,7 +45,8 @@ write_files:
 
       source .envrc
 
-      export INSTANCE_ID_SUBST=`wget http://169.254.169.254/latest/meta-data/instance-id -O- --timeout=5 --tries=1`
+      IMDS_TOKEN=$(wget http://169.254.169.254/latest/api/token -O- --timeout=5 --tries=1 --method=PUT --header="X-aws-ec2-metadata-token-ttl-seconds: 60") || true
+      export INSTANCE_ID_SUBST=`wget http://169.254.169.254/latest/meta-data/instance-id -O- --timeout=5 --tries=1 --header="X-aws-ec2-metadata-token: $IMDS_TOKEN"`
       [ -z "$INSTANCE_ID_SUBST" ] && export INSTANCE_ID_SUBST='{{.FullID}}'
       echo "INSTANCE_ID_SUBST=$INSTANCE_ID_SUBST" >> .env
 
@@ -51,7 +54,7 @@ write_files:
 
 
       aws ecr get-login-password --region ${region} | docker login --username AWS --password-stdin "$AWS_ECR_BASE_URL"
-      docker-compose up -d
+      docker compose up -d
 
 runcmd:
   - chown -R ubuntu:ubuntu /home/ubuntu

@@ -17,7 +17,7 @@ source "amazon-ebs" "docker-optimized" {
   source_ami_filter {
     filters = {
       virtualization-type = "hvm"
-      name = "*ubuntu-focal-20.04-amd64-minimal-*"
+      name = "ubuntu-minimal/images/hvm-ssd-gp3/ubuntu-resolute-26.04-amd64-minimal-*"
       root-device-type = "ebs"
     }
 
@@ -67,13 +67,10 @@ build {
       "curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg",
       "echo \"deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable\" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null",
       "sudo apt-get update",
-      "sudo apt-get install -y docker-ce docker-ce-cli containerd.io",
+      "sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin",
       "sudo gpasswd -a ubuntu docker",
       "sudo mkdir -p /etc/docker/",
-      "sudo service docker restart",
-
-      "sudo curl -L \"https://github.com/docker/compose/releases/download/1.29.2/docker-compose-$(uname -s)-$(uname -m)\" -o /usr/local/bin/docker-compose",
-      "sudo chmod +x /usr/local/bin/docker-compose"
+      "sudo service docker restart"
     ]
   }
 }
