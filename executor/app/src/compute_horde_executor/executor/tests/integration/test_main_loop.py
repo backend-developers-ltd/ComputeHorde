@@ -1032,6 +1032,7 @@ def test_zip_and_http_put_output_uploader(httpx_mock: HTTPXMock, tmp_path):
     assert request.method == "PUT"
 
 
+@pytest.mark.httpx_mock(can_send_already_matched_responses=True)
 def test_output_upload_failed(httpx_mock: HTTPXMock, tmp_path):
     # Arrange
     httpx_mock.add_response(status_code=400)
@@ -1273,6 +1274,7 @@ def test_raw_script_job():
     ]
 
 
+@pytest.mark.httpx_mock(can_send_already_matched_responses=True)
 def test_multi_upload_output_uploader_with_system_output(httpx_mock: HTTPXMock, tmp_path):
     url1 = "http://localhost/bucket/file1.txt"
     url2 = "http://localhost/bucket/file2.txt"
@@ -1503,6 +1505,7 @@ def test_single_file_volume(httpx_mock: HTTPXMock, tmp_path):
     assert request.method == "GET"
 
 
+@pytest.mark.httpx_mock(can_send_already_matched_responses=True)
 def test_multi_volume(httpx_mock: HTTPXMock, tmp_path):
     # Arrange
     httpx_mock.add_response(text=payload)

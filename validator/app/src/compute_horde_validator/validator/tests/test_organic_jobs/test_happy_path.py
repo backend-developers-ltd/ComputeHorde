@@ -17,7 +17,7 @@ from compute_horde_validator.validator.models import OrganicJob
 
 pytestmark = [
     pytest.mark.asyncio,
-    pytest.mark.django_db(transaction=True),
+    pytest.mark.django_db(databases=["default", "default_alias"], transaction=True),
     pytest.mark.override_config(
         DYNAMIC_EXECUTOR_RESERVATION_TIME_LIMIT=1,
         DYNAMIC_EXECUTOR_STARTUP_TIME_LIMIT=1,
@@ -61,7 +61,7 @@ def metagraph_snapshot(monkeypatch):
     return metagraph
 
 
-@pytest.mark.django_db(transaction=True)
+@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 async def test_basic_flow_works(job_request, faci_transport, miner_transport, execute_scenario):
     await faci_transport.add_message(job_request, send_before=0)
     # vali -> faci: received

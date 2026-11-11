@@ -75,7 +75,7 @@ def test_job_too_long():
         assert "Required allowance cannot be greater than 3600.0 seconds" in e2.value.args[0]
 
 
-@pytest.mark.django_db(transaction=True)
+@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 @pytest.mark.filterwarnings("ignore::pytest.PytestUnraisableExceptionWarning")
 def test_empty():
     with set_block_number(1000):
@@ -112,7 +112,7 @@ def test_empty():
         assert "Reservation with ID 999999 not found" in str(e3.value)
 
 
-@pytest.mark.django_db(transaction=True)
+@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 @pytest.mark.filterwarnings("ignore::pytest.PytestUnraisableExceptionWarning")
 def test_block_without_manifests():
     with set_block_number(1000):
@@ -514,7 +514,7 @@ def test_complete(caplog, configure_logs):
     assert AllowanceBooking.objects.count() == 0
 
 
-@pytest.mark.django_db(transaction=True)
+@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 @pytest.mark.filterwarnings("ignore::pytest.PytestUnraisableExceptionWarning")
 def test_blocks_out_of_order(configure_logs):
     for block_number in [1000, 1011, 1025, 1050, 1075, 1100]:
@@ -536,7 +536,7 @@ def test_blocks_out_of_order(configure_logs):
     )
 
 
-@pytest.mark.django_db(transaction=True)
+@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 @pytest.mark.filterwarnings("ignore::pytest.PytestUnraisableExceptionWarning")
 def test_allowance_reservation_corner_cases(configure_logs):
     """Test all corner cases of reserve_allowance, undo_allowance_reservation, and spend_allowance methods."""
@@ -685,7 +685,7 @@ def test_allowance_reservation_corner_cases(configure_logs):
         }
 
 
-@pytest.mark.django_db(transaction=True)
+@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 def test_manifests(configure_logs):
     with set_block_number(1000):
         sync_manifests()
