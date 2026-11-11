@@ -23,7 +23,7 @@ else:
 
 logger = logging.getLogger(__name__)
 
-NGINX_IMAGE = "nginx:1.26-alpine"
+NGINX_IMAGE = "nginx:1.30-alpine"
 
 
 async def get_docker_container_ip(container_name: str, bridge_network: bool = False) -> str:
