@@ -137,7 +137,7 @@ def patch_allowance_metagraph(monkeypatch, serving_hotkeys: list[str]) -> Metagr
     return metagraph
 
 
-@pytest.mark.django_db(transaction=True)
+@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 @pytest.mark.asyncio
 async def test_get_manifests_from_miners():
     """
@@ -198,7 +198,7 @@ async def test_get_manifests_from_miners():
     )
 
 
-@pytest.mark.django_db(transaction=True)
+@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 @pytest.mark.asyncio
 async def test_poll_miner_manifests_with_partial_failures(monkeypatch):
     """
@@ -236,7 +236,7 @@ async def test_poll_miner_manifests_with_partial_failures(monkeypatch):
     assert miner1_manifest[ExecutorClass.always_on__gpu_24gb] == 2
 
 
-@pytest.mark.django_db(transaction=True)
+@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 @pytest.mark.asyncio
 async def test_poll_miner_manifests_multiple_calls(monkeypatch):
     """
@@ -291,7 +291,7 @@ async def test_poll_miner_manifests_multiple_calls(monkeypatch):
     )
 
 
-@pytest.mark.django_db(transaction=True)
+@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 @pytest.mark.asyncio
 async def test_poll_miner_manifests_with_partial_transport_failures(
     monkeypatch,
@@ -346,7 +346,7 @@ async def test_poll_miner_manifests_with_partial_transport_failures(
     assert miner2_manifest[ExecutorClass.spin_up_4min__gpu_24gb] == 0
 
 
-@pytest.mark.django_db(transaction=True)
+@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 @pytest.mark.asyncio
 async def test_poll_miner_manifests_no_duplicate_offline_records(monkeypatch):
     """
