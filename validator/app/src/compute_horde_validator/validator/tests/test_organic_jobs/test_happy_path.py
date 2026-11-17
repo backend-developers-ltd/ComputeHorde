@@ -157,16 +157,24 @@ async def test_two_jobs(
         send_before=0,
     )
 
-    # Expected messages: auth, job1 status=accepted, job1 status=finished, job2 status=accepted
+    # Authentication followed by six status updates per job; jobs may interleave.
     await execute_scenario(until=lambda: len(faci_transport.sent) >= 13, timeout_seconds=3)
     assert len(faci_transport.sent) >= 13
 
-    j1_accepted_msg = JobStatusUpdate.model_validate_json(faci_transport.sent[2])
-    j1_finished_msg = JobStatusUpdate.model_validate_json(faci_transport.sent[6])
-    j2_accepted_msg = JobStatusUpdate.model_validate_json(faci_transport.sent[8])
-    j2_finished_msg = JobStatusUpdate.model_validate_json(faci_transport.sent[12])
+    statuses_by_job: dict[str, list[str]] = {}
+    for raw_message in faci_transport.sent[1:]:
+        message = JobStatusUpdate.model_validate_json(raw_message)
+        statuses_by_job.setdefault(message.uuid, []).append(message.status)
 
-    assert j1_accepted_msg.status == "accepted"
-    assert j1_finished_msg.status == "completed"
-    assert j2_accepted_msg.status == "accepted"
-    assert j2_finished_msg.status == "completed"
+    expected_statuses = [
+        "received",
+        "accepted",
+        "executor_ready",
+        "volumes_ready",
+        "execution_done",
+        "completed",
+    ]
+    assert statuses_by_job == {
+        job_request.uuid: expected_statuses,
+        another_job_request.uuid: expected_statuses,
+    }

@@ -113,7 +113,7 @@ async def main() -> None:
         upload_time_limit_sec=5,
     )
     streaming_job = await compute_horde_client.create_job(compute_horde_streaming_job_spec)
-    await streaming_job.wait_for_streaming(timeout=60)
+    await streaming_job.wait_for_streaming(timeout=120)
     logger.info(f"Streaming server: {streaming_job.streaming_server_address}:{streaming_job.streaming_server_port}")
 
     client = create_mt_client_with_tempfiles(

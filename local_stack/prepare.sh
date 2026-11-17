@@ -78,6 +78,7 @@ $DOCKER_COMPOSE_COMMAND up -d
 
 timeout 30s uv run python app/src/manage.py wait_for_database
 uv run python app/src/manage.py migrate
+uv run python app/src/manage.py constance set DYNAMIC_EXECUTOR_STARTUP_TIME_LIMIT 30
 uv run python app/src/manage.py debug_add_validator 5CDYBwxDZwXnYSp7E39Vy92MVbCMtcK2i953oRxDm9Veko7M
 
 # setup validator
@@ -102,6 +103,7 @@ $DOCKER_COMPOSE_COMMAND up -d
 
 timeout 30s uv run python app/src/manage.py wait_for_database
 uv run python app/src/manage.py migrate
+uv run python app/src/manage.py constance set DYNAMIC_EXECUTOR_STARTUP_TIME_LIMIT 30
 
 # setup facilitator
 
