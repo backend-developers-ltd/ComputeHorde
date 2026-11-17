@@ -2,6 +2,13 @@
 
 <!-- towncrier release notes start -->
 
+## [0.0.28](https://github.com/backend-developers-ltd/ComputeHorde/releases/tag/library-v0.0.28) - 2026-11-17
+
+### Added
+
+- Added support for the `always_on__cpu__4c__8gb` executor class with 4 CPU cores and 8 GB RAM.
+
+
 ## [0.0.27](https://github.com/backend-developers-ltd/ComputeHorde/releases/tag/library-v0.0.27) - 2026-10-26
 
 ### Fixed
