@@ -58,10 +58,13 @@ class TestFormatManifestCommitment:
             ExecutorClass.always_on__gpu_24gb: 2,
             ExecutorClass.always_on__llm__a6000: 3,
             ExecutorClass.always_on__test: 5,
+            ExecutorClass.always_on__cpu__8c__16gb: 6,
+            ExecutorClass.always_on__cpu__4c__8gb: 7,
         }
         result = format_manifest_commitment(manifest)
-        expected = "A2;L3;S1;T5"
+        expected = "A2;C6;D7;L3;S1;T5"
         assert result == expected
+        assert parse_commitment_string(result) == manifest
 
     def test_format_manifest_commitment_too_long(self):
         long_manifest = {

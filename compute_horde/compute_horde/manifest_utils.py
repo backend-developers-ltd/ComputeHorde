@@ -20,6 +20,7 @@ EXECUTOR_CLASS_TO_SHORT: dict[ExecutorClass, str] = {
     ExecutorClass.always_on__llm__a6000: "L",
     ExecutorClass.always_on__test: "T",
     ExecutorClass.always_on__cpu__8c__16gb: "C",
+    ExecutorClass.always_on__cpu__4c__8gb: "D",
 }
 
 SHORT_TO_EXECUTOR_CLASS: dict[str, ExecutorClass] = {

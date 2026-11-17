@@ -82,13 +82,11 @@ class CustomJobRunner(DefaultJobRunner):
 
 
 @pytest.fixture(autouse=True)
-@patch("compute_horde_executor.executor.job_driver.JobDriver.run_cve_2022_0492_check_or_fail")
-@patch(
-    "compute_horde_executor.executor.job_driver.JobDriver.run_nvidia_toolkit_version_check_or_fail"
-)
-@patch("compute_horde_executor.executor.job_driver.JobDriver.run_security_checks_or_fail")
-def mock_gpu_checks(cve_check, nvidia_toolkit_check, security_check):
-    yield
+def mock_gpu_checks():
+    with patch(
+        "compute_horde_executor.executor.job_driver.JobDriver.run_security_checks_or_fail"
+    ) as security_check:
+        yield security_check
 
 
 class CommandTested(Command):
@@ -109,7 +107,7 @@ class CommandTested(Command):
         ),
     ),
 )
-def test_main_loop_basic(command_kwargs, expected_stdout):
+def test_main_loop_basic(command_kwargs, expected_stdout, mock_gpu_checks):
     job_container_name = f"ch-{uuid.uuid4()}-job"
     nginx_container_name = f"ch-{uuid.uuid4()}-nginx"
     network_name = f"ch-{uuid.uuid4()}"
@@ -183,6 +181,7 @@ def test_main_loop_basic(command_kwargs, expected_stdout):
         )
     )
     call_command(command, startup_time_limit=5, **command_kwargs)
+    mock_gpu_checks.assert_awaited_once_with(True)
     assert [json.loads(msg) for msg in command.miner_client.transport.sent_messages] == [
         {
             "message_type": "V0ExecutorReadyRequest",
