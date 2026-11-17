@@ -1,4 +1,5 @@
 import logging
+import re
 
 from compute_horde.manifest_utils import (
     extract_manifest_payload,
@@ -24,21 +25,29 @@ def commit_manifest(manifest: dict[ExecutorClass, int], pylon_client: PylonClien
     Note: Empty manifests are allowed to support "pausing" a miner.
     """
     response = pylon_client.identity.get_own_commitment()
-    current_commitment = response.commitment
+    try:
+        current_commitment = (
+            bytes.fromhex(response.commitment.removeprefix("0x")).decode("utf-8")
+            if response.commitment
+            else ""
+        )
+    except ValueError:
+        logger.exception("Failed to decode existing commitment, aborting commit")
+        return False
 
     new_manifest_string = format_manifest_commitment(manifest)
 
-    if current_commitment:
-        _, current_manifest_payload = extract_manifest_payload(current_commitment)
-        if current_manifest_payload == new_manifest_string:
-            logger.info("Manifest unchanged, skipping commit")
-            return True
-
     try:
-        merged_commitment = merge_manifest(current_commitment, new_manifest_string)
+        # Preserve explicit shield envelopes, discarding old manifests and hex garbage.
+        shield_commitment = "".join(re.findall(r"<D:[^<>]*>", current_commitment))
+        merged_commitment = merge_manifest(shield_commitment, new_manifest_string)
     except Exception as e:
         logger.error(f"Failed to merge manifest with existing commitment: {e}, aborting commit")
         return False
+
+    if current_commitment == merged_commitment:
+        logger.info("Manifest unchanged, skipping commit")
+        return True
 
     commitment_bytes = len(merged_commitment.encode("utf-8"))
     if commitment_bytes > MAX_COMMITMENT_BYTES:
