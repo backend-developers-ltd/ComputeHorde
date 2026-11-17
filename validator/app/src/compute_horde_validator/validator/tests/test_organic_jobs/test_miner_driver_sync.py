@@ -5,6 +5,7 @@ from functools import partial
 from unittest import mock
 
 import pytest
+import websockets
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.fv_protocol.facilitator_requests import OrganicJobRequest
 from compute_horde.fv_protocol.validator_requests import JobStatusUpdate
@@ -35,12 +36,16 @@ from compute_horde.receipts.schemas import (
 )
 from freezegun import freeze_time
 
-from compute_horde_validator.validator.models import Miner
+from compute_horde_validator.validator.models import Miner, MinerIncident
 from compute_horde_validator.validator.organic_jobs.facilitator_client import OrganicJob
 from compute_horde_validator.validator.organic_jobs.miner_driver_sync import (
+    DriverState,
     MinerClient,
     SyncOrganicJobDriver,
 )
+from compute_horde_validator.validator.routing.default import _get_miners_reliability_score
+from compute_horde_validator.validator.routing.types import MinerIncidentType
+from compute_horde_validator.validator.routing.utils import weighted_shuffle
 
 from ..helpers import get_dummy_job_request_v2
 
@@ -447,6 +452,83 @@ def test_sync_miner_driver_signs_job_requests(settings):
         "validator_signature": mock.ANY,
     }
     assert full_job_request.is_signed_by(my_keypair.ss58_address)
+
+
+@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
+@pytest.mark.parametrize(
+    "error",
+    [
+        ConnectionRefusedError(111, "Connection refused"),
+        TimeoutError(),
+        websockets.InvalidHandshake(),
+    ],
+)
+@pytest.mark.parametrize("recovers", [False, True])
+def test_connection_retries_account_for_one_failed_job(settings, caplog, error, recovers):
+    request = create_job_request(str(uuid.uuid4()))
+    driver, _ = _driver_for(settings, request, [])
+    driver.miner_hotkey = driver.job.miner.hotkey
+    driver.miner_client = MinerClient(
+        url="ws://miner:9999/v0.1/validator_interface/test",
+        miner_hotkey=driver.miner_hotkey,
+        validator_keypair=driver.my_keypair,
+    )
+    socket = mock.MagicMock()
+    outcomes = [error] * 4 + [socket if recovers else error]
+    with (
+        mock.patch("websockets.sync.client.connect", side_effect=outcomes) as connect,
+        mock.patch("compute_horde_validator.validator.organic_jobs.miner_driver_sync.time.sleep"),
+        freeze_time("2026-11-16 12:35:00") as clock,
+    ):
+        state = driver._connect()
+        assert connect.call_count == 5
+        assert state == (DriverState.RESERVE_EXECUTOR if recovers else DriverState.FAILED)
+        assert list(
+            MinerIncident.objects.values("type", "hotkey_ss58address", "job_uuid", "executor_class")
+        ) == (
+            []
+            if recovers
+            else [
+                {
+                    "type": MinerIncidentType.MINER_HORDE_FAILED,
+                    "hotkey_ss58address": driver.miner_hotkey,
+                    "job_uuid": uuid.UUID(request.uuid),
+                    "executor_class": request.executor_class.value,
+                }
+            ]
+        )
+        manifests = {
+            driver.miner_hotkey: {request.executor_class: 1},
+            "healthy": {request.executor_class: 1},
+        }
+
+        def scores():
+            return _get_miners_reliability_score(
+                datetime.timedelta(hours=24), request.executor_class, manifests
+            )
+
+        assert scores() == {driver.miner_hotkey: 0 if recovers else -1, "healthy": 0}
+        hotkeys, probabilities = weighted_shuffle(
+            list(scores()), list(scores().values()), center=-25, steepness=5
+        )
+        probabilities_by_hotkey = dict(zip(hotkeys, probabilities))
+        if not recovers:
+            assert probabilities_by_hotkey[driver.miner_hotkey] < probabilities_by_hotkey["healthy"]
+            assert (
+                f"job {request.uuid}: hotkey={driver.miner_hotkey} host=miner port=9999"
+                in caplog.text
+            )
+        clock.tick(datetime.timedelta(hours=24, seconds=1))
+        assert scores() == {driver.miner_hotkey: 0, "healthy": 0}
+    driver.miner_client.close()
+
+
+@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
+def test_local_connection_error_does_not_penalize_miner(settings):
+    driver, client = _driver_for(settings, create_job_request(str(uuid.uuid4())), [])
+    with mock.patch.object(client, "connect", side_effect=ValueError("local configuration error")):
+        assert driver._connect() == DriverState.FAILED
+    assert list(MinerIncident.objects.all()) == []
 
 
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)

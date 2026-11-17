@@ -5,6 +5,7 @@ import time
 from collections.abc import Callable
 from enum import Enum, auto
 from typing import TypeVar, assert_never
+from urllib.parse import urlsplit
 
 import bittensor
 import bittensor_wallet
@@ -743,10 +744,24 @@ class SyncOrganicJobDriver:
         try:
             self.miner_client.connect()
         except Exception as exc:
+            endpoint = urlsplit(self.miner_client.url)
+            logger.warning(
+                "Miner connection failed for job %s: hotkey=%s host=%s port=%s error=%s",
+                self.job.job_uuid,
+                self.miner_hotkey,
+                endpoint.hostname,
+                endpoint.port,
+                exc,
+            )
             return self._handle_horde_failure(
                 comment=f"Miner connection failed: {exc}",
                 event_subtype=SystemEvent.EventSubType.MINER_CONNECTION_ERROR,
                 horde_failure_reason=HordeFailureReason.MINER_CONNECTION_FAILED,
+                incident_type=(
+                    MinerIncidentType.MINER_HORDE_FAILED
+                    if isinstance(exc, websockets.WebSocketException | OSError)
+                    else None
+                ),
                 log_exc_info=True,
             )
 
