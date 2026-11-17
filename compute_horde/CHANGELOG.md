@@ -2,6 +2,13 @@
 
 <!-- towncrier release notes start -->
 
+## [0.0.29](https://github.com/backend-developers-ltd/ComputeHorde/releases/tag/library-v0.0.29) - 2026-11-17
+
+### Infrastructure
+
+- Re-release the library.
+
+
 ## [0.0.28](https://github.com/backend-developers-ltd/ComputeHorde/releases/tag/library-v0.0.28) - 2026-11-17
 
 ### Added
