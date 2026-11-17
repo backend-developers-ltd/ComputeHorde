@@ -230,7 +230,9 @@ def test_complete(caplog, configure_logs):
         }.items()
     )
 
-    assert len(get_metric_values_by_remaining_labels(VALIDATOR_MINER_MANIFEST_REPORT, {})) == 1280
+    assert len(get_metric_values_by_remaining_labels(VALIDATOR_MINER_MANIFEST_REPORT, {})) == (
+        len(MINER_HOTKEYS) + len(VALIDATOR_HOTKEYS)
+    ) * len(ExecutorClass)
 
     assert get_metric_values_by_remaining_labels(VALIDATOR_BLOCK_DURATION, {}) == {"": 11.99}
 
@@ -489,8 +491,8 @@ def test_complete(caplog, configure_logs):
 
     assert blocks_ == list(range(379, 1100))
 
-    assert BlockAllowance.objects.count() == 8402380
-    assert AllowanceMinerManifest.objects.count() == 7655
+    assert BlockAllowance.objects.count() == 1_680_476 * len(ExecutorClass)
+    assert AllowanceMinerManifest.objects.count() == 1531 * len(ExecutorClass)
     assert Block.objects.count() == 1101
     assert set(Neuron.objects.values_list("block", flat=True)) == set(range(1000, 1101))
     assert AllowanceBooking.objects.count() == 1
@@ -498,8 +500,8 @@ def test_complete(caplog, configure_logs):
     with set_block_number(2906):
         evict_old_data()
 
-    assert BlockAllowance.objects.count() == 2711500
-    assert AllowanceMinerManifest.objects.count() == 7655
+    assert BlockAllowance.objects.count() == 542_300 * len(ExecutorClass)
+    assert AllowanceMinerManifest.objects.count() == 1531 * len(ExecutorClass)
     assert Block.objects.count() == 360
     assert set(Neuron.objects.values_list("block", flat=True)) == set(range(1000, 1101))
     assert AllowanceBooking.objects.count() == 1
@@ -669,7 +671,7 @@ def test_allowance_reservation_corner_cases(configure_logs):
             "highest_available_allowance": LF(4.749230769230769),
             "highest_available_allowance_ss58": Matcher(r".*"),
             "highest_unspent_allowance": LF(11.86813186813187),
-            "highest_unspent_allowance_ss58": Matcher(r"stable_miner_\d{3}"),
+            "highest_unspent_allowance_ss58": Matcher(r"stable_miner_\d{3}|malforming_miner_249"),
         }
 
         for res_id in reservations:

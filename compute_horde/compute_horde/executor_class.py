@@ -50,6 +50,13 @@ EXECUTOR_CLASS = {
         cpu_cores=8,
         ram_gb=16,
     ),
+    ExecutorClass.always_on__cpu__4c__8gb: ExecutorClassSpec(
+        description="always on, CPU machine with 4 cores and 8GB RAM",
+        has_gpu=False,
+        spin_up_time=30,  # FIXME: temporary value for debugging
+        cpu_cores=4,
+        ram_gb=8,
+    ),
 }
 
 # This is the upper TTL for executors, after which executor pool kills an executor.
