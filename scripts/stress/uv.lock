@@ -450,7 +450,7 @@ wheels = [
 
 [[package]]
 name = "compute-horde"
-version = "0.0.28"
+version = "0.0.29"
 source = { editable = "../../compute_horde" }
 dependencies = [
     { name = "aiohttp" },
