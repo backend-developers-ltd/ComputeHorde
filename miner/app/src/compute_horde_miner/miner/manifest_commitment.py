@@ -7,6 +7,7 @@ from compute_horde.manifest_utils import (
     merge_manifest,
 )
 from compute_horde_core.executor_class import ExecutorClass
+from django.conf import settings
 from pylon_client.v1 import PylonClient, PylonResponseException
 
 logger = logging.getLogger(__name__)
@@ -24,7 +25,7 @@ def commit_manifest(manifest: dict[ExecutorClass, int], pylon_client: PylonClien
 
     Note: Empty manifests are allowed to support "pausing" a miner.
     """
-    response = pylon_client.identity.get_own_commitment()
+    response = pylon_client.v1.identity.get_own_commitment()
     try:
         current_commitment = (
             bytes.fromhex(response.commitment.removeprefix("0x")).decode("utf-8")
@@ -45,7 +46,11 @@ def commit_manifest(manifest: dict[ExecutorClass, int], pylon_client: PylonClien
         logger.error(f"Failed to merge manifest with existing commitment: {e}, aborting commit")
         return False
 
-    if current_commitment == merged_commitment:
+    if (
+        current_commitment == merged_commitment
+        and response.block.number - response.commitment_block_number
+        < settings.MANIFEST_COMMITMENT_REFRESH_BLOCKS
+    ):
         logger.info("Manifest unchanged, skipping commit")
         return True
 
@@ -65,7 +70,7 @@ def commit_manifest(manifest: dict[ExecutorClass, int], pylon_client: PylonClien
         logger.info(f"Committing manifest to chain: {new_manifest_string or '(empty)'}")
 
     try:
-        pylon_client.identity.set_commitment(merged_commitment.encode("utf-8"))
+        pylon_client.v1.identity.set_commitment(merged_commitment.encode("utf-8"))
     except PylonResponseException as e:
         logger.warning("Failed to commit manifest to chain", exc_info=e)
         return False

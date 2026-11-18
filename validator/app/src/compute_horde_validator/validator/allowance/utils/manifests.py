@@ -9,6 +9,7 @@ from compute_horde.manifest_utils import extract_manifest_payload, parse_commitm
 from compute_horde.miner_client.organic import OrganicMinerClient
 from compute_horde_core.executor_class import ExecutorClass
 from constance import config
+from django.conf import settings as django_settings
 from django.db import transaction
 from django.db.models import Min, Q
 
@@ -194,9 +195,10 @@ def sync_manifests():
     ]
 
     if config.DYNAMIC_MANIFESTS_USE_KNOWLEDGE_COMMITMENTS:
-        current_block = supertensor().get_current_block()
-        commitments = supertensor().get_commitments(current_block)
-        new_manifests = parse_commitments_to_manifests(commitments or {})
+        commitments = supertensor().get_recent_commitments(
+            block, django_settings.MANIFEST_COMMITMENT_MAX_AGE_BLOCKS
+        )
+        new_manifests = parse_commitments_to_manifests(commitments)
     else:
         new_manifests = event_loop().run_until_complete(fetch_manifests_from_miners(miners))
 
