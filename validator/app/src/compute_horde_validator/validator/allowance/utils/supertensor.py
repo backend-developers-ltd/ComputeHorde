@@ -326,13 +326,23 @@ class SuperTensor(BaseSuperTensor):
     def get_recent_commitments(self, block_number: int, max_age_blocks: int) -> dict[str, bytes]:
         with pylon_client() as client:
             response = client.unstable.identity.get_commitments()
-            oldest_block = max(block_number, response.block.number) - max_age_blocks
-            return {
-                hotkey: bytes.fromhex(commitment.commitment.removeprefix("0x"))
-                for hotkey, commitment in response.commitments.items()
-                if isinstance(commitment, HexDataCommitment)
-                and commitment.commitment_block_number >= oldest_block
-            }
+        current_block = max(block_number, response.block.number)
+        recent = {}
+        for hotkey, commitment in response.commitments.items():
+            if not isinstance(commitment, HexDataCommitment):
+                continue
+            age = current_block - commitment.commitment_block_number
+            if age > max_age_blocks:
+                logger.info(
+                    "Ignoring stale commitment for %s from block %d: age %d blocks exceeds limit %d",
+                    hotkey,
+                    commitment.commitment_block_number,
+                    age,
+                    max_age_blocks,
+                )
+                continue
+            recent[hotkey] = bytes.fromhex(commitment.commitment.removeprefix("0x"))
+        return recent
 
     @archive_fallback
     @make_sync
