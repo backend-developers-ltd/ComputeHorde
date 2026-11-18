@@ -11,20 +11,30 @@ def pylon_hex(value: str) -> str:
     return "0x" + value.encode("utf-8").hex()
 
 
+def own_commitment(commitment: str | None, age: int = 0):
+    return Mock(
+        commitment=commitment, block=Mock(number=20_000), commitment_block_number=20_000 - age
+    )
+
+
 class TestCommitManifest:
     def test_commit_manifest_success(self, mock_pylon_client):
         manifest = {ExecutorClass.always_on__gpu_24gb: 3}
-        mock_pylon_client.identity.get_own_commitment.return_value = Mock(commitment=None)
+        mock_pylon_client.v1.identity.get_own_commitment.return_value = own_commitment(
+            commitment=None
+        )
 
         result = commit_manifest(manifest, mock_pylon_client)
 
         assert result is True
-        mock_pylon_client.identity.set_commitment.assert_called_once_with(b"<M:A3>")
+        mock_pylon_client.v1.identity.set_commitment.assert_called_once_with(b"<M:A3>")
 
     def test_commit_manifest_failure(self, mock_pylon_client):
         manifest = {ExecutorClass.always_on__gpu_24gb: 3}
-        mock_pylon_client.identity.get_own_commitment.return_value = Mock(commitment=None)
-        mock_pylon_client.identity.set_commitment.side_effect = PylonResponseException()
+        mock_pylon_client.v1.identity.get_own_commitment.return_value = own_commitment(
+            commitment=None
+        )
+        mock_pylon_client.v1.identity.set_commitment.side_effect = PylonResponseException()
 
         result = commit_manifest(manifest, mock_pylon_client)
 
@@ -32,44 +42,58 @@ class TestCommitManifest:
 
     def test_commit_manifest_exception_propagates(self, mock_pylon_client):
         manifest = {ExecutorClass.always_on__gpu_24gb: 3}
-        mock_pylon_client.identity.get_own_commitment.return_value = Mock(commitment=None)
-        mock_pylon_client.identity.set_commitment.side_effect = PylonRequestException()
+        mock_pylon_client.v1.identity.get_own_commitment.return_value = own_commitment(
+            commitment=None
+        )
+        mock_pylon_client.v1.identity.set_commitment.side_effect = PylonRequestException()
 
         with pytest.raises(PylonRequestException):
             commit_manifest(manifest, mock_pylon_client)
 
     def test_commit_manifest_empty_manifest(self, mock_pylon_client):
         manifest = {}
-        mock_pylon_client.identity.get_own_commitment.return_value = Mock(commitment=None)
+        mock_pylon_client.v1.identity.get_own_commitment.return_value = own_commitment(
+            commitment=None
+        )
 
         result = commit_manifest(manifest, mock_pylon_client)
 
         assert result is True
-        mock_pylon_client.identity.set_commitment.assert_called_once_with(b"<M:>")
+        mock_pylon_client.v1.identity.set_commitment.assert_called_once_with(b"<M:>")
 
     def test_commit_manifest_unchanged_manifest(self, mock_pylon_client):
         manifest = {ExecutorClass.always_on__gpu_24gb: 3}
-        mock_pylon_client.identity.get_own_commitment.return_value = Mock(
+        mock_pylon_client.v1.identity.get_own_commitment.return_value = own_commitment(
             commitment=pylon_hex("<M:A3>")
         )
 
         result = commit_manifest(manifest, mock_pylon_client)
 
         assert result is True
-        mock_pylon_client.identity.set_commitment.assert_not_called()
+        mock_pylon_client.v1.identity.set_commitment.assert_not_called()
+
+    @pytest.mark.parametrize("age, refresh", [(4_999, False), (5_000, True), (5_001, True)])
+    def test_refresh_unchanged_manifest(self, mock_pylon_client, age, refresh):
+        identity = mock_pylon_client.v1.identity
+        identity.get_own_commitment.return_value = own_commitment(pylon_hex("<M:A3>"), age)
+        assert commit_manifest({ExecutorClass.always_on__gpu_24gb: 3}, mock_pylon_client)
+        if refresh:
+            identity.set_commitment.assert_called_once_with(b"<M:A3>")
+        else:
+            identity.set_commitment.assert_not_called()
 
     def test_commit_manifest_replaces_other_data_even_when_manifest_unchanged(
         self, mock_pylon_client
     ):
         manifest = {ExecutorClass.always_on__gpu_24gb: 3}
-        mock_pylon_client.identity.get_own_commitment.return_value = Mock(
+        mock_pylon_client.v1.identity.get_own_commitment.return_value = own_commitment(
             commitment=pylon_hex("https://example.com<M:A3>")
         )
 
         result = commit_manifest(manifest, mock_pylon_client)
 
         assert result is True
-        mock_pylon_client.identity.set_commitment.assert_called_once_with(b"<M:A3>")
+        mock_pylon_client.v1.identity.set_commitment.assert_called_once_with(b"<M:A3>")
 
     @pytest.mark.parametrize("layers", [1, 2, 3])
     @pytest.mark.parametrize("other_data", ["", "<D:https://example.com/old-shield>"])
@@ -78,21 +102,21 @@ class TestCommitManifest:
         commitment = other_data + "<M:C1>"
         for _ in range(layers):
             commitment = pylon_hex(commitment) + "<M:C1>"
-        mock_pylon_client.identity.get_own_commitment.return_value = Mock(
+        mock_pylon_client.v1.identity.get_own_commitment.return_value = own_commitment(
             commitment=pylon_hex(commitment)
         )
         manifest = {ExecutorClass.always_on__cpu__8c__16gb: count} if count else {}
         expected = (f"<M:C{count}>" if count else "<M:>").encode("utf-8")
 
         assert commit_manifest(manifest, mock_pylon_client) is True
-        mock_pylon_client.identity.set_commitment.assert_called_once_with(expected)
+        mock_pylon_client.v1.identity.set_commitment.assert_called_once_with(expected)
 
-        mock_pylon_client.identity.set_commitment.reset_mock()
-        mock_pylon_client.identity.get_own_commitment.return_value = Mock(
+        mock_pylon_client.v1.identity.set_commitment.reset_mock()
+        mock_pylon_client.v1.identity.get_own_commitment.return_value = own_commitment(
             commitment="0x" + expected.hex()
         )
         assert commit_manifest(manifest, mock_pylon_client) is True
-        mock_pylon_client.identity.set_commitment.assert_not_called()
+        mock_pylon_client.v1.identity.set_commitment.assert_not_called()
 
     @pytest.mark.parametrize(
         "old_manifest",
@@ -105,7 +129,7 @@ class TestCommitManifest:
     ):
         shield = "<D:https://example.com/é>"
         commitment = shield + old_manifest if shield_first else old_manifest + shield
-        mock_pylon_client.identity.get_own_commitment.return_value = Mock(
+        mock_pylon_client.v1.identity.get_own_commitment.return_value = own_commitment(
             commitment=pylon_hex(commitment)
         )
         manifest = {} if empty_manifest else {ExecutorClass.always_on__gpu_24gb: 3}
@@ -113,66 +137,70 @@ class TestCommitManifest:
 
         assert commit_manifest(manifest, mock_pylon_client) is True
         if commitment == expected:
-            mock_pylon_client.identity.set_commitment.assert_not_called()
+            mock_pylon_client.v1.identity.set_commitment.assert_not_called()
         else:
-            mock_pylon_client.identity.set_commitment.assert_called_once_with(expected.encode())
+            mock_pylon_client.v1.identity.set_commitment.assert_called_once_with(expected.encode())
 
-        mock_pylon_client.identity.set_commitment.reset_mock()
-        mock_pylon_client.identity.get_own_commitment.return_value = Mock(
+        mock_pylon_client.v1.identity.set_commitment.reset_mock()
+        mock_pylon_client.v1.identity.get_own_commitment.return_value = own_commitment(
             commitment=pylon_hex(expected)
         )
         assert commit_manifest(manifest, mock_pylon_client) is True
-        mock_pylon_client.identity.set_commitment.assert_not_called()
+        mock_pylon_client.v1.identity.set_commitment.assert_not_called()
 
     @pytest.mark.parametrize("size, success", [(128, True), (129, False)])
     def test_shield_counts_towards_byte_limit(self, mock_pylon_client, size, success):
         shield = "<D:" + "é" * 59 + "x" * (size - 128) + ">"
-        mock_pylon_client.identity.get_own_commitment.return_value = Mock(
+        mock_pylon_client.v1.identity.get_own_commitment.return_value = own_commitment(
             commitment=pylon_hex(shield + "<M:A2>")
         )
 
         assert commit_manifest({ExecutorClass.always_on__gpu_24gb: 3}, mock_pylon_client) is success
         if success:
-            mock_pylon_client.identity.set_commitment.assert_called_once_with(
+            mock_pylon_client.v1.identity.set_commitment.assert_called_once_with(
                 (shield + "<M:A3>").encode()
             )
         else:
-            mock_pylon_client.identity.set_commitment.assert_not_called()
+            mock_pylon_client.v1.identity.set_commitment.assert_not_called()
 
     @pytest.mark.parametrize(
         "other_data",
         ["https://example.com/é", "0xdeadbeef", "0x123", "0xzz", pylon_hex("other data")],
     )
     def test_update_replaces_other_data(self, mock_pylon_client, other_data):
-        mock_pylon_client.identity.get_own_commitment.return_value = Mock(
+        mock_pylon_client.v1.identity.get_own_commitment.return_value = own_commitment(
             commitment=pylon_hex(other_data + "<M:A2>")
         )
 
         assert commit_manifest({ExecutorClass.always_on__gpu_24gb: 3}, mock_pylon_client)
-        mock_pylon_client.identity.set_commitment.assert_called_once_with(b"<M:A3>")
+        mock_pylon_client.v1.identity.set_commitment.assert_called_once_with(b"<M:A3>")
 
     @pytest.mark.parametrize("commitment", ["0xzz", "0x1", "0xff"])
     def test_invalid_response_is_not_overwritten(self, mock_pylon_client, commitment):
-        mock_pylon_client.identity.get_own_commitment.return_value = Mock(commitment=commitment)
+        mock_pylon_client.v1.identity.get_own_commitment.return_value = own_commitment(
+            commitment=commitment
+        )
 
         assert commit_manifest({ExecutorClass.always_on__gpu_24gb: 3}, mock_pylon_client) is False
-        mock_pylon_client.identity.set_commitment.assert_not_called()
+        mock_pylon_client.v1.identity.set_commitment.assert_not_called()
 
     @pytest.mark.parametrize("size, success", [(128, True), (129, False)])
     def test_commitment_byte_limit(self, mock_pylon_client, size, success):
         count = 10 ** (size - 6)
-        mock_pylon_client.identity.get_own_commitment.return_value = Mock(commitment=None)
+        mock_pylon_client.v1.identity.get_own_commitment.return_value = own_commitment(
+            commitment=None
+        )
 
         assert (
             commit_manifest({ExecutorClass.always_on__gpu_24gb: count}, mock_pylon_client)
             is success
         )
         if success:
-            mock_pylon_client.identity.set_commitment.assert_called_once_with(
+            mock_pylon_client.v1.identity.set_commitment.assert_called_once_with(
                 f"<M:A{count}>".encode()
             )
         else:
-            mock_pylon_client.identity.set_commitment.assert_not_called()
+            mock_pylon_client.v1.identity.set_commitment.assert_not_called()
 
 
 @pytest.mark.django_db

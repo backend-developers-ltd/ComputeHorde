@@ -158,6 +158,7 @@ cat > .env <<ENDENV
 SECRET_KEY=$(python3 -c 'import secrets; print(secrets.token_urlsafe(25))')
 POSTGRES_PASSWORD=$(python3 -c 'import secrets; print(secrets.token_urlsafe(16))')
 BITTENSOR_NETUID=12
+MANIFEST_COMMITMENT_REFRESH_BLOCKS=5000
 
 # leave it as "finney" if you want to use the public mainnet chain
 BITTENSOR_NETWORK=finney

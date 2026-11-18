@@ -1,3 +1,4 @@
+from types import SimpleNamespace
 from unittest.mock import create_autospec
 
 import pytest
@@ -11,4 +12,5 @@ def mock_pylon_client():
     mocked.__enter__.return_value = mocked
     mocked.open_access = create_autospec(AbstractOpenAccessApi, instance=True)
     mocked.identity = create_autospec(AbstractIdentityApi, instance=True)
+    mocked.v1 = SimpleNamespace(identity=mocked.identity, open_access=mocked.open_access)
     return mocked

@@ -428,7 +428,9 @@ def set_block_number(block_number_, oldest_reachable_block: float | int = float(
                 ],
             )
 
-        def get_commitments(self, block_number: int) -> dict[str, bytes]:
+        def get_recent_commitments(
+            self, block_number: int, max_age_blocks: int
+        ) -> dict[str, bytes]:
             return {}
 
         def get_hyperparameters(self, block_number: int) -> SubnetHyperparams | None:

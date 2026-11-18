@@ -16,6 +16,7 @@ import websockets
 from bt_ddos_shield.shield_metagraph import ShieldMetagraphOptions
 from bt_ddos_shield.turbobt import ShieldedBittensor
 from compute_horde.blockchain.block_cache import get_current_block
+from pylon_client.artanis.unstable import HexDataCommitment
 from pylon_client.v1 import GetNeuronsResponse, Neuron
 from turbobt.subtensor.runtime.subnet_info import SubnetHyperparams
 
@@ -167,7 +168,9 @@ class BaseSuperTensor(abc.ABC):
     def oldest_reachable_block(self) -> float | int: ...
 
     @abc.abstractmethod
-    def get_commitments(self, block_number: int) -> dict[str, bytes]: ...
+    def get_recent_commitments(
+        self, block_number: int, max_age_blocks: int
+    ) -> dict[str, bytes]: ...
 
     @abc.abstractmethod
     def get_hyperparameters(self, block_number: int) -> SubnetHyperparams | None: ...
@@ -320,12 +323,15 @@ class SuperTensor(BaseSuperTensor):
     def get_subnet_state(self, block_number: int) -> turbobt.subnet.SubnetState:
         return self._get_subnet_state(block_number)
 
-    def get_commitments(self, block_number: int) -> dict[str, bytes]:
+    def get_recent_commitments(self, block_number: int, max_age_blocks: int) -> dict[str, bytes]:
         with pylon_client() as client:
-            response = client.identity.get_commitments()
+            response = client.unstable.identity.get_commitments()
+            oldest_block = max(block_number, response.block.number) - max_age_blocks
             return {
-                hotkey: bytes.fromhex(commitment.removeprefix("0x"))
+                hotkey: bytes.fromhex(commitment.commitment.removeprefix("0x"))
                 for hotkey, commitment in response.commitments.items()
+                if isinstance(commitment, HexDataCommitment)
+                and commitment.commitment_block_number >= oldest_block
             }
 
     @archive_fallback
