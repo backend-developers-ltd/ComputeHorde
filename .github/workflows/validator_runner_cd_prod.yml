@@ -11,6 +11,7 @@ env:
   DOCKER_REPO_NAME: "backenddevelopersltd/compute-horde-validator-runner"
   DOCKER_NGINX_REPO_NAME: "backenddevelopersltd/compute-horde-validator-nginx"
   VALIDATOR_IMAGE_REPO: "compute-horde-validator"
+  VALIDATOR_NGINX_IMAGE_REPO: "compute-horde-validator-nginx"
   DIST_VERSION_PREFIX: "validator-runner-prod"
 
 jobs:
@@ -30,6 +31,7 @@ jobs:
             -t "${IMAGE_NAME}" \
             --build-arg VALIDATOR_RUNNER_VERSION="${GITHUB_SHA}" \
             --build-arg VALIDATOR_IMAGE_REPO="${VALIDATOR_IMAGE_REPO}" \
+            --build-arg VALIDATOR_NGINX_IMAGE_REPO="${VALIDATOR_NGINX_IMAGE_REPO}" \
             .
 
           docker image tag "${IMAGE_NAME}" "${SHA_IMAGE_NAME}"
