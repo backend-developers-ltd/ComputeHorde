@@ -326,7 +326,7 @@ services:
       - "com.centurylinklabs.watchtower.enable=true"
 
   nginx:
-    image: backenddevelopersltd/compute-horde-validator-nginx:v0-latest
+    image: backenddevelopersltd/${VALIDATOR_NGINX_IMAGE_REPO:-compute-horde-validator-nginx}:v0-latest
     restart: unless-stopped
     healthcheck:
       test: wget -q --spider 0.0.0.0:80/admin/login/ || exit 1
