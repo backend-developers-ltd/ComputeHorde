@@ -183,6 +183,7 @@ class DockerExecutorManager(BaseExecutorManager):
         env = [
             f"MINER_ADDRESS=ws://{settings.ADDRESS_FOR_EXECUTORS}:{settings.PORT_FOR_EXECUTORS}",
             f"EXECUTOR_TOKEN={token}",
+            f"EXECUTOR_CACHE_MAX_BYTES={settings.EXECUTOR_CACHE_MAX_BYTES}",
         ]
         if settings.DEBUG_NO_GPU_MODE:
             env.append("DEBUG_NO_GPU_MODE=1")

@@ -27,6 +27,7 @@ class DevExecutorManager(BaseExecutorManager):
         env = {
             "MINER_ADDRESS": f"ws://{settings.ADDRESS_FOR_EXECUTORS}:{settings.PORT_FOR_EXECUTORS}",
             "EXECUTOR_TOKEN": token,
+            "EXECUTOR_CACHE_MAX_BYTES": str(settings.EXECUTOR_CACHE_MAX_BYTES),
             "PATH": os.environ["PATH"],
             "NGINX_PORT": str(nginx_port),
             "EXECUTOR_ON_HOST": "1",

@@ -7,7 +7,9 @@ from unittest.mock import patch
 import jwt
 import pytest
 from bittensor_wallet import Wallet
+from compute_horde.protocol_messages import V0JobRequest
 from compute_horde_core.executor_class import ExecutorClass
+from compute_horde_sdk.v1 import HTTPInputVolume
 from django.conf import settings
 from django.contrib.auth.models import User
 from rest_framework.exceptions import ErrorDetail
@@ -149,7 +151,10 @@ def test_job_viewset_retrieve_docker(api_client, user, job_docker):
 @pytest.mark.django_db
 def test_docker_job_viewset_create(api_client, user, connected_validator, mock_signature_from_request):
     api_client.force_authenticate(user=user)
+    volume = HTTPInputVolume(url="https://example.org/data", cache_ttl_seconds=3600, cache_key="dataset/v1")
+    wire = volume.to_compute_horde_volume("/volume/nested/data").model_dump(mode="json")
     data = {
+        "volumes": [wire],
         "docker_image": "hello-world",
         "args": ["my", "args"],
         "env": {"MY_ENV": "my value"},
@@ -160,7 +165,7 @@ def test_docker_job_viewset_create(api_client, user, connected_validator, mock_s
         "streaming_start_time_limit": 1,
         "upload_time_limit": 1,
     }
-    response = api_client.post("/api/v1/job-docker/", data)
+    response = api_client.post("/api/v1/job-docker/", data, format="json")
     assert response.status_code == 201
     assert Job.objects.count() == 1
     job = Job.objects.first()
@@ -168,6 +173,19 @@ def test_docker_job_viewset_create(api_client, user, connected_validator, mock_s
     assert job.args == ["my", "args"]
     assert job.env == {"MY_ENV": "my value"}
     assert job.user == user
+    dispatch = job.as_job_request()
+    assert dispatch.get_signed_fields().volumes == [wire]
+    native = V0JobRequest.model_validate(
+        {
+            "job_uuid": str(job.uuid),
+            "executor_class": job.executor_class,
+            "docker_image": job.docker_image,
+            "docker_run_options_preset": "none",
+            "docker_run_cmd": job.args,
+            "volume": dispatch.model_dump(mode="json")["volume"],
+        }
+    )
+    assert native.volume.model_dump(mode="json") == {"volume_type": "multi_volume", "volumes": [wire]}
 
 
 @pytest.mark.django_db

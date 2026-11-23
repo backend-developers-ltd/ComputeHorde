@@ -171,6 +171,10 @@ async def main():
 asyncio.run(main())
 ```
 
+### Sharing immutable HTTP inputs
+
+For input caching, pass a versioned `cache_key` and positive `cache_ttl_seconds` to `HTTPInputVolume`.
+
 ### 📤 Uploading Output to S3 or R2 (Presigned URLs)
 
 ComputeHorde lets you store output files externally using **HTTP PUT or POST uploads** to any S3-compatible service (e.g., AWS S3, Cloudflare R2).

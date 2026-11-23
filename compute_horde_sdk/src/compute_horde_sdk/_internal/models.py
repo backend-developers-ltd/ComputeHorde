@@ -261,7 +261,7 @@ class HuggingfaceInputVolume(pydantic.BaseModel, AbstractInputVolume):
         )
 
 
-class HTTPInputVolume(pydantic.BaseModel, AbstractInputVolume):
+class HTTPInputVolume(compute_horde_volume.HTTPInputCachePolicy, AbstractInputVolume):
     """Volume for downloading files from the Internet via HTTP."""
 
     url: str
@@ -272,6 +272,8 @@ class HTTPInputVolume(pydantic.BaseModel, AbstractInputVolume):
         return compute_horde_volume.SingleFileVolume(
             relative_path=relative_path,
             url=self.url,
+            cache_ttl_seconds=self.cache_ttl_seconds,
+            cache_key=self.cache_key,
         )
 
 
