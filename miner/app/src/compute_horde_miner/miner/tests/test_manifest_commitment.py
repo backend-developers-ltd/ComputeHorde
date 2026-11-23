@@ -202,6 +202,35 @@ class TestCommitManifest:
         else:
             mock_pylon_client.v1.identity.set_commitment.assert_not_called()
 
+    FACTORY = "<F:factory-horde-factory@" + "A" * 43 + ">"
+
+    @pytest.mark.parametrize("old_manifest", ["", "<M:A2>", "<M:A3>"])
+    @pytest.mark.parametrize("shield", ["", "<D:https://example.com/s>"])
+    def test_preserves_factory_horde_submission(self, mock_pylon_client, old_manifest, shield):
+        current = shield + self.FACTORY + old_manifest
+        mock_pylon_client.v1.identity.get_own_commitment.return_value = own_commitment(
+            commitment=pylon_hex(current)
+        )
+        expected = shield + self.FACTORY + "<M:A3>"
+
+        assert commit_manifest({ExecutorClass.always_on__gpu_24gb: 3}, mock_pylon_client) is True
+        if current == expected:
+            mock_pylon_client.v1.identity.set_commitment.assert_not_called()
+        else:
+            mock_pylon_client.v1.identity.set_commitment.assert_called_once_with(
+                expected.encode("utf-8")
+            )
+
+    def test_moves_factory_horde_submission_before_manifest(self, mock_pylon_client):
+        mock_pylon_client.v1.identity.get_own_commitment.return_value = own_commitment(
+            commitment=pylon_hex("<M:A3>" + self.FACTORY)
+        )
+
+        assert commit_manifest({ExecutorClass.always_on__gpu_24gb: 3}, mock_pylon_client) is True
+        mock_pylon_client.v1.identity.set_commitment.assert_called_once_with(
+            (self.FACTORY + "<M:A3>").encode("utf-8")
+        )
+
 
 @pytest.mark.django_db
 class TestCommitManifestToChainTask:

@@ -39,9 +39,9 @@ def commit_manifest(manifest: dict[ExecutorClass, int], pylon_client: PylonClien
     new_manifest_string = format_manifest_commitment(manifest)
 
     try:
-        # Preserve explicit shield envelopes, discarding old manifests and hex garbage.
-        shield_commitment = "".join(re.findall(r"<D:[^<>]*>", current_commitment))
-        merged_commitment = merge_manifest(shield_commitment, new_manifest_string)
+        # Preserve shield and FactoryHorde (mechanism 1) envelopes, discarding old manifests and hex garbage.
+        preserved = "".join(re.findall(r"<[DF]:[^<>]*>", current_commitment))
+        merged_commitment = merge_manifest(preserved, new_manifest_string)
     except Exception as e:
         logger.error(f"Failed to merge manifest with existing commitment: {e}, aborting commit")
         return False
