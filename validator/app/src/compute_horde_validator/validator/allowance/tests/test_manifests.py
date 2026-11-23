@@ -118,6 +118,22 @@ class TestParseCommitmentsToManifests:
 
         assert result == {}
 
+    def test_parse_commitments_beside_other_envelopes(self):
+        commitments = {
+            "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY": (
+                b"<D:https://example.com/s><X:other-mechanism@" + b"A" * 43 + b"><M:A5>"
+            ),
+        }
+
+        result = parse_commitments_to_manifests(commitments)
+
+        assert result == {
+            (
+                "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
+                ExecutorClass.always_on__gpu_24gb,
+            ): 5
+        }
+
 
 @pytest.mark.django_db(transaction=True, databases=["default", "default_alias"])
 def test_expiring_chain_manifest(settings):

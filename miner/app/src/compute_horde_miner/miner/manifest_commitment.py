@@ -39,9 +39,10 @@ def commit_manifest(manifest: dict[ExecutorClass, int], pylon_client: PylonClien
     new_manifest_string = format_manifest_commitment(manifest)
 
     try:
-        # Preserve explicit shield envelopes, discarding old manifests and hex garbage.
-        shield_commitment = "".join(re.findall(r"<D:[^<>]*>", current_commitment))
-        merged_commitment = merge_manifest(shield_commitment, new_manifest_string)
+        # Keep envelopes written by others (e.g. shield <D:...>), discarding old manifests and non-envelope garbage.
+        # <M:...> is the miner's own envelope and is never preserved.
+        preserved = "".join(re.findall(r"<[A-LN-Z]:[^<>]*>", current_commitment))
+        merged_commitment = merge_manifest(preserved, new_manifest_string)
     except Exception as e:
         logger.error(f"Failed to merge manifest with existing commitment: {e}, aborting commit")
         return False
