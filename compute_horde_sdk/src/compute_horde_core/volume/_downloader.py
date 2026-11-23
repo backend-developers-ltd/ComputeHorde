@@ -9,7 +9,9 @@ import pathlib
 import random
 import tempfile
 import zipfile
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
+from contextlib import AbstractContextManager, nullcontext
+from functools import wraps
 from typing import Any
 
 import httpx
@@ -62,10 +64,22 @@ class VolumeDownloader(metaclass=abc.ABCMeta):
     def __init__(self) -> None:
         self.max_size_bytes = 2147483648
         self.max_retries = 3
+        self.cache_hook: Callable[..., AbstractContextManager[bool]] | None = None
 
     @classmethod
     def for_volume(cls, volume: Volume) -> VolumeDownloader:
         return cls.__volume_type_map[volume.__class__](volume)
+
+
+def _with_cache(download: Callable[..., Awaitable[None]]) -> Callable[..., Any]:
+    @wraps(download)
+    async def wrapped(self: Any, directory: pathlib.Path) -> None:
+        context = self.cache_hook(self.volume, directory) if self.cache_hook else nullcontext(True)
+        with context as needs_download:
+            if needs_download:
+                await download(self, directory)
+
+    return wrapped
 
 
 class HuggingfaceVolumeDownloader(VolumeDownloader):
@@ -79,6 +93,7 @@ class HuggingfaceVolumeDownloader(VolumeDownloader):
     def handles_volume_type(cls) -> type[Volume]:
         return HuggingfaceVolume
 
+    @_with_cache
     async def download(self, directory: pathlib.Path) -> None:
         with tempfile.NamedTemporaryFile():
             extraction_path = directory
@@ -153,6 +168,7 @@ class InlineVolumeDownloader(VolumeDownloader):
     def handles_volume_type(cls) -> type[Volume]:
         return InlineVolume
 
+    @_with_cache
     async def download(self, directory: pathlib.Path) -> None:
         decoded_contents = base64.b64decode(self.volume.contents)
         bytes_io = io.BytesIO(decoded_contents)
@@ -174,6 +190,7 @@ class SingleFileVolumeDownloader(VolumeDownloader):
     def handles_volume_type(cls) -> type[Volume]:
         return SingleFileVolume
 
+    @_with_cache
     async def download(self, directory: pathlib.Path) -> None:
         file_path = directory / self.volume.relative_path
         file_path.parent.mkdir(parents=True, exist_ok=True)
@@ -195,6 +212,7 @@ class ZipUrlVolumeDownloader(VolumeDownloader):
     def handles_volume_type(cls) -> type[Volume]:
         return ZipUrlVolume
 
+    @_with_cache
     async def download(self, directory: pathlib.Path) -> None:
         with tempfile.NamedTemporaryFile() as download_file:
             async with self._semaphore:
@@ -228,6 +246,7 @@ class MultiVolumeDownloader(VolumeDownloader):
             downloader = VolumeDownloader.for_volume(sub_volume)
             downloader.max_size_bytes = self.max_size_bytes
             downloader.max_retries = self.max_retries
+            downloader.cache_hook = self.cache_hook
             await downloader.download(directory)
 
 

@@ -516,7 +516,7 @@ type-check = [
 
 [[package]]
 name = "compute-horde-sdk"
-version = "0.0.21"
+version = "0.0.22"
 source = { editable = "../../compute_horde_sdk" }
 dependencies = [
     { name = "aiohttp" },

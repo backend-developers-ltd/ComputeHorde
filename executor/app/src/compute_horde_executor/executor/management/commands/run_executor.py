@@ -40,6 +40,7 @@ class Command(BaseCommand):
     @async_to_sync
     async def handle(self, *args, **options):
         self.runner = options["job_runner_class"]()
+        await self.runner.sweep_input_cache()
         self.miner_client = self.MINER_CLIENT_CLASS(settings.MINER_ADDRESS, settings.EXECUTOR_TOKEN)
 
         driver = JobDriver(

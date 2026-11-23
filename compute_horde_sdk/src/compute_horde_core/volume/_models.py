@@ -1,6 +1,6 @@
 import enum
 import re
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 from urllib.parse import urlparse
 
 import pydantic
@@ -58,7 +58,37 @@ class ZipUrlVolume(pydantic.BaseModel):
         return False
 
 
-class SingleFileVolume(pydantic.BaseModel):
+class HTTPInputCachePolicy(pydantic.BaseModel):
+    model_config = pydantic.ConfigDict(json_schema_mode_override="validation")
+
+    cache_ttl_seconds: int | None = None
+    cache_key: str | None = Field(default=None, validate_default=True)
+
+    @pydantic.field_validator("cache_ttl_seconds", mode="before")
+    @classmethod
+    def positive_integer_ttl(cls, value: Any) -> int | None:
+        return value if type(value) is int and value > 0 else None
+
+    @pydantic.field_validator("cache_key", mode="before")
+    @classmethod
+    def validate_cache_key(cls, value: Any, info: pydantic.ValidationInfo) -> str | None:
+        if info.data.get("cache_ttl_seconds") is None:
+            return None
+        if not isinstance(value, str) or not value:
+            raise ValueError("cache_key must be a nonempty string when cache_ttl_seconds is positive")
+        value.encode("utf-8")
+        return value
+
+    @pydantic.model_serializer(mode="wrap")
+    def _omit_null_cache_fields(self, handler: pydantic.SerializerFunctionWrapHandler) -> dict[str, Any]:
+        volume: dict[str, Any] = handler(self)
+        for field in ("cache_ttl_seconds", "cache_key"):
+            if volume.get(field) is None:
+                volume.pop(field, None)
+        return volume
+
+
+class SingleFileVolume(HTTPInputCachePolicy):
     volume_type: Literal[VolumeType.single_file] = VolumeType.single_file
     url: str
     relative_path: str

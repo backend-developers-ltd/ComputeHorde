@@ -2,10 +2,12 @@ import asyncio
 import base64
 import json
 import logging
+import os
 import pathlib
 import re
 import shlex
 import shutil
+import sqlite3
 import tempfile
 from abc import ABC, abstractmethod
 from collections.abc import AsyncGenerator
@@ -13,6 +15,7 @@ from contextlib import asynccontextmanager
 from typing import Any
 
 import aiodocker
+from asgiref.sync import sync_to_async
 from compute_horde.base.docker import DockerRunOptionsPreset
 from compute_horde.job_errors import HordeError, JobError
 from compute_horde.protocol_consts import JobFailureReason
@@ -41,6 +44,7 @@ from compute_horde_core.volume import (
 )
 from django.conf import settings
 
+from compute_horde_executor.executor.input_cache import InputCache
 from compute_horde_executor.executor.miner_client import (
     ExecutionResult,
     JobResult,
@@ -153,6 +157,8 @@ class BaseJobRunner(ABC):
         self.full_job_request: V0JobRequest | None = None
 
         self.temp_dir = pathlib.Path(tempfile.mkdtemp())
+        budget = os.environ.get("EXECUTOR_CACHE_MAX_BYTES")
+        self.input_cache = InputCache(int(budget)) if budget is not None else None
         self.volume_mount_dir = self.temp_dir / "volume"
         self.output_volume_mount_dir = self.temp_dir / "output"
         self.specs_volume_mount_dir = self.temp_dir / "specs"
@@ -210,6 +216,14 @@ class BaseJobRunner(ABC):
                         await network_obj.delete()
                     except Exception as e:
                         logger.warning(f"Failed to remove network {name}: {e}")
+
+    async def sweep_input_cache(self):
+        if self.input_cache is None:
+            return
+        try:
+            await sync_to_async(self.input_cache.sweep)()
+        except (VolumeDownloadFailed, OSError, sqlite3.Error) as exc:
+            logger.warning("Input cache maintenance failed: %s", exc)
 
     async def prepare_initial(self, initial_job_request: V0InitialJobRequest):
         self.initial_job_request = initial_job_request
@@ -310,6 +324,16 @@ class BaseJobRunner(ABC):
         if self.full_job_request.artifacts_dir:
             docker_kwargs["HostConfig"]["Binds"].append(
                 f"{self.artifacts_mount_dir.as_posix()}/:{self.full_job_request.artifacts_dir}"
+            )
+        if self.input_cache and self.input_cache.mounts:
+            docker_kwargs["HostConfig"].setdefault("Mounts", []).extend(
+                {
+                    "Type": "bind",
+                    "Source": str(source),
+                    "Target": f"/volume/{target}",
+                    "ReadOnly": True,
+                }
+                for target, source in self.input_cache.mounts.items()
             )
         docker_kwargs["Env"] = [f"{k}={v}" for k, v in self.full_job_request.env.items()]
 
@@ -423,6 +447,7 @@ class BaseJobRunner(ABC):
         return artifacts
 
     async def clean(self):
+        await self.sweep_input_cache()
         # remove input/output directories with docker, to deal with funky file permissions
         root_for_remove = pathlib.Path("/temp_dir/")
         async with docker_container_wrapper(
@@ -452,6 +477,8 @@ class BaseJobRunner(ABC):
             logger.error(f"Failed to remove temp dir {self.temp_dir}: {e}")
 
     async def download_volume(self):
+        if self.input_cache:
+            self.input_cache.mounts.clear()
         assert str(self.volume_mount_dir) not in {"~", "/"}
         for path in self.volume_mount_dir.glob("*"):
             if path.is_file():
@@ -467,8 +494,12 @@ class BaseJobRunner(ABC):
             if volume_downloader.handles_volume_type() is HuggingfaceVolume:
                 if volume.token is None:
                     volume.token = settings.HF_ACCESS_TOKEN
+            if self.input_cache:
+                volume_downloader.cache_hook = self.input_cache.prepare
             try:
                 await volume_downloader.download(self.volume_mount_dir)
+                if self.input_cache:
+                    self.input_cache.create_mount_targets(self.volume_mount_dir)
             except VolumeDownloadFailed as e:
                 raise JobError(
                     f"Download failed: {str(e)}", JobFailureReason.DOWNLOAD_FAILED

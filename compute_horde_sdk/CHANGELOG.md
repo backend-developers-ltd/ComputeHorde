@@ -9,6 +9,13 @@ upcoming release can be found in [changelog.d](changelog.d).
 
 <!-- towncrier release notes start -->
 
+## [0.0.22](https://github.com/backend-developers-ltd/compute-horde-sdk/releases/tag/v0.0.22) - 2026-11-23
+
+### Added
+
+- Added support for `cache_ttl_seconds` and `cache_key` to `HTTPInputVolume` and `SingleFileVolume`.
+
+
 ## [0.0.21](https://github.com/backend-developers-ltd/compute-horde-sdk/releases/tag/v0.0.21) - 2026-11-17
 
 ### Added

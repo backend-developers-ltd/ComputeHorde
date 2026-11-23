@@ -397,7 +397,15 @@ async def test_get_job__malformed_response(apiver_module, compute_horde_client, 
 
 
 @pytest.mark.asyncio
-async def test_create_job(apiver_module, compute_horde_client, httpx_mock):
+@pytest.mark.parametrize(
+    "cache_fields",
+    [
+        pytest.param({}, id="legacy"),
+        pytest.param({"cache_ttl_seconds": None, "cache_key": None}, id="explicit-null"),
+        pytest.param({"cache_ttl_seconds": 3600, "cache_key": "dataset/v1"}, id="cached"),
+    ],
+)
+async def test_create_job(apiver_module, compute_horde_client, httpx_mock, cache_fields):
     httpx_mock.add_response(
         json=get_job_response(
             uuid=TEST_JOB_UUID,
@@ -422,7 +430,8 @@ async def test_create_job(apiver_module, compute_horde_client, httpx_mock):
                 "/volume/models/model01": apiver_module.HuggingfaceInputVolume(repo_id="myrepo/mymodel"),
                 "/volume/version.txt": apiver_module.InlineInputVolume(contents="dmVyc2lvbj0y"),
                 "/volume/dataset.json": apiver_module.HTTPInputVolume(
-                    url="https://s3.aws.something.com/mybucket/myfile.json"
+                    url="https://s3.aws.something.com/mybucket/myfile.json",
+                    **cache_fields,
                 ),
             },
             output_volumes={
@@ -467,6 +476,7 @@ async def test_create_job(apiver_module, compute_horde_client, httpx_mock):
         {
             "volume_type": "single_file",
             "relative_path": "dataset.json",
+            **{key: value for key, value in cache_fields.items() if value is not None},
             "url": "https://s3.aws.something.com/mybucket/myfile.json",
         },
     ]

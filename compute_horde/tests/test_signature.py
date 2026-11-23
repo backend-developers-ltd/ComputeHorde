@@ -16,7 +16,7 @@ from compute_horde_core.signature import (
     signature_from_headers,
     signature_payload,
 )
-from compute_horde_core.volume import HuggingfaceVolume, MultiVolume, SingleFileVolume
+from compute_horde_core.volume import HuggingfaceVolume, MultiVolume
 
 from compute_horde.fv_protocol.facilitator_requests import (
     V2JobRequest,
@@ -152,17 +152,26 @@ def test_signed_fields__missing_fields():
     assert v2_job_request.get_signed_fields() == facilitator_signed_fields
 
 
-def test_signed_fields__volumes_uploads():
+@pytest.mark.parametrize(
+    "cache_fields",
+    [
+        pytest.param({}, id="legacy"),
+        pytest.param({"cache_ttl_seconds": 60, "cache_key": "dataset/v1"}, id="cached"),
+    ],
+)
+def test_signed_fields__volumes_uploads(cache_fields):
     volumes = [
-        SingleFileVolume(
-            url="smth.amazon.com",
-            relative_path="np_data.npy",
-        ),
+        {
+            **cache_fields,
+            "volume_type": "single_file",
+            "url": "smth.amazon.com",
+            "relative_path": "np_data.npy",
+        },
         HuggingfaceVolume(
             repo_id="hug",
             revision="333",
             relative_path="./models/here",
-        ),
+        ).model_dump(),
     ]
 
     uploads = [
@@ -182,7 +191,7 @@ def test_signed_fields__volumes_uploads():
         "use_gpu": True,
         "input_url": "",
         "uploads": to_json_array(uploads),
-        "volumes": to_json_array(volumes),
+        "volumes": volumes,
         "download_time_limit": 1,
         "execution_time_limit": 1,
         "upload_time_limit": 1,
@@ -206,7 +215,8 @@ def test_signed_fields__volumes_uploads():
         upload_time_limit=1,
         streaming_start_time_limit=1,
     )
-    assert v2_job_request.get_signed_fields() == facilitator_signed_fields
+    dispatched = V2JobRequest.model_validate_json(v2_job_request.model_dump_json())
+    assert dispatched.get_signed_payload() == facilitator_signed_fields.model_dump_json()
 
 
 def test_authentication_request(keypair):

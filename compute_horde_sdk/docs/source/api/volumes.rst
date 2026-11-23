@@ -16,6 +16,40 @@ The following input volume types are supported:
 
 .. autoclass:: compute_horde_sdk.v1.InlineInputVolume
 
+Shared HTTP inputs
+~~~~~~~~~~~~~~~~~~
+
+**Opting in shares the file with every submitter on the same native Docker executor host who supplies the same key, including other validators.**
+Any of those submitters can populate the key on a miss. Use this for data intended for that sharing boundary.
+A hit skips the origin entirely, even if the new job supplies a different URL or the original signature has expired.
+
+Use the existing SDK namespace and specify the exact workload filenames in the job's
+``input_volumes`` mapping. For example, a reference image and its companion index can share a directory:
+
+.. code-block:: python
+
+    from compute_horde_sdk.v1 import HTTPInputVolume
+
+    input_volumes = {
+        "/volume/reference/img21.png": HTTPInputVolume(
+            url=image_url,
+            cache_key="ch17/reference/img21.png",
+            cache_ttl_seconds=3600,
+        ),
+        "/volume/reference/img21.png.idx": HTTPInputVolume(
+            url=index_url,
+            cache_key="ch17/reference/img21.png.idx",
+            cache_ttl_seconds=3600,
+        ),
+    }
+
+Choose an opaque, case-sensitive key for immutable bytes. Change it whenever the bytes change
+and assign each sidecar its own key. Keep credentials and signed URLs out of keys.
+The native executor bind-mounts each opted-in file read-only. Ordinary inputs in the same directory remain writable.
+
+A positive integer TTL requires a nonempty string key. Hits preserve the original expiry, and a shorter TTL in
+a later request limits the acceptable age.
+
 Output Volumes
 --------------
 
