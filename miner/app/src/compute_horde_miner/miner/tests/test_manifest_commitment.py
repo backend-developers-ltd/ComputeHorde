@@ -202,16 +202,16 @@ class TestCommitManifest:
         else:
             mock_pylon_client.v1.identity.set_commitment.assert_not_called()
 
-    FACTORY = "<F:factory-horde-factory@" + "A" * 43 + ">"
+    OTHER = "<X:other-mechanism@" + "A" * 43 + ">"
 
     @pytest.mark.parametrize("old_manifest", ["", "<M:A2>", "<M:A3>"])
     @pytest.mark.parametrize("shield", ["", "<D:https://example.com/s>"])
-    def test_preserves_factory_horde_submission(self, mock_pylon_client, old_manifest, shield):
-        current = shield + self.FACTORY + old_manifest
+    def test_preserves_other_envelopes(self, mock_pylon_client, old_manifest, shield):
+        current = shield + self.OTHER + old_manifest
         mock_pylon_client.v1.identity.get_own_commitment.return_value = own_commitment(
             commitment=pylon_hex(current)
         )
-        expected = shield + self.FACTORY + "<M:A3>"
+        expected = shield + self.OTHER + "<M:A3>"
 
         assert commit_manifest({ExecutorClass.always_on__gpu_24gb: 3}, mock_pylon_client) is True
         if current == expected:
@@ -221,14 +221,14 @@ class TestCommitManifest:
                 expected.encode("utf-8")
             )
 
-    def test_moves_factory_horde_submission_before_manifest(self, mock_pylon_client):
+    def test_moves_other_envelopes_before_manifest(self, mock_pylon_client):
         mock_pylon_client.v1.identity.get_own_commitment.return_value = own_commitment(
-            commitment=pylon_hex("<M:A3>" + self.FACTORY)
+            commitment=pylon_hex("<M:A3>" + self.OTHER)
         )
 
         assert commit_manifest({ExecutorClass.always_on__gpu_24gb: 3}, mock_pylon_client) is True
         mock_pylon_client.v1.identity.set_commitment.assert_called_once_with(
-            (self.FACTORY + "<M:A3>").encode("utf-8")
+            (self.OTHER + "<M:A3>").encode("utf-8")
         )
 
 

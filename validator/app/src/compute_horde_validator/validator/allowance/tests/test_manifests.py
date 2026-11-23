@@ -118,10 +118,10 @@ class TestParseCommitmentsToManifests:
 
         assert result == {}
 
-    def test_parse_commitments_beside_factory_horde(self):
+    def test_parse_commitments_beside_other_envelopes(self):
         commitments = {
             "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY": (
-                b"<D:https://example.com/s><F:factory-horde-factory@" + b"A" * 43 + b"><M:A5>"
+                b"<D:https://example.com/s><X:other-mechanism@" + b"A" * 43 + b"><M:A5>"
             ),
         }
 
