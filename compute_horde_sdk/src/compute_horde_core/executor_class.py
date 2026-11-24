@@ -13,3 +13,4 @@ class ExecutorClass(StrEnum):
     always_on__test = "always_on.test"
     always_on__cpu__8c__16gb = "always_on.cpu.8c.16gb"
     always_on__cpu__4c__8gb = "always_on.cpu.4c.8gb"
+    always_on__cpu__2c__4gb = "always_on.cpu.2c.4gb"
