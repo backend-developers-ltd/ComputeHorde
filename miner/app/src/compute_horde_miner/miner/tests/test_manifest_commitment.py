@@ -4,7 +4,7 @@ import pytest
 from compute_horde_core.executor_class import ExecutorClass
 from pylon_client.v1 import PylonRequestException, PylonResponseException
 
-from compute_horde_miner.miner.manifest_commitment import commit_manifest
+from compute_horde_miner.miner.manifest_commitment import MAX_COMMITMENT_BYTES, commit_manifest
 
 
 def pylon_hex(value: str) -> str:
@@ -148,7 +148,9 @@ class TestCommitManifest:
         assert commit_manifest(manifest, mock_pylon_client) is True
         mock_pylon_client.v1.identity.set_commitment.assert_not_called()
 
-    @pytest.mark.parametrize("size, success", [(128, True), (129, False)])
+    @pytest.mark.parametrize(
+        "size, success", [(MAX_COMMITMENT_BYTES, True), (MAX_COMMITMENT_BYTES + 1, False)]
+    )
     def test_shield_counts_towards_byte_limit(self, mock_pylon_client, size, success):
         shield = "<D:" + "é" * 59 + "x" * (size - 128) + ">"
         mock_pylon_client.v1.identity.get_own_commitment.return_value = own_commitment(
@@ -162,6 +164,18 @@ class TestCommitManifest:
             )
         else:
             mock_pylon_client.v1.identity.set_commitment.assert_not_called()
+
+    def test_keeps_full_factory_horde_reference(self, mock_pylon_client):
+        shield = "<D:" + "s" * 26 + ">"
+        factory = "<F:ghcr.io/backend-developers-ltd/factory-horde-factory@" + "q" * 43 + ">"
+        mock_pylon_client.v1.identity.get_own_commitment.return_value = own_commitment(
+            commitment=pylon_hex(shield + factory + "<M:A2>")
+        )
+
+        assert commit_manifest({ExecutorClass.always_on__gpu_24gb: 3}, mock_pylon_client)
+        mock_pylon_client.v1.identity.set_commitment.assert_called_once_with(
+            (shield + factory + "<M:A3>").encode()
+        )
 
     @pytest.mark.parametrize(
         "other_data",
@@ -184,11 +198,15 @@ class TestCommitManifest:
         assert commit_manifest({ExecutorClass.always_on__gpu_24gb: 3}, mock_pylon_client) is False
         mock_pylon_client.v1.identity.set_commitment.assert_not_called()
 
-    @pytest.mark.parametrize("size, success", [(128, True), (129, False)])
+    @pytest.mark.parametrize(
+        "size, success", [(MAX_COMMITMENT_BYTES, True), (MAX_COMMITMENT_BYTES + 1, False)]
+    )
     def test_commitment_byte_limit(self, mock_pylon_client, size, success):
-        count = 10 ** (size - 6)
+        count = 10**100
+        manifest = f"<M:A{count}>"
+        other = "<X:" + "x" * (size - len(manifest) - 4) + ">"
         mock_pylon_client.v1.identity.get_own_commitment.return_value = own_commitment(
-            commitment=None
+            commitment=pylon_hex(other)
         )
 
         assert (
@@ -197,7 +215,7 @@ class TestCommitManifest:
         )
         if success:
             mock_pylon_client.v1.identity.set_commitment.assert_called_once_with(
-                f"<M:A{count}>".encode()
+                (other + manifest).encode()
             )
         else:
             mock_pylon_client.v1.identity.set_commitment.assert_not_called()
