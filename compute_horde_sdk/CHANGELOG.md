@@ -9,6 +9,13 @@ upcoming release can be found in [changelog.d](changelog.d).
 
 <!-- towncrier release notes start -->
 
+## [0.0.23](https://github.com/backend-developers-ltd/compute-horde-sdk/releases/tag/v0.0.23) - 2026-11-24
+
+### Added
+
+- Added support for the `always_on__cpu__2c__4gb` executor class with 2 CPU cores and 4 GB RAM.
+
+
 ## [0.0.22](https://github.com/backend-developers-ltd/compute-horde-sdk/releases/tag/v0.0.22) - 2026-11-23
 
 ### Added
