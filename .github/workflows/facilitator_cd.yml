@@ -3,7 +3,6 @@ name: "CD: facilitator (all)"
 on:
   push:
     branches:
-      - "master"
       - "deploy-facilitator-staging"
       - "deploy-facilitator-prod"
 
@@ -30,7 +29,7 @@ jobs:
       - name: Set deployment environment
         id: set-env
         run: |
-          if [[ "${GITHUB_REF}" == "refs/heads/master" ]] || [[ "${GITHUB_REF}" == "refs/heads/deploy-facilitator-staging" ]]; then
+          if [[ "${GITHUB_REF}" == "refs/heads/deploy-facilitator-staging" ]]; then
             echo "env=staging" >> $GITHUB_OUTPUT
           elif [[ "${GITHUB_REF}" == "refs/heads/deploy-facilitator-prod" ]]; then
             echo "env=prod" >> $GITHUB_OUTPUT
