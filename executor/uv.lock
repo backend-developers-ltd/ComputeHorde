@@ -351,7 +351,7 @@ wheels = [
 
 [[package]]
 name = "bittensor-pylon-client"
-version = "2.3.1"
+version = "2.5.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "apscheduler" },
@@ -363,9 +363,9 @@ dependencies = [
     { name = "pyyaml" },
     { name = "tenacity" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/e0/a3/c46f0e6f8c0a1caf3dd4d58d1b95af78db0f7611219597a8a168b5710a10/bittensor_pylon_client-2.3.1.tar.gz", hash = "sha256:c062529c519ebe7a9278fc70229e368084ce6c07c4d40fdb4956d447fdb9330d", size = 39236, upload-time = "2026-10-22T22:27:30.303Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/48/cf/bad1ff6f1e19f27ddc03ee131ca9b03c4f8314183dad7e209e9b3ef4a3d0/bittensor_pylon_client-2.5.0.tar.gz", hash = "sha256:0759b128d4f32e1365f7784c3e5d5e23624dac3eed30130e05784808c21294f2", size = 40189, upload-time = "2026-11-24T12:33:46.633Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/ed/1e/931672841cb97459cba211ecbc99bad90ce40dad7a716db7f37c6b5c4516/bittensor_pylon_client-2.3.1-py3-none-any.whl", hash = "sha256:f6dde7450ce2da3d87f46562c978ad78a2d45cd764776cd5277b031e9f0c2814", size = 67706, upload-time = "2026-10-22T22:27:28.531Z" },
+    { url = "https://files.pythonhosted.org/packages/9e/e8/334565daf2812bc50d2079c94b81632e8a968d87c30c6701849eab6fdcb5/bittensor_pylon_client-2.5.0-py3-none-any.whl", hash = "sha256:e6dd3f451ccdf1e9fb4af4b77bb20d028158915972e29a984dfac0d8e50768a8", size = 68803, upload-time = "2026-11-24T12:33:45.561Z" },
 ]
 
 [[package]]
@@ -638,7 +638,7 @@ dependencies = [
 requires-dist = [
     { name = "aiohttp", specifier = ">=3.12.0" },
     { name = "bittensor", specifier = "~=9.9" },
-    { name = "bittensor-pylon-client", specifier = ">=2.3.0,<3.0.0" },
+    { name = "bittensor-pylon-client", specifier = ">=2.5.0,<3.0.0" },
     { name = "celery", specifier = ">=5.3.0,<6" },
     { name = "certifi", specifier = ">=2026.10.19" },
     { name = "compute-horde-sdk", editable = "../compute_horde_sdk" },

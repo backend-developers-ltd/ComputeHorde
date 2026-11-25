@@ -12,9 +12,9 @@ from pylon_client.v1 import PylonClient, PylonResponseException
 
 logger = logging.getLogger(__name__)
 
-# Maximum size for the entire commitment (including other_data + envelope)
-# This is the limit enforced by Bittensor subtensor.commit (Raw extrinsic)
-MAX_COMMITMENT_BYTES = 128
+# Maximum size for the entire commitment (other envelopes + own manifest): the chain's BigRaw bound.
+# Pylon writes up to 128 bytes as RawN and longer values as BigRaw.
+MAX_COMMITMENT_BYTES = 512
 
 
 def commit_manifest(manifest: dict[ExecutorClass, int], pylon_client: PylonClient) -> bool:
