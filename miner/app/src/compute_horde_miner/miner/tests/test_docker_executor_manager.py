@@ -11,6 +11,7 @@ from asyncssh import SSHAuthorizedKeys
 from compute_horde_core.executor_class import ExecutorClass
 
 from compute_horde_miner.miner.executor_manager._internal.docker import (
+    DockerExecutor,
     DockerExecutorManager,
 )
 
@@ -142,3 +143,39 @@ async def test_docker_executor_manager_prepare_executor_image(settings, docker_c
     await executor_manager.prepare_executor_image()
 
     await docker_client.images.inspect("alpine:latest")  # this should not raise
+
+
+@pytest.mark.asyncio
+@pytest.mark.django_db
+async def test_docker_executor_manager_kill_executor_stops_job_containers(settings, docker_client):
+    settings.ADDRESS_FOR_EXECUTORS = "127.0.0.1"
+    await docker_client.images.pull("alpine:latest")
+
+    executor_manager = DockerExecutorManager()
+    executor_class = ExecutorClass(settings.DEFAULT_EXECUTOR_CLASS)
+    server_name, server_config = executor_manager._server_manager.reserve_server(executor_class)
+
+    token = f"unittest-docker-{uuid.uuid4()}"
+    containers = {}
+    try:
+        for name in [token, f"ch-{token}-job", f"ch-{token}-nginx"]:
+            containers[name] = await docker_client.containers.run(
+                config={"Image": "alpine:latest", "Cmd": ["sleep", "300"]}, name=name
+            )
+
+        await executor_manager.kill_executor(
+            DockerExecutor(token, containers[token].id, server_name, server_config)
+        )
+
+        running = {
+            name: (await container.show())["State"]["Running"]
+            for name, container in containers.items()
+        }
+        assert running == dict.fromkeys(containers, False)
+        assert executor_manager._server_manager.reserve_server(executor_class) == (
+            server_name,
+            server_config,
+        )
+    finally:
+        for container in containers.values():
+            await container.delete(force=True)
