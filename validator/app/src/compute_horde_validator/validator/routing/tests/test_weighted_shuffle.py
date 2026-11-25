@@ -1,3 +1,4 @@
+import numpy as np
 import pytest
 
 from compute_horde_validator.validator.routing.utils import weighted_shuffle
@@ -68,7 +69,15 @@ def mean_shuffled_indices(
     return [total / iterations for total in position_sums]
 
 
-def test_weighted_shuffle_averages_out_predictably():
+@pytest.fixture
+def seeded_numpy_random():
+    state = np.random.get_state()
+    np.random.seed(0)
+    yield
+    np.random.set_state(state)
+
+
+def test_weighted_shuffle_averages_out_predictably(seeded_numpy_random):
     """
     This test is mostly a check that the shuffling function works as intended - biases by weights.
 
@@ -81,7 +90,7 @@ def test_weighted_shuffle_averages_out_predictably():
     from the center of the sigmoid. Also, the sigmoid must not be too steep. This way each weight is assigned a
     probability of being selected distinct enough from all others that after many iterations we can tell them apart.
 
-    If this breaks because an item is out of order, congratulations. You won the lottery.
+    Weights 5 and 7 are close enough to swap places in ~3% of unseeded runs, hence the fixed seed.
     """
     # Random order of weights on the input to make sure we're not just getting back the same order.
     # Some repetitions to make sure we're handling multiple instances of the same weight.
