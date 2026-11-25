@@ -1,3 +1,4 @@
+import string
 from unittest.mock import Mock, patch
 
 import pytest
@@ -175,6 +176,18 @@ class TestCommitManifest:
         assert commit_manifest({ExecutorClass.always_on__gpu_24gb: 3}, mock_pylon_client)
         mock_pylon_client.v1.identity.set_commitment.assert_called_once_with(
             (shield + factory + "<M:A3>").encode()
+        )
+
+    @pytest.mark.parametrize("tag", [t for t in string.ascii_uppercase if t != "M"])
+    def test_keeps_envelope_of_any_tag(self, mock_pylon_client, tag):
+        envelope = f"<{tag}:some-data@" + "A" * 43 + ">"
+        mock_pylon_client.v1.identity.get_own_commitment.return_value = own_commitment(
+            commitment=pylon_hex(envelope + "<M:A2>")
+        )
+
+        assert commit_manifest({ExecutorClass.always_on__gpu_24gb: 3}, mock_pylon_client)
+        mock_pylon_client.v1.identity.set_commitment.assert_called_once_with(
+            (envelope + "<M:A3>").encode()
         )
 
     @pytest.mark.parametrize(
