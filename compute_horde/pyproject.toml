@@ -19,7 +19,7 @@ dependencies = [
     "compute-horde-sdk",
     "rich~=13.9.4",
     "web3==7.16.0",
-    "bittensor-pylon-client>=2.3.0,<3.0.0",
+    "bittensor-pylon-client>=2.5.0,<3.0.0",
 ]
 
 [build-system]
