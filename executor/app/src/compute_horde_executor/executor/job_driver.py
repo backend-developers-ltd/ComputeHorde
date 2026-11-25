@@ -210,15 +210,15 @@ class JobDriver:
                 reason=HordeFailureReason.SECURITY_CHECK_FAILED,
                 context={
                     "return_code": return_code,
-                    "stdout": stdout.decode(),
-                    "stderr": stderr.decode(),
+                    "stdout": stdout,
+                    "stderr": stderr,
                 },
             )
 
         expected_output = "Contained: cannot escape via CVE-2022-0492"
         if expected_output not in stdout:
             raise HordeError(
-                f'CVE-HordeFailureReason-0492 check failed: "{expected_output}" not in stdout.',
+                f'CVE-2022-0492 check failed: "{expected_output}" not in stdout.',
                 reason=HordeFailureReason.SECURITY_CHECK_FAILED,
                 context={
                     "stdout": stdout,
@@ -278,8 +278,8 @@ class JobDriver:
                 reason=HordeFailureReason.SECURITY_CHECK_FAILED,
                 context={
                     "return_code": return_code,
-                    "stdout": stdout.decode(),
-                    "stderr": stderr.decode(),
+                    "stdout": stdout,
+                    "stderr": stderr,
                 },
             )
 
