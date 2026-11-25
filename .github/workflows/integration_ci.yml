@@ -46,3 +46,10 @@ jobs:
           name: integration-test-logs
           path: /tmp/integration_test_logs/*.log
 
+      # Background `uv run` services hold the uv cache lock, which blocks setup-uv's cache prune on a cache miss.
+      - name: Stop services
+        if: always()
+        run: |
+          pkill -f '[u]v run' || true
+          timeout 30s bash -c "while pgrep -f '[u]v run' > /dev/null; do sleep 1; done" || pkill -9 -f '[u]v run' || true
+
