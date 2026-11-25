@@ -218,15 +218,15 @@ def test_complete(caplog, configure_logs):
     assert (
         get_metric_values_by_remaining_labels(VALIDATOR_MINER_MANIFEST_REPORT, {}).items()
         >= {
-            "whacky_miner_234always_on.gpu-24gb": 0.0,
-            "whacky_miner_234always_on.llm.a6000": 0.0,
-            "whacky_miner_234spin_up-4min.gpu-24gb": 4.0,
-            "timing_out_miner_248always_on.gpu-24gb": 4.0,
-            "timing_out_miner_248always_on.llm.a6000": 1.0,
-            "timing_out_miner_248spin_up-4min.gpu-24gb": 8.0,
-            "forgetting_miner_246always_on.gpu-24gb": 2.0,
-            "forgetting_miner_246always_on.llm.a6000": 0.0,
-            "forgetting_miner_246spin_up-4min.gpu-24gb": 6.0,
+            "whacky_miner_024always_on.gpu-24gb": 0.0,
+            "whacky_miner_024always_on.llm.a6000": 0.0,
+            "whacky_miner_024spin_up-4min.gpu-24gb": 4.0,
+            "timing_out_miner_38always_on.gpu-24gb": 4.0,
+            "timing_out_miner_38always_on.llm.a6000": 1.0,
+            "timing_out_miner_38spin_up-4min.gpu-24gb": 8.0,
+            "forgetting_miner_36always_on.gpu-24gb": 2.0,
+            "forgetting_miner_36always_on.llm.a6000": 0.0,
+            "forgetting_miner_36spin_up-4min.gpu-24gb": 6.0,
         }.items()
     )
 
@@ -250,8 +250,8 @@ def test_complete(caplog, configure_logs):
             )
 
     with set_block_number(1004):
-        assert "deregging_miner_247" in [n.hotkey for n in allowance().neurons(block=1004)]
-        assert "deregging_miner_247" in [
+        assert "deregging_miner_37" in [n.hotkey for n in allowance().neurons(block=1004)]
+        assert "deregging_miner_37" in [
             el[0]
             for el in allowance().find_miners_with_allowance(
                 1.0, ExecutorClass.always_on__llm__a6000, 1004
@@ -284,8 +284,8 @@ def test_complete(caplog, configure_logs):
 
     with set_block_number(1010):
         blocks.process_block_allowance_with_reporting(1010, supertensor_=supertensor(), live=True)
-        assert "deregging_miner_247" not in [n.hotkey for n in allowance().neurons(block=1010)]
-        assert "deregging_miner_247" not in [
+        assert "deregging_miner_37" not in [n.hotkey for n in allowance().neurons(block=1010)]
+        assert "deregging_miner_37" not in [
             el[0]
             for el in allowance().find_miners_with_allowance(
                 1.0, ExecutorClass.always_on__llm__a6000, 1010
@@ -351,12 +351,12 @@ def test_complete(caplog, configure_logs):
                 {
                     "type": "COMPUTE_TIME_ALLOWANCE",
                     "subtype": "MANIFEST_TIMEOUT",
-                    "data": {"hotkey": "malforming_miner_249"},
+                    "data": {"hotkey": "malforming_miner_39"},
                 },
                 {
                     "type": "COMPUTE_TIME_ALLOWANCE",
                     "subtype": "MANIFEST_TIMEOUT",
-                    "data": {"hotkey": "timing_out_miner_248"},
+                    "data": {"hotkey": "timing_out_miner_38"},
                 },
             ]
         ):
@@ -364,12 +364,12 @@ def test_complete(caplog, configure_logs):
     new_resp = allowance().find_miners_with_allowance(
         1.0, ExecutorClass.always_on__llm__a6000, 1001
     )
-    assert len(resp) - len(new_resp) == 82  # some manifests dropped
+    assert len(resp) - len(new_resp) == 12  # some manifests dropped
     for hotkey, allowance_ in new_resp:
         assert LF(dict(resp)[hotkey]) == allowance_, hotkey  # but nothing else should have changed
 
     for block_number in range(1011, 1102):
-        with set_block_number(block_number):
+        with set_block_number(block_number, oldest_reachable_block=1000):
             if not block_number % 25:
                 sync_manifests()
                 with (
@@ -390,15 +390,15 @@ def test_complete(caplog, configure_logs):
                         VALIDATOR_MINER_MANIFEST_REPORT, {}
                     ).items()
                     >= {
-                        "forgetting_miner_246always_on.gpu-24gb": 0.0,
-                        "forgetting_miner_246always_on.llm.a6000": 1.0,
-                        "forgetting_miner_246spin_up-4min.gpu-24gb": 1.0,
-                        "timing_out_miner_248always_on.gpu-24gb": 0.0,
-                        "timing_out_miner_248always_on.llm.a6000": 0.0,
-                        "timing_out_miner_248spin_up-4min.gpu-24gb": 0.0,
-                        "whacky_miner_234always_on.gpu-24gb": 0.0,
-                        "whacky_miner_234always_on.llm.a6000": 1.0,
-                        "whacky_miner_234spin_up-4min.gpu-24gb": 9.0,
+                        "forgetting_miner_36always_on.gpu-24gb": 0.0,
+                        "forgetting_miner_36always_on.llm.a6000": 1.0,
+                        "forgetting_miner_36spin_up-4min.gpu-24gb": 1.0,
+                        "timing_out_miner_38always_on.gpu-24gb": 0.0,
+                        "timing_out_miner_38always_on.llm.a6000": 0.0,
+                        "timing_out_miner_38spin_up-4min.gpu-24gb": 0.0,
+                        "whacky_miner_024always_on.gpu-24gb": 0.0,
+                        "whacky_miner_024always_on.llm.a6000": 1.0,
+                        "whacky_miner_024spin_up-4min.gpu-24gb": 9.0,
                     }.items()
                 )
 
@@ -412,7 +412,7 @@ def test_complete(caplog, configure_logs):
         json.loads((pathlib.Path(__file__).parent / "allowance_after_100_blocks.json").read_text())
     )
 
-    assert len(get_metric_values_by_remaining_labels(VALIDATOR_ALLOWANCE_CHECKPOINT, {})) == 2910
+    assert len(get_metric_values_by_remaining_labels(VALIDATOR_ALLOWANCE_CHECKPOINT, {})) == 444
     allowance_after_100_blocks = allowance().find_miners_with_allowance(
         1.0, ExecutorClass.always_on__llm__a6000, 1101
     )
@@ -453,7 +453,7 @@ def test_complete(caplog, configure_logs):
     # a quick test to check reserving works for huge numbers of blocks
     with assert_metric_observed(VALIDATOR_RESERVE_ALLOWANCE_DURATION, "reserve_allowance"):
         reservation_id, blocks_ = allowance().reserve_allowance(
-            "stable_miner_081",
+            "stable_miner_003",
             ExecutorClass.always_on__llm__a6000,
             1755,
             1101,
@@ -464,13 +464,13 @@ def test_complete(caplog, configure_logs):
     # nothing left
     with pytest.raises(CannotReserveAllowanceException) as e2:
         allowance().reserve_allowance(
-            "stable_miner_081",
+            "stable_miner_003",
             ExecutorClass.always_on__llm__a6000,
             1.0,
             1101,
         )
     assert e2.value.to_dict() == {
-        "miner": "stable_miner_081",
+        "miner": "stable_miner_003",
         "required_allowance_seconds": LF(1.0),
         "available_allowance_seconds": LF(0.0),
     }
@@ -483,7 +483,7 @@ def test_complete(caplog, configure_logs):
     # now it's working again
     with assert_metric_observed(VALIDATOR_RESERVE_ALLOWANCE_DURATION, "reserve_allowance"):
         _, blocks_ = allowance().reserve_allowance(
-            "stable_miner_081",
+            "stable_miner_003",
             ExecutorClass.always_on__llm__a6000,
             1755,
             1101,
@@ -491,8 +491,8 @@ def test_complete(caplog, configure_logs):
 
     assert blocks_ == list(range(379, 1100))
 
-    assert BlockAllowance.objects.count() == 1_680_476 * len(ExecutorClass)
-    assert AllowanceMinerManifest.objects.count() == 1531 * len(ExecutorClass)
+    assert BlockAllowance.objects.count() == 301_826 * len(ExecutorClass)
+    assert AllowanceMinerManifest.objects.count() == 271 * len(ExecutorClass)
     assert Block.objects.count() == 1101
     assert set(Neuron.objects.values_list("block", flat=True)) == set(range(1000, 1101))
     assert AllowanceBooking.objects.count() == 1
@@ -500,8 +500,8 @@ def test_complete(caplog, configure_logs):
     with set_block_number(2906):
         evict_old_data()
 
-    assert BlockAllowance.objects.count() == 542_300 * len(ExecutorClass)
-    assert AllowanceMinerManifest.objects.count() == 1531 * len(ExecutorClass)
+    assert BlockAllowance.objects.count() == 97_310 * len(ExecutorClass)
+    assert AllowanceMinerManifest.objects.count() == 271 * len(ExecutorClass)
     assert Block.objects.count() == 360
     assert set(Neuron.objects.values_list("block", flat=True)) == set(range(1000, 1101))
     assert AllowanceBooking.objects.count() == 1
@@ -667,11 +667,13 @@ def test_allowance_reservation_corner_cases(configure_logs):
 
         with pytest.raises(NotEnoughAllowanceException) as e1:
             allowance().find_miners_with_allowance(100.0, ExecutorClass.always_on__llm__a6000, 1005)
+        unspent_miner = e1.value.highest_unspent_allowance_ss58
+        assert dict(miners_with_allowance)[unspent_miner] == LF(e1.value.highest_unspent_allowance)
         assert e1.value.to_dict() == {
             "highest_available_allowance": LF(4.749230769230769),
             "highest_available_allowance_ss58": Matcher(r".*"),
             "highest_unspent_allowance": LF(11.86813186813187),
-            "highest_unspent_allowance_ss58": Matcher(r"stable_miner_\d{3}|malforming_miner_249"),
+            "highest_unspent_allowance_ss58": unspent_miner,
         }
 
         for res_id in reservations:

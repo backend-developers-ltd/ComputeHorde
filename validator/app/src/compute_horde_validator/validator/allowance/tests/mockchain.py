@@ -17,7 +17,7 @@ from compute_horde_validator.validator.allowance.types import MetagraphData, Val
 from compute_horde_validator.validator.allowance.utils import supertensor
 from compute_horde_validator.validator.tests.transport import SimulationTransport
 
-NUM_MINERS = 250
+NUM_MINERS = 40
 NUM_VALIDATORS = 6
 NUM_BLOCKS = 100
 START_BLOCK = 1000
