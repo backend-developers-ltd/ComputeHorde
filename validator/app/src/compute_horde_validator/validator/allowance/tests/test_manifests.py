@@ -14,6 +14,10 @@ from compute_horde_validator.validator.allowance.utils.manifests import (
     sync_manifests,
 )
 from compute_horde_validator.validator.allowance.utils.supertensor import SuperTensor, supertensor
+from compute_horde_validator.validator.models.allowance.internal import (
+    AllowanceMinerManifest,
+    MinerAddress,
+)
 from compute_horde_validator.validator.tests.helpers import patch_constance
 
 
@@ -133,6 +137,46 @@ class TestParseCommitmentsToManifests:
                 ExecutorClass.always_on__gpu_24gb,
             ): 5
         }
+
+
+@pytest.mark.django_db(transaction=True, databases=["default", "default_alias"])
+def test_invalid_count_marks_only_its_class_unavailable():
+    miner, peer = MINER_HOTKEYS[0], MINER_HOTKEYS[1]
+    cpu = ExecutorClass.always_on__cpu__4c__8gb
+    gpu = ExecutorClass.always_on__gpu_24gb
+    AllowanceMinerManifest.objects.create(
+        miner_ss58address=miner,
+        executor_class=cpu,
+        executor_count=1,
+        block_number=999,
+        success=True,
+        is_drop=False,
+    )
+    with (
+        set_block_number(1000),
+        patch_constance({"DYNAMIC_MANIFESTS_USE_KNOWLEDGE_COMMITMENTS": False}),
+        patch(
+            "compute_horde_validator.validator.allowance.utils.manifests.fetch_manifests_from_miners",
+            return_value={
+                (miner, cpu): 1_000_001,
+                (miner, gpu): 6,
+                (peer, cpu): 1_000_000,
+                (peer, gpu): 0,
+            },
+        ),
+    ):
+        sync_manifests()
+
+    rows = AllowanceMinerManifest.objects.filter(
+        block_number=1000, miner_ss58address__in=[miner, peer], executor_class__in=[cpu, gpu]
+    ).values_list("miner_ss58address", "executor_class", "executor_count", "success", "is_drop")
+    assert set(rows) == {
+        (miner, cpu, 0, False, True),
+        (miner, gpu, 5, True, False),
+        (peer, cpu, 1_000_000, True, False),
+        (peer, gpu, 0, True, False),
+    }
+    assert MinerAddress.objects.filter(hotkey_ss58address=peer).exists()
 
 
 @pytest.mark.django_db(transaction=True, databases=["default", "default_alias"])

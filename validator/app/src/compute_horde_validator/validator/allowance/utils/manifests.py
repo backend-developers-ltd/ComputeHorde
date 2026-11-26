@@ -5,7 +5,11 @@ import logging
 import operator
 from functools import reduce
 
-from compute_horde.manifest_utils import extract_manifest_payload, parse_commitment_string
+from compute_horde.manifest_utils import (
+    extract_manifest_payload,
+    is_valid_executor_count,
+    parse_commitment_string,
+)
 from compute_horde.miner_client.organic import OrganicMinerClient
 from compute_horde_core.executor_class import ExecutorClass
 from constance import config
@@ -198,9 +202,15 @@ def sync_manifests():
         commitments = supertensor().get_recent_commitments(
             block, django_settings.MANIFEST_COMMITMENT_MAX_AGE_BLOCKS
         )
-        new_manifests = parse_commitments_to_manifests(commitments)
+        reported_manifests = parse_commitments_to_manifests(commitments)
     else:
-        new_manifests = event_loop().run_until_complete(fetch_manifests_from_miners(miners))
+        reported_manifests = event_loop().run_until_complete(fetch_manifests_from_miners(miners))
+
+    new_manifests = {
+        (hotkey, executor_class): min(count, max_executors_per_class.get(executor_class, count))
+        for (hotkey, executor_class), count in reported_manifests.items()
+        if is_valid_executor_count(count)
+    }
 
     with transaction.atomic():
         with Lock(LockType.ALLOWANCE_BLOCK_INJECTION, 10.0):
@@ -222,24 +232,20 @@ def sync_manifests():
             block_allowances_to_invalidate = []
             # Use a set to avoid duplicates when combining new and old manifests
             all_manifest_keys = set(itertools.chain(new_manifests.keys(), old_manifests.keys()))
-            for miner_hotkey, executor_class in all_manifest_keys:
-                is_drop = False
-                if new_manifests.get((miner_hotkey, executor_class), 0) < old_manifests.get(
-                    (miner_hotkey, executor_class), 0
-                ):
-                    is_drop = True
+            for key in all_manifest_keys:
+                miner_hotkey, executor_class = key
+                executor_count = new_manifests.get(key, 0)
+                is_drop = executor_count < old_manifests.get(key, 0)
+                if is_drop:
                     block_allowances_to_invalidate.append((miner_hotkey, executor_class.value))
                 manifests_to_inject.append(
                     AllowanceMinerManifest(
                         miner_ss58address=miner_hotkey,
                         block_number=block,
-                        success=(miner_hotkey, executor_class) in new_manifests,
+                        success=key in new_manifests,
                         executor_class=executor_class.value,
                         is_drop=is_drop,
-                        executor_count=min(
-                            new_manifests.get((miner_hotkey, executor_class), 0),
-                            max_executors_per_class.get(executor_class, float("inf")),
-                        ),
+                        executor_count=executor_count,
                     )
                 )
             if manifests_to_inject:
