@@ -10,6 +10,7 @@ from compute_horde_core.executor_class import ExecutorClass
 logger = logging.getLogger(__name__)
 
 MAX_MANIFEST_COMMITMENT_BYTES = 128
+MAX_MANIFEST_EXECUTORS_PER_CLASS = 1_000_000
 
 # Envelope pattern for manifest commitments: <M:...>
 MANIFEST_ENVELOPE_PATTERN = re.compile(r"<M:([^>]*)>")
@@ -27,6 +28,10 @@ EXECUTOR_CLASS_TO_SHORT: dict[ExecutorClass, str] = {
 SHORT_TO_EXECUTOR_CLASS: dict[str, ExecutorClass] = {
     v: k for k, v in EXECUTOR_CLASS_TO_SHORT.items()
 }
+
+
+def is_valid_executor_count(count: int) -> bool:
+    return 0 <= count <= MAX_MANIFEST_EXECUTORS_PER_CLASS
 
 
 def _iter_pairs(text: str):

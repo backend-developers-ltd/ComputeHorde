@@ -200,6 +200,32 @@ async def test_get_manifests_from_miners():
 
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 @pytest.mark.asyncio
+async def test_poll_records_zero_for_invalid_counts(monkeypatch):
+    miner = await Miner.objects.acreate(hotkey="test_miner", address="192.168.1.1", port=8080)
+    patch_allowance_metagraph(monkeypatch, [miner.hotkey])
+    manifest = {
+        ExecutorClass.always_on__gpu_24gb: -1,
+        ExecutorClass.spin_up_4min__gpu_24gb: 1_000_001,
+        ExecutorClass.always_on__llm__a6000: 1_000_000,
+    }
+    with patch(
+        "compute_horde_validator.validator.tasks.get_manifests_from_miners",
+        return_value={miner.hotkey: manifest},
+    ):
+        await _poll_miner_manifests()
+
+    rows = MinerManifest.objects.filter(miner=miner).values_list(
+        "executor_class", "executor_count", "online_executor_count"
+    )
+    assert {row async for row in rows} == {
+        (ExecutorClass.always_on__gpu_24gb, 0, 0),
+        (ExecutorClass.spin_up_4min__gpu_24gb, 0, 0),
+        (ExecutorClass.always_on__llm__a6000, 1_000_000, 1_000_000),
+    }
+
+
+@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
+@pytest.mark.asyncio
 async def test_poll_miner_manifests_with_partial_failures(monkeypatch):
     """
     Test _poll_miner_manifests with some miners failing to respond.

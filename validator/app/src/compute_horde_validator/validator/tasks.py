@@ -11,6 +11,7 @@ from celery.utils.log import get_task_logger
 from celery.utils.time import get_exponential_backoff_interval
 from compute_horde.dynamic_config import fetch_dynamic_configs_from_contract, sync_dynamic_config
 from compute_horde.fv_protocol.facilitator_requests import OrganicJobRequest
+from compute_horde.manifest_utils import is_valid_executor_count
 from compute_horde.miner_client.organic import OrganicMinerClient
 from compute_horde.smart_contracts.map_contract import get_dynamic_config_types_from_settings
 from compute_horde_core.executor_class import ExecutorClass
@@ -393,7 +394,8 @@ async def _poll_miner_manifests() -> None:
         manifest = manifests_dict.get(miner.hotkey, {})
 
         if manifest:
-            for executor_class, executor_count in manifest.items():
+            for executor_class, reported_count in manifest.items():
+                executor_count = reported_count if is_valid_executor_count(reported_count) else 0
                 manifest_records.append(
                     MinerManifest(
                         miner=miner,
@@ -402,7 +404,7 @@ async def _poll_miner_manifests() -> None:
                         online_executor_count=executor_count,
                     )
                 )
-            logger.debug(f"Stored manifest for {miner.hotkey}: {manifest}")
+            logger.debug(f"Received manifest from {miner.hotkey}: {manifest}")
         else:
             last_manifests = [
                 m

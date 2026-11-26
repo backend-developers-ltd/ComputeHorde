@@ -225,7 +225,7 @@ CONSTANCE_CONFIG = {
         "always_on.llm.a6000=2",
         (
             "The maximum number of executor for an executor class that miners are allowed to have. "
-            "Executor classes not mentioned here have no limits. "
+            "All classes are subject to the global manifest count limit. "
             "The format should be: 'key1=value1,key2=value2', "
             "where the keys are executor class enum values, and the values are integers. "
             "Setting 0 will disable an executor class."
