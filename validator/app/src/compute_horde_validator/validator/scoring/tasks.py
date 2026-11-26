@@ -120,7 +120,7 @@ def set_scores() -> None:
                     },
                 )
 
-                hotkey_scores = _score_cycles(current_block_number)
+                hotkey_scores = _score_cycles(current_block_number, [n.hotkey for n in neurons])
 
                 if not hotkey_scores:
                     logger.warning("No scores calculated")
@@ -318,12 +318,13 @@ def _get_cycles_for_scoring(current_block: int) -> tuple[int, int]:
     return current_cycle_start, previous_cycle_start
 
 
-def _score_cycles(current_block: int) -> dict[str, float]:
+def _score_cycles(current_block: int, registered_hotkeys: list[str]) -> dict[str, float]:
     """
     Score cycles.
 
     Args:
         current_block: Current block number
+        registered_hotkeys: Hotkeys registered on the subnet at current_block
 
     Returns:
         Dictionary mapping hotkey to score
@@ -347,6 +348,7 @@ def _score_cycles(current_block: int) -> dict[str, float]:
     scores = engine.calculate_scores_for_cycles(
         current_cycle_start=current_cycle_start,
         previous_cycle_start=previous_cycle_start,
+        registered_hotkeys=registered_hotkeys,
     )
 
     return scores

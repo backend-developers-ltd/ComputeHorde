@@ -405,3 +405,24 @@ def test_set_scores__multiple_starts(settings, pylon_client_mock):
         SystemEvent.EventSubType.SET_WEIGHTS_SUCCESS,
         1,
     )
+
+
+@pytest.mark.override_config(DYNAMIC_EXECUTOR_CLASS_WEIGHTS="spin_up-4min.gpu-24gb=100")
+@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
+@patch_constance({"DYNAMIC_COMMIT_REVEAL_WEIGHTS_ENABLED": False})
+@override_settings(BITTENSOR_NETUID=359)
+def test_set_scores__deregistered_hotkey_gets_no_share_of_coldkey_score(pylon_client_mock):
+    with (
+        setup_db_and_scores(hotkey_to_score={"stable_miner_000": 10, "stable_miner_001": 10}),
+        patch(
+            "compute_horde_validator.validator.scoring.engine.query_miner_main_hotkeys",
+            return_value={},
+        ),
+        set_block_number(1000),
+    ):
+        Miner.objects.filter(hotkey="stable_miner_000").update(coldkey="coldkey_000")
+        Miner.objects.create(hotkey="deregistered_miner", coldkey="coldkey_000")
+        set_scores()
+
+    weights = pylon_client_mock.identity.put_weights.call_args.args[0]
+    assert weights["stable_miner_000"] == LF(weights["stable_miner_001"])
