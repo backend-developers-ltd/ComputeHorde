@@ -1,5 +1,6 @@
 import logging
 from collections import defaultdict
+from collections.abc import Collection
 
 from compute_horde.subtensor import get_cycle_containing_block
 from django.conf import settings
@@ -30,7 +31,10 @@ class DefaultScoringEngine(ScoringEngine):
         self.main_hotkey_share = getattr(settings, "MAIN_HOTKEY_SHARE", 0.8)
 
     def calculate_scores_for_cycles(
-        self, current_cycle_start: int, previous_cycle_start: int
+        self,
+        current_cycle_start: int,
+        previous_cycle_start: int,
+        registered_hotkeys: Collection[str] | None = None,
     ) -> dict[str, float]:
         """
         Calculate scores for current cycle.
@@ -38,7 +42,8 @@ class DefaultScoringEngine(ScoringEngine):
         Args:
             current_cycle_start: Start block of current cycle
             previous_cycle_start: Start block of previous cycle
-            validator_hotkey: Validator hotkey for split retrieval
+            registered_hotkeys: Hotkeys currently registered on the subnet. When given, a
+                coldkey's score is only distributed among its registered hotkeys.
 
         Returns:
             Dictionary mapping hotkey to final score
@@ -46,6 +51,8 @@ class DefaultScoringEngine(ScoringEngine):
         logger.info(f"Calculating scores for cycle {current_cycle_start}")
 
         hotkey_to_coldkey = self._create_hotkey_to_coldkey_mapping()
+        if registered_hotkeys is not None:
+            registered_hotkeys = set(registered_hotkeys)
 
         current_cycle_range = get_cycle_containing_block(
             block=current_cycle_start, netuid=settings.BITTENSOR_NETUID
@@ -70,6 +77,7 @@ class DefaultScoringEngine(ScoringEngine):
                 current_cycle_start,
                 previous_cycle_start,
                 hotkey_to_coldkey,
+                registered_hotkeys,
             )
 
             total_executor_score = sum(final_executor_scores.values())
@@ -110,6 +118,7 @@ class DefaultScoringEngine(ScoringEngine):
         current_cycle_start: int,
         previous_cycle_start: int,
         hotkey_to_coldkey: dict[str, str],
+        registered_hotkeys: Collection[str] | None = None,
     ) -> dict[str, float]:
         """
         Apply dancing to scores.
@@ -120,11 +129,21 @@ class DefaultScoringEngine(ScoringEngine):
             previous_cycle_start: Previous cycle start block
             validator_hotkey: Validator hotkey
             hotkey_to_coldkey: Mapping from hotkey to coldkey
+            registered_hotkeys: If given, only these hotkeys receive a share of a coldkey's score
 
         Returns:
             Final scores with dancing applied
         """
         coldkey_scores = self._group_scores_by_coldkey(scores, hotkey_to_coldkey)
+
+        if registered_hotkeys is not None:
+            # Work done by a deregistered hotkey still counts for its coldkey, but only
+            # registered hotkeys can receive weight, so only they get a share.
+            hotkey_to_coldkey = {
+                hotkey: coldkey
+                for hotkey, coldkey in hotkey_to_coldkey.items()
+                if hotkey in registered_hotkeys
+            }
 
         final_scores = self._process_main_hotkeys_and_distribute(
             coldkey_scores,
@@ -429,6 +448,8 @@ class DefaultScoringEngine(ScoringEngine):
         """
         # Get all hotkeys for this coldkey
         hotkeys_in_coldkey = [hotkey for hotkey, ck in hotkey_to_coldkey.items() if ck == coldkey]
+        if not hotkeys_in_coldkey:
+            return {}
 
         if main_hotkey in hotkeys_in_coldkey:
             # If there's only one hotkey in this coldkey, give it 100% of the score
@@ -470,6 +491,8 @@ class DefaultScoringEngine(ScoringEngine):
         """
         # Get all hotkeys for this coldkey
         hotkeys_in_coldkey = [hotkey for hotkey, ck in hotkey_to_coldkey.items() if ck == coldkey]
+        if not hotkeys_in_coldkey:
+            return {}
 
         bonus_multiplier = 1.0 + self.dancing_bonus
         total_score_with_bonus = total_score * bonus_multiplier
