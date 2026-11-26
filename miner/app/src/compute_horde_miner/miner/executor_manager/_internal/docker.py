@@ -244,10 +244,11 @@ class DockerExecutorManager(BaseExecutorManager):
         logger.info("Stopping executor %s", executor.token)
 
         async with tunneled_docker_client(executor.server_config) as docker:
-            job_container_name = f"{executor.token}-job"
+            # Container names given by the executor's job runner.
             results = await asyncio.gather(
                 _stop_or_kill_container(docker, executor.container_id),
-                _stop_or_kill_container(docker, job_container_name),
+                _stop_or_kill_container(docker, f"ch-{executor.token}-job"),
+                _stop_or_kill_container(docker, f"ch-{executor.token}-nginx"),
                 return_exceptions=True,
             )
 
